@@ -1,82 +1,115 @@
 # Literature Management Subsystem (`research/literature/`)
 
-This directory houses verified academic literature records, systematic survey matrices, and export tools for PocketInspect.
+This directory holds PocketInspect's verified literature records, search logs, human-readable summaries, and the generated literature matrix.
+
+| File | Purpose |
+| :--- | :--- |
+| `papers.csv` | Main literature database (one row per verified paper, 29-column schema below) |
+| `selected_papers.md` | Human-readable summary of every retained paper, with per-claim evidence records, plus rejected/deferred candidates |
+| `search_log.md` | Every search batch: date, group, exact query, source, hits, screened count, retained IDs, rationale |
+| `literature_matrix.csv` | Generated from `papers.csv` by `scripts/manage_literature.py matrix`. Do not edit by hand. |
+
+> **Status:** Literature collection is ongoing. Nothing in this directory establishes a research gap or a novelty claim (see `RESEARCH_RULES.md`). Gap analysis in `research/gap_analysis/` is deferred until enough verified literature exists and a human researcher reviews it.
 
 ---
 
-## 1. Literature Review Workflow
+## 1. How papers are collected
 
-All literature added to PocketInspect follows a strict 6-step human-in-the-loop ingestion workflow:
+Searches are organised into six groups:
 
-1. **Identification**: ChatGPT/researcher identifies candidate papers relevant to mobile Edge AI, industrial visual inspection, or 3D-print defect detection.
-2. **Verification**: Researcher verifies paper details (title, authors, year, venue, DOI, verified URL, and quantitative evidence).
-3. **Ingestion**: Verified paper records are added to `research/literature/papers.csv`.
-4. **Validation & Matrix Generation**: Automated scripts validate schema integrity, check for duplicate DOIs/titles, and compile `literature_matrix.csv`.
-5. **Gap Extraction**: Literature coverage counts across research dimensions are evaluated objectively in `research/gap_analysis/`.
-6. **Decision**: Final decisions on research gap claims are made after human researcher verification.
+| Group | Theme |
+| :--- | :--- |
+| G1 | Smartphone / mobile AI / on-device edge AI |
+| G2 | Industrial visual inspection |
+| G3 | 3D-printed part inspection |
+| G4 | Adaptive / resource-aware inference (incl. energy, thermal, latency) |
+| G5 | Multi-view / active inspection |
+| G6 | Confidence / uncertainty / selective prediction |
 
----
+For each group:
 
-## 2. Schema Specification (`papers.csv`)
+1. Run keyword queries against a scholarly index (batch 1 used the OpenAlex API). Broad queries are followed by narrower title/abstract queries when results are noisy. Known-item title lookups are allowed but must be labelled as such in `search_log.md`.
+2. Screen the top-ranked results for relevance. Peer-reviewed venues and 2019–2026 publications are preferred. Foundational older works are kept only when later work builds on them. arXiv is used only when no peer-reviewed version is found.
+3. Record every query, its hit count, how many results were screened and which paper IDs were retained in `search_log.md`.
 
-`papers.csv` contains exactly 29 mandatory columns:
+## 2. How papers are verified
 
-| Field Name | Type | Description |
+A paper is added only after all of the following succeed:
+
+1. **Existence and metadata**: title, authors, year and venue are cross-checked between Crossref and OpenAlex. When the two disagree on year (online-first vs issue), the Crossref `issued` year is used and the difference is noted in `notes`.
+2. **DOI resolution**: the DOI resolves via the doi.org handle API. Papers without a DOI (e.g., NeurIPS, PMLR) must have a verified proceedings landing page in `url`.
+3. **Abstract retrieved**: from OpenAlex, Crossref, Semantic Scholar or the publisher landing page. If no abstract can be retrieved, the paper is **deferred**, not guessed.
+4. **Evidence-backed fields**: every `Yes` in a characteristic field has a matching evidence item (claim → short paraphrase) in `evidence` and in `selected_papers.md`.
+
+Rules that are never relaxed:
+- Never infer `smartphone` from "edge" or "mobile device" wording.
+- Never infer `on_device` unless the paper says inference runs on the device.
+- Never infer `resource_awareness` just because a model is lightweight or runs on an edge device.
+- Never infer `multi_view` unless multiple views or camera angles are actually captured.
+- Set `uncertainty` only when confidence or uncertainty is explicitly used or evaluated.
+
+Rejected and deferred candidates are listed with reasons at the end of `selected_papers.md`.
+
+## 3. `papers.csv` schema
+
+29 columns in this exact order (enforced by `src/literature/schema.py`):
+
+| Field | Type | Description |
 | :--- | :--- | :--- |
-| `paper_id` | String (Required) | Unique identifier key (e.g. `P001` or `Author2024`) |
-| `title` | String (Required) | Full verified title of paper |
-| `authors` | String (Required) | Author names (e.g., "Smith J., Doe A.") |
-| `year` | Integer (Required) | Year of publication (e.g., `2023`) |
-| `venue` | String | Journal or conference venue (e.g., "IEEE TIM", "CVPR") |
-| `doi` | String | Digital Object Identifier (e.g., `10.1109/...`) |
-| `url` | String | Direct URL link to publisher or arXiv page |
-| `domain` | String | Primary domain (e.g., "3D-Print Inspection", "Edge AI") |
+| `paper_id` | String (required) | Sequential ID `P001`, `P002`, … Never reused. |
+| `title` | String (required) | Verified full title |
+| `authors` | String (required) | Full author list, `;`-separated, as registered in Crossref/OpenAlex |
+| `year` | Integer (required) | Version-of-record year (Crossref `issued`) |
+| `venue` | String | Journal or proceedings name |
+| `doi` | String | Bare DOI (e.g. `10.1109/...`); blank if the paper has no DOI |
+| `url` | String | `https://doi.org/<doi>` or the verified proceedings page |
+| `domain` | String | Primary domain (e.g. "3D-Print Inspection") |
 | `application` | String | Specific target application |
-| `dataset` | String | Dataset used in paper |
-| `model` | String | Neural architecture or computer vision algorithm |
-| `hardware` | String | Hardware platform tested (e.g., "Snapdragon 888", "Jetson Nano") |
-| `smartphone` | Boolean (`true`/`false`) | Evaluated specifically on a smartphone device |
-| `edge_device` | Boolean (`true`/`false`) | Evaluated on an edge device |
-| `on_device` | Boolean (`true`/`false`) | Inference executed fully on-device without cloud |
-| `cloud` | Boolean (`true`/`false`) | Offloads compute to cloud servers |
-| `adaptive_inference` | Boolean (`true`/`false`) | Implements dynamic runtime adaptation |
-| `resource_awareness` | Boolean (`true`/`false`) | Considers CPU/GPU/RAM constraints |
-| `energy_evaluation` | Boolean (`true`/`false`) | Quantifies power consumption or battery drain |
-| `thermal_evaluation` | Boolean (`true`/`false`) | Quantifies device temperature or thermal throttling |
-| `multi_view` | Boolean (`true`/`false`) | Uses multi-camera angle inspection |
-| `uncertainty` | Boolean (`true`/`false`) | Evaluates prediction uncertainty or OOD detection |
-| `anomaly_detection` | Boolean (`true`/`false`) | Evaluates unsupervised/semi-supervised anomaly detection |
-| `latency_evaluation` | Boolean (`true`/`false`) | Reports inference latency or FPS |
-| `accuracy_metrics` | String | Primary accuracy metric values reported (e.g. "mAP@0.5: 88.4%") |
-| `limitations` | String | Explicitly documented limitations |
-| `future_work` | String | Future work directions noted by authors |
-| `evidence` | String | Verified empirical evidence quotes or metric summaries |
-| `notes` | String | Additional notes |
+| `dataset` | String | Dataset(s) as stated by the source |
+| `model` | String | Model or algorithm as stated by the source |
+| `hardware` | String | Hardware platform as stated by the source |
+| `smartphone` … `latency_evaluation` | `Yes` / `No` / `Unknown` | 12 characteristic fields: `smartphone`, `edge_device`, `on_device`, `cloud`, `adaptive_inference`, `resource_awareness`, `energy_evaluation`, `thermal_evaluation`, `multi_view`, `uncertainty`, `anomaly_detection`, `latency_evaluation` |
+| `accuracy_metrics` | String | Metric values exactly as reported by the source |
+| `limitations` | String | Limitations stated by the authors |
+| `future_work` | String | Future work stated by the authors |
+| `evidence` | String | `[Verified; source: …]` followed by `claim -> evidence` items separated by ` \| ` |
+| `notes` | String | Search group, extraction depth/date, caveats |
 
-*Note: For missing or unknown information, leave the column empty or enter `unknown`. Never guess or infer unsupported metadata.*
+## 4. What `Unknown`, `No` and blank mean
 
----
+- **`Unknown`** means the examined source (currently the abstract) does not establish the characteristic. It is **not** evidence of absence and must never be converted to `No` without a full-text check.
+- **`No`** is used only when the source explicitly describes a contrary setup (e.g., the hardware is stated to be a Raspberry Pi, so `smartphone = No`).
+- **Blank free-text fields** (`limitations`, `future_work`, `accuracy_metrics`) mean nothing was extracted at the current extraction depth, not that none exists.
+- The validator also accepts legacy `true`/`false`/empty values (see `src/literature/schema.py`). New records should use `Yes`/`No`/`Unknown`.
 
-## 3. Literature Management Commands
+Batch 1 extraction is **abstract-level**. Full-text review will upgrade `Unknown` fields and fill limitations and future work; each upgrade needs a new evidence item.
 
-Use `scripts/manage_literature.py` to manage and process literature:
+## 5. Duplicate handling
+
+Before a paper is added:
+1. Compare its normalised DOI (lower-case, `https://doi.org/` stripped) with existing rows.
+2. Compare its normalised title (lower-case alphanumerics only) with existing rows.
+3. If the same work has several DOIs (e.g., an arXiv preprint and a peer-reviewed version, or ACM reprints in SIG newsletters), keep **one** row for the version of record and record the other identifiers in `notes`.
+
+`python scripts/manage_literature.py validate` reports duplicate IDs, DOIs and titles. `tests/test_literature_data.py` fails if the committed `papers.csv` has any.
+
+## 6. Running the literature tools
 
 ```bash
 # Validate papers.csv schema and check for duplicates
 python scripts/manage_literature.py validate
 
-# View summary statistics across verified literature
+# Summary statistics over the characteristic fields
 python scripts/manage_literature.py stats
 
-# Generate literature_matrix.csv
+# Regenerate literature_matrix.csv
 python scripts/manage_literature.py matrix
 
-# Generate gap_matrix.csv and gap_candidates.md
-python scripts/manage_literature.py gap
-
-# Export literature matrix to LaTeX or Markdown format
+# Export literature matrix to LaTeX or Markdown
 python scripts/manage_literature.py export --format latex --out research/tables/literature_table.tex
 
-# Run complete pipeline
-python scripts/manage_literature.py all
+# Run the test suite (schema, validator and committed-data integrity)
+python -m pytest -q
 ```
+
+`python scripts/manage_literature.py gap` (and `all`, which calls it) regenerates `research/gap_analysis/gap_matrix.csv` and `gap_candidates.md`. Do not run them as part of routine literature updates; gap analysis is deferred until a human researcher decides the literature base is sufficient.
