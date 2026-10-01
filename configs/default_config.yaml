@@ -1,0 +1,33 @@
+# PocketInspect System Default Configuration
+
+project:
+  name: "PocketInspect"
+  version: "0.1.0"
+  target_application: "3D-printed part visual inspection"
+
+acquisition:
+  target_fps: 15
+  resolution: [1920, 1080]
+  color_space: "RGB"
+  exposure_mode: "auto"
+
+quality:
+  blur_threshold: 100.0  # Laplacian variance threshold
+  min_illumination: 30.0
+  max_illumination: 220.0
+
+inference:
+  runtime: "onnxruntime"  # options: onnxruntime, tflite
+  device_target: "cpu"    # options: cpu, gpu, npu
+  precision: "fp32"       # options: fp32, fp16, int8
+  thread_count: 4
+
+adaptation:
+  thermal_limit_celsius: 45.0
+  battery_low_threshold_pct: 20
+  enable_dynamic_resolution: true
+  enable_frame_skipping: true
+
+uncertainty:
+  confidence_threshold: 0.85
+  ood_method: "entropy"  # options: entropy, energy, temperature_scaling
