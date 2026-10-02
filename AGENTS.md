@@ -51,3 +51,12 @@ Welcome to **PocketInspect**. This document specifies operational directives, ar
 - **Traceability**: When answering questions or proposing architecture changes, reference specific files using Markdown links (e.g., [`PROJECT_SPEC.md`](file:///e:/ML/projects/PocketInspect/PROJECT_SPEC.md)).
 - **Assumptions**: Explicitly list all technical or operational assumptions when delivering output.
 - **Verification**: Run standard sanity checks (e.g., `pytest`, syntax verification) whenever modifying code or configurations.
+
+---
+
+## 4. Multi-Agent Synchronization
+
+- Claude Code and Antigravity share state through [`docs/agent_sync/CHANGELOG.md`](docs/agent_sync/CHANGELOG.md).
+- Before starting a task, read the latest CHANGELOG entries. After every coherent change, append a new entry (`## YYYY-MM-DD — <Agent>`) using the template in that file. Never rewrite earlier entries.
+- Literature searches are logged separately in [`research/literature/search_log.md`](research/literature/search_log.md).
+- The sources-of-truth table in the CHANGELOG defines the single purpose of each research file; do not mix them.
