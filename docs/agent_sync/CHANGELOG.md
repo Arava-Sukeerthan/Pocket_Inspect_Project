@@ -226,3 +226,40 @@ Step 8.1: formalise the literature coding definitions before any further correct
 - Previous Claude Code entry (literature audit): commit `12d2c70`, merged to `main` via PR #3 as `e45bd93`.
 - Commit: see `git log -- research/literature/coding_decisions.md` (hash recorded in the next entry)
 - Push status: pushed to `origin/claude/pocketinspect-agent-sync-a33d88` (see next entry if this changes)
+
+---
+
+## 2026-10-03 — Antigravity
+
+### Task
+Step 8.2: Review literature coding definitions in `research/literature/README.md` (§7 v1.0) and `research/literature/coding_decisions.md` (v1.0) for precision, reproducibility, and required distinction clarity.
+
+### Changes
+- `docs/agent_sync/CHANGELOG.md`: Appended Antigravity review and verification entry.
+- **`papers.csv` was NOT modified** (blob remains untouched).
+
+### Research decisions
+- None made independently. Confirmed that all 7 required distinctions (resource measurement vs adaptation, adaptive inference vs DVFS, latency vs throughput vs adaptation time, confidence vs uncertainty, multiple images vs multi-view, edge infrastructure vs edge inference, supervised vs anomaly detection) are explicitly defined with clear operational rules.
+- Agreed that borderline decisions CD-01 to CD-17 in `coding_decisions.md` should remain provisional pending researcher/ChatGPT approval.
+
+### Verification
+- `git pull`: Sync verified (fast-forward to `f4ef3c1` containing Claude Code's Step 8.1 entry).
+- `python scripts/manage_literature.py validate`: 54 records, status **VALID** (0 errors, 0 duplicates).
+- `python -m pytest`: **18 passed** in 0.28s (`test_imports.py`, `test_literature.py`, `test_literature_data.py`).
+- `git diff`: Verified only `CHANGELOG.md` is modified.
+
+### Uncertain items (recorded for researcher/ChatGPT review)
+- **Design-time vs Runtime in `resource_awareness`**: Does offline Neural Architecture Search (NAS) / model compression under explicit FLOP/memory budgets set `resource_awareness = Yes`, or are only runtime/deployment-time resource-driven decisions eligible?
+- **Partitioning as `adaptive_inference` (CD-06 ⚑)**: Dynamic layer partitioning across edge/cloud alters where layers execute without changing model weights. Confirm whether this is model-level adaptive inference or system-level offloading scheduling.
+- **Confidence-Gated Decisions (CD-08 ⚑)**: Excluding softmax confidence thresholds from `uncertainty = Yes` leaves confidence-gated active capture/referral visible only in `notes`. Confirm whether a dedicated `confidence_gating` attribute or schema column should be introduced.
+- **Throughput & Comparative Speed Claims in `latency_evaluation` (CD-02 ⚑, CD-04 ⚑)**: Confirm acceptance of throughput (FPS) and qualitative comparative speed claims ("faster than X") under `latency_evaluation = Yes` (with evidence tags).
+- **Tablet / Industrial PC Edge Boundaries (CD-10 ⚑, CD-12)**: Clarify whether tablets are categorized as `edge_device` vs `smartphone`, and confirm that industrial PCs with desktop-grade GPUs are strictly excluded from `edge_device`.
+
+### Remaining work
+- Researcher/ChatGPT approval of the ⚑ decisions in `coding_decisions.md` and the uncertainties above.
+- Execute the logged correction task applying provisional recodings to `papers.csv` once approved.
+
+### Git
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md`
+- Push status: pending push
+
