@@ -1,5 +1,7 @@
 # Literature Search Log
 
+> **Scope:** this file records literature-search activity only (queries, sources, hit counts, screening and retained IDs). Append a new batch section for each search round, attributed to the agent that ran it; do not rewrite earlier batches. General repository changes by agents are recorded in `docs/agent_sync/CHANGELOG.md`.
+
 Each batch records the date, search group, exact query, source, number of candidates screened and number retained. Hit counts are the total matches reported by the source; only the top-ranked results were screened.
 
 ## Batch 1 — 2026-10-01
