@@ -122,3 +122,44 @@ Verify synchronization infrastructure and literature dataset integrity following
 - Commit: see `git log -- docs/agent_sync/CHANGELOG.md`
 - Push status: pending push
 
+
+---
+
+## 2026-10-02 — Claude Code
+
+### Task
+Step 8: first-pass audit of the 54 existing literature records (no new searches, no edits to `papers.csv`).
+
+### Changes
+- `research/literature/audit_report.csv` (new): one row per paper with relevance_class, verification_status, metadata_issues, evidence_issues, duplicate_status and recommended_action.
+- `research/literature/audit_report.md` (new): method, class criteria, summary statistics, duplicate, metadata and evidence findings, and recommended next steps.
+- `docs/agent_sync/CHANGELOG.md`: this entry.
+- Synced the branch with `origin/main` (fast-forward to `0736c2a`, which contains Antigravity's entry) before starting.
+
+### Research decisions
+- Proposed relevance classes: A 17, B 24, C 12, D 1 (P013), E 0. The A–D criteria are the auditor's proposal; **requires researcher/ChatGPT review**.
+- No records deleted or edited. All corrections are listed as recommendations only.
+
+### Verification
+- All 54 records checked against the doi.org handle API, Crossref (DataCite for P054), OpenAlex, and the NeurIPS/PMLR pages for P045/P046. Every record exists and its metadata matches; all 52 DOIs resolve; no retractions.
+- Coded flags checked against retrieved abstracts (OpenAlex, Crossref, Semantic Scholar, Springer, NeurIPS, PMLR). No coded value contradicts its abstract. 13 records have weak or interpretive support or source-labelling issues.
+- `python scripts/manage_literature.py validate`: 54 records, VALID, 0 duplicates. Fuzzy title check: 9 similar pairs, all distinct works.
+- `python -m pytest -q`: 18 passed.
+- `git diff` reviewed: only the two audit files and this changelog changed; `papers.csv` unchanged.
+
+### Uncertain items
+- The 12 characteristic fields have no written definitions. In particular: does `latency_evaluation` cover throughput or adaptation time? Does `adaptive_inference` cover DVFS? Does `resource_awareness` cover measurement only? Are surveys coded by topic? **Requires researcher decision.**
+- P013 (class D): the abstract does not say whether the inspection is image-based. Needs a full-text check.
+- P007: the search log retains it under G4, but notes assign G1.
+- The audit is abstract-level only. The verification scripts were run from scratch space and are not committed.
+
+### Remaining work
+- Researcher review of the proposed classes.
+- Write field definitions in `research/literature/README.md`.
+- After approval, a separate `papers.csv` correction task: alternative identifiers for P006/P054, P007's group, P006's evidence source label, missing evidence items for P003/P027/P042.
+- Full-text review starting with class A and P013.
+
+### Git
+- Previous Claude Code entry (sync infrastructure): commit `aa9715a`, merged to `main` via PR #2 as `5d3ac8b`.
+- Commit: see `git log -- research/literature/audit_report.csv` (hash recorded in the next entry)
+- Push status: pushed to `origin/claude/pocketinspect-agent-sync-a33d88` (see next entry if this changes)
