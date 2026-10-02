@@ -396,3 +396,70 @@ Step 8.4: Verification of Claude Code Step 8.3 implementation (commit `e618fd1`)
 - Verification commit: see `git log -- docs/agent_sync/CHANGELOG.md`
 - Push status: pending push
 
+
+---
+
+## 2026-10-04 — Claude Code
+
+### Task
+Step 9.1: prepare the full-text verification queue. Preparation only; no full-text coding was started.
+
+### Changes
+- `research/literature/fulltext_verification_queue.md` (new): 18 queued papers. Each row gives ID, title, year, DOI, relevance class, thematic groups (assigned group plus the actual retrieval query), current coded characteristics, issues needing full text, and priority (HIGH for all). Papers not in the queue are listed by class.
+- `research/literature/fulltext_verification_template.md` (new):
+  - instructions bound to README §7 v1.1;
+  - a blank template;
+  - an evidence table for each queued paper covering the 15 coded fields and 11 contextual items. Current CSV values are pre-filled. The Full-Text Value, Evidence Location, Evidence Quote/Paraphrase, Confidence (Confirmed / Not supported / Ambiguous) and Action (Keep / Change / Needs researcher decision) columns are left blank.
+- `research/literature/fulltext_verification_status.md` (new): summary counts, accessibility per paper, how accessibility was checked, and blockers.
+- `docs/agent_sync/CHANGELOG.md`: this entry.
+- Synced the branch with `origin/main` (fast-forward to `9ebbf89`) before starting.
+
+### Research decisions
+- None. Relevance classes, coding definitions, `papers.csv` and gap-analysis files are unchanged.
+- **Source of the relevance class:** `papers.csv` has no `relevance_class` column. Classes were read from `audit_report.csv` (the 2026-10-02 audit proposal) and joined by `paper_id` to the current `papers.csv`. **Requires researcher decision:** confirm the audit classes are approved, and decide whether relevance class should become a schema column.
+
+### Queue
+- **Class A (17):** P001, P002, P007, P011, P015, P016, P017, P018, P019, P020, P022, P023, P029, P031, P032, P033, P034.
+- **P013:** queued as HIGH; class D unchanged.
+- **Total queued:** 18.
+
+### Accessibility (checked 2026-10-04)
+- **Full text at the publisher, confirmed (6):** P001, P002, P007, P015, P016, P020.
+- **Alternative legitimate source, confirmed (6):**
+  - P011: arXiv 2407.11771;
+  - P013: UTS repository, publisher PDF;
+  - P029: arXiv 1810.10090;
+  - P031: arXiv 2410.10847;
+  - P033: arXiv 2409.01089;
+  - P034: FH JOANNEUM repository, submitted version.
+- **Abstract only (4):** P018, P019, P022, P023. These are subscription papers; no legitimate open copy was found.
+- **Not confirmed from this environment (2):**
+  - P017: gold open access per OpenAlex and Semantic Scholar, but ScienceDirect's bot check blocked confirmation;
+  - P032: DiVA repository copy did not respond.
+- **Method:**
+  - OpenAlex open-access data; Semantic Scholar `openAccessPdf` for closed papers;
+  - exact-title or linked-ID arXiv lookups only;
+  - PDF response checks, or section headings in the browser (article text not read);
+  - bot checks were not bypassed; no pirated sources.
+
+### Verification
+- `python -m pytest -q`: 24 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID.
+- **`papers.csv` NOT modified** (`git diff` empty for the file).
+- `git diff` reviewed: only the three new files and this changelog entry.
+
+### Blockers / uncertain items
+- Four class-A papers are abstract-only (P018, P019, P022, P023) and need institutional access, interlibrary loan or an author copy. This is a researcher action.
+- P017 and P032 need a manual access check.
+- Five confirmed copies are preprints or submitted versions (P011, P029, P031, P033, P034). The verifier must record which version was used.
+- **P002:** section headings on the publisher page mention vibration sensors and a 1D-CNN. Full-text verification should check whether the system is camera-based. Any change to its class is a researcher decision.
+- **Note on the Step 8.4 Antigravity entry:** it lists P005 under Decision 7 (split computing). P005 was recoded `on_device Yes→Unknown` under the static-analysis rule (README §7.3), not Decision 7. Only P027 and P028 were recoded under Decision 7. Recorded here for accuracy; the earlier entry is not edited.
+
+### Remaining work
+- Resolve access for the six abstract-only or unconfirmed papers.
+- Begin full-text verification with the template, recording evidence only. Coding changes follow researcher/ChatGPT review.
+
+### Git
+- Previous Claude Code entry (Step 8.3): commit `e618fd1`, merged to `main` via PR #5 as `1d85914`.
+- Commit: see `git log -- research/literature/fulltext_verification_queue.md` (hash recorded in the next entry)
+- Push status: pushed to `origin/claude/pocketinspect-agent-sync-a33d88`; not merged.
