@@ -349,3 +349,50 @@ Step 8.3: apply the eight literature-coding decisions approved by the researcher
 - Previous Claude Code entry (Step 8.1 definitions): commit `8585ad5`, merged to `main` via PR #4 as `f4ef3c1`.
 - Commit: see `git log -- research/literature/recoding_report.md` (hash recorded in the next entry)
 - Push status: pushed to `origin/claude/pocketinspect-agent-sync-a33d88` (see next entry if this changes)
+
+---
+
+## 2026-10-03 — Antigravity
+
+### Task
+Step 8.4: Verification of Claude Code Step 8.3 implementation (commit `e618fd1`) before branch merge.
+
+### Changes
+- `docs/agent_sync/CHANGELOG.md`: Appended Antigravity verification entry. No implementation or literature files changed.
+
+### Verification
+- **Git / Repository**: Commit `e618fd1` verified (merged via PR #5 as `1d85914`). Working tree clean on `main`. No force push, no unexpected file deletions, and no accidental modification of gap-analysis files (`research/gap_analysis/*` untouched).
+- **31-Column Schema**: Verified exact 31-column schema across `src/literature/schema.py` (`PAPERS_SCHEMA_HEADERS`) and `research/literature/papers.csv`.
+  - `confidence_gating` is at column 23 (immediately after `uncertainty`).
+  - `efficiency_metrics` is at column 27 (immediately after `accuracy_metrics`).
+  - All 54 rows in `papers.csv` contain exactly 31 fields.
+- **Approved Decisions 1–8**: Verified exact compliance in `papers.csv`:
+  - Decision 1: All 6 surveys (P010, P024, P026, P035, P036, P052) are coded `No` across all characteristic fields.
+  - Decision 2: Throughput/FPS counts as `latency_evaluation = Yes` when measured timing/throughput is present (`latency type:` in evidence).
+  - Decision 3: Qualitative speed claims without figures (P002, P003, P006, P025, P027, P031, P032) are `Unknown`.
+  - Decision 4: Dynamic partitioning counts as `adaptive_inference = Yes` (P027, P028); DVFS alone is `Unknown`/`No` (P031).
+  - Decision 5: `confidence_gating` is `Yes` for P025, `No` for 6 surveys, `Unknown` for 47.
+  - Decision 6: Mi 11 Lite (P031) coded `smartphone = Yes` with external manufacturer specification provenance documented.
+  - Decision 7: Split computing (P005, P027, P028) is coded `on_device = Unknown` / `No`.
+  - Decision 8: `efficiency_metrics` populated for 6 papers (P007, P018, P028, P029, P034, P039); task metrics isolated in `accuracy_metrics`.
+- **Recoding Report (`recoding_report.md`)**: Verified metrics against `papers.csv`: 54 papers total, 20 papers recoded, 95 changed values across original 12 fields (71 Unknown→No, 14 Yes→Unknown, 7 Unknown→Yes, 3 Yes→No).
+- **Special Cases**: Verified P002, P003, P004, P005, P006 (arXiv 2109.13963 added to notes), P007 (thematic G1 + query G4 in notes), P013, P026, P027, P028, P031, P034, P040, P042, P054 (SSRN 10.2139/ssrn.4042653 added to notes).
+- **`selected_papers.md`**: Verified that only "Characteristics marked Yes" lines were regenerated (17 lines changed).
+- **Tests & Validation**:
+  - `python -m pytest -q`: **24 passed** in 0.20s.
+  - `python scripts/manage_literature.py validate`: **54 records VALID** (0 schema errors, 0 duplicates, 0 warnings).
+- **Data Integrity**: 0 papers added/deleted; P001–P054 intact; DOIs, titles, authors, and years unchanged.
+
+### Unresolved Methodological Questions (Recorded as Open Questions)
+- **Question A**: Does design-time NAS or model architecture optimization under a resource budget count as `resource_awareness`?
+- **Question B**: How should tablets be classified relative to `smartphone` and `edge_device`?
+- **Question C (P045 / P046)**: Does a learned selection score (P046) or risk-thresholded reject option without explicit confidence (P045) count under `confidence_gating` or remain `Unknown` pending full-text review?
+
+### Verification Result & Merge Status
+- **Result**: STEP 8.3 VERIFIED — READY FOR MERGE
+- **Branch status**: Merged via PR #5 into `main` at `1d85914`.
+
+### Git
+- Verification commit: see `git log -- docs/agent_sync/CHANGELOG.md`
+- Push status: pending push
+
