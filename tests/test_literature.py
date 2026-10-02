@@ -19,10 +19,19 @@ from src.literature import (
 class TestLiteratureSchemaAndUtils(unittest.TestCase):
 
     def test_schema_headers_count(self):
-        self.assertEqual(len(PAPERS_SCHEMA_HEADERS), 29)
+        self.assertEqual(len(PAPERS_SCHEMA_HEADERS), 31)
+        self.assertEqual(len(set(PAPERS_SCHEMA_HEADERS)), 31)
         self.assertIn("paper_id", PAPERS_SCHEMA_HEADERS)
         self.assertIn("adaptive_inference", PAPERS_SCHEMA_HEADERS)
         self.assertIn("thermal_evaluation", PAPERS_SCHEMA_HEADERS)
+
+    def test_new_fields_positions_and_types(self):
+        h = PAPERS_SCHEMA_HEADERS
+        self.assertEqual(h.index("confidence_gating"), h.index("uncertainty") + 1)
+        self.assertEqual(h.index("efficiency_metrics"), h.index("accuracy_metrics") + 1)
+        self.assertIn("confidence_gating", BOOLEAN_FIELDS)
+        self.assertNotIn("efficiency_metrics", BOOLEAN_FIELDS)
+        self.assertEqual(len(BOOLEAN_FIELDS), 13)
 
     def test_boolean_parsing(self):
         self.assertTrue(parse_boolean_field("true"))
@@ -183,6 +192,28 @@ class TestLiteratureAnalyzer(unittest.TestCase):
         tex = MatrixExporter.export_literature_latex(matrix_rows)
         self.assertIn("| P001 |", md)
         self.assertIn("\\begin{table*}", tex)
+
+    def test_matrix_rows_include_new_fields(self):
+        rows = LiteratureAnalyzer([
+            {"paper_id": "P001", "title": "T", "authors": "A", "year": "2024",
+             "confidence_gating": "Yes", "efficiency_metrics": "31.76 FPS"},
+            {"paper_id": "P002", "title": "U", "authors": "B", "year": "2024"},
+        ]).generate_literature_matrix_rows()
+        self.assertEqual(rows[0]["confidence_gating"], "true")
+        self.assertEqual(rows[0]["efficiency_metrics"], "31.76 FPS")
+        self.assertEqual(rows[1]["confidence_gating"], "unknown")
+        self.assertEqual(rows[1]["efficiency_metrics"], "Unspecified")
+        md = MatrixExporter.export_literature_markdown(rows)
+        self.assertIn("Confidence Gating", md)
+
+    def test_validator_rejects_old_29_column_header(self):
+        old_headers = [h for h in PAPERS_SCHEMA_HEADERS if h not in ("confidence_gating", "efficiency_metrics")]
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "papers.csv"
+            path.write_text(",".join(old_headers) + "\n", encoding="utf-8")
+            report = LiteratureValidator().validate_file(path)
+        self.assertFalse(report["is_valid"])
+        self.assertIn("confidence_gating", report["schema_errors"][0])
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import csv
 import re
 import unittest
 from pathlib import Path
-from src.literature import BOOLEAN_FIELDS, LiteratureValidator
+from src.literature import BOOLEAN_FIELDS, PAPERS_SCHEMA_HEADERS, LiteratureValidator
 
 PAPERS_CSV = Path(__file__).resolve().parent.parent / "research" / "literature" / "papers.csv"
 ALLOWED_CHARACTERISTIC_VALUES = {"Yes", "No", "Unknown"}
@@ -24,6 +24,27 @@ class TestCommittedPapersCsv(unittest.TestCase):
         self.assertTrue(report["is_valid"], report["schema_errors"])
         self.assertEqual(report["duplicates"], [])
         self.assertEqual(report["warnings"], [])
+
+    def test_every_row_has_exactly_31_fields(self):
+        with open(PAPERS_CSV, encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.reader(f))
+        self.assertEqual(rows[0], PAPERS_SCHEMA_HEADERS)
+        for i, row in enumerate(rows):
+            self.assertEqual(len(row), 31, f"line {i + 1}")
+
+    def test_survey_papers_coded_no(self):
+        # README §7.1: survey/review papers are coded No for every characteristic field.
+        for r in self.records:
+            if "Paper type: survey/review" in r["notes"]:
+                for field in BOOLEAN_FIELDS:
+                    self.assertEqual(r[field], "No", f"{r['paper_id']}.{field}")
+
+    def test_latency_yes_records_timing_type(self):
+        # README §7.3: every latency_evaluation = Yes names its timing type in the evidence.
+        pattern = r"latency type: (inference latency|end-to-end latency|throughput/FPS)"
+        for r in self.records:
+            if r["latency_evaluation"] == "Yes":
+                self.assertRegex(r["evidence"], pattern, r["paper_id"])
 
     def test_paper_ids_sequential(self):
         ids = [r["paper_id"] for r in self.records]

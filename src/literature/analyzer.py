@@ -152,9 +152,11 @@ class LiteratureAnalyzer:
                 "thermal_evaluation": self._format_bool(r.get("thermal_evaluation")),
                 "multi_view": self._format_bool(r.get("multi_view")),
                 "uncertainty": self._format_bool(r.get("uncertainty")),
+                "confidence_gating": self._format_bool(r.get("confidence_gating")),
                 "anomaly_detection": self._format_bool(r.get("anomaly_detection")),
                 "latency_evaluation": self._format_bool(r.get("latency_evaluation")),
                 "accuracy_metrics": r.get("accuracy_metrics", "") or "Unspecified",
+                "efficiency_metrics": r.get("efficiency_metrics", "") or "Unspecified",
                 "limitations": r.get("limitations", "") or "Unspecified",
                 "evidence": r.get("evidence", "") or "Unspecified",
                 "notes": r.get("notes", "") or ""
@@ -175,8 +177,8 @@ class LiteratureAnalyzer:
             "dataset", "model", "hardware", "smartphone", "edge_device",
             "on_device", "cloud", "adaptive_inference", "resource_awareness",
             "energy_evaluation", "thermal_evaluation", "multi_view", "uncertainty",
-            "anomaly_detection", "latency_evaluation", "accuracy_metrics",
-            "limitations", "evidence", "notes"
+            "confidence_gating", "anomaly_detection", "latency_evaluation",
+            "accuracy_metrics", "efficiency_metrics", "limitations", "evidence", "notes"
         ]
 
         with open(path, mode="w", encoding="utf-8", newline="") as f:
