@@ -163,3 +163,66 @@ Step 8: first-pass audit of the 54 existing literature records (no new searches,
 - Previous Claude Code entry (sync infrastructure): commit `aa9715a`, merged to `main` via PR #2 as `5d3ac8b`.
 - Commit: see `git log -- research/literature/audit_report.csv` (hash recorded in the next entry)
 - Push status: pushed to `origin/claude/pocketinspect-agent-sync-a33d88` (see next entry if this changes)
+
+---
+
+## 2026-10-03 — Claude Code
+
+### Task
+Step 8.1: formalise the literature coding definitions before any further correction or searching. No new searches.
+
+### Changes
+- `research/literature/README.md`:
+  - added **§7 Literature Coding Definitions** (v1.0) with these subsections:
+    - 7.1 general rules: Yes/No/Unknown, abstract-level coding, paper-type tag, survey rule;
+    - 7.2 evidence requirements and evidence-item format;
+    - 7.3 operational definitions of all 12 characteristic fields;
+    - 7.4 the 10 required distinctions;
+    - 7.5 cross-field consistency rules;
+    - 7.6 recording rules for `dataset`, `model`, `hardware`, `accuracy_metrics`, `limitations` and `future_work`;
+    - 7.7 how a coding may be changed;
+  - updated the §2 `uncertainty` rule and the §4 meaning of `No` to match §7, with pointers to §7.
+- `research/literature/coding_decisions.md` (new):
+  - 17 borderline decisions (CD-01 to CD-17) with rationale, alternatives and corpus examples;
+  - a table of the provisional effect on current records (not applied);
+  - optional schema extensions (reported, not implemented);
+  - questions for approval.
+- `docs/agent_sync/CHANGELOG.md`: this entry.
+
+### Research decisions
+- **No schema change.** The single `latency_evaluation` field is defined to cover inference latency, end-to-end latency and throughput. The evidence item records the timing type; adaptation time alone does not qualify.
+- `adaptive_inference` requires the model computation to change. DVFS or scheduling alone is system-level adaptation and is coded under `resource_awareness` when it is driven by resources.
+- `resource_awareness` requires a resource-driven decision; measurement alone does not qualify.
+- `uncertainty` excludes a plain softmax confidence or a confidence threshold unless the score is estimated, calibrated or evaluated as uncertainty. Selective prediction and OOD detection qualify.
+- Surveys are coded `No` for all characteristic fields; their topics go in `notes`, `domain` and `application`.
+- **`papers.csv` was NOT modified** (blob `44276441` is identical to HEAD). The provisional recodings are listed in `coding_decisions.md` §2 only:
+  - 9 values Yes→Unknown;
+  - 6 values Unknown→Yes;
+  - 3 values Yes→No;
+  - 69 values Unknown→No (surveys).
+
+### Verification
+- `python -m pytest -q`: 18 passed. Literature tests (`test_literature.py`, `test_literature_data.py`): 17 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID, 0 duplicates.
+- Every "current value" in the provisional-effect table was checked programmatically against `papers.csv`: 0 mismatches.
+- `git diff` reviewed. Only `README.md` (285 additions, 2 changed lines) and the new `coding_decisions.md` changed, plus this changelog.
+
+### Uncertain items (require researcher/ChatGPT approval, marked ⚑ in README §7)
+- CD-01: surveys coded `No` (vs `Unknown` or a `paper_type` column).
+- CD-02: throughput/FPS counts toward `latency_evaluation`.
+- CD-04: comparative speed findings without figures count as `Yes`.
+- CD-06: runtime device/edge/cloud partitioning counts as `adaptive_inference`.
+- CD-08: confidence-gated decisions are excluded from `uncertainty`. Should a `confidence_gating` field be added?
+- CD-10: external identification of named phone models.
+- CD-13: split-only execution coded `on_device = No`.
+- CD-16: efficiency figures kept in `accuracy_metrics` with an `Efficiency:` prefix (vs a new column).
+
+### Remaining work
+- Researcher approval of the ⚑ decisions.
+- Then a separate, logged correction task that applies `coding_decisions.md` §2 and the formatting rules (CD-10, CD-16, CD-17) to `papers.csv`.
+- Full-text review starting with class A papers and P013.
+
+### Git
+- Previous Claude Code entry (literature audit): commit `12d2c70`, merged to `main` via PR #3 as `e45bd93`.
+- Commit: see `git log -- research/literature/coding_decisions.md` (hash recorded in the next entry)
+- Push status: pushed to `origin/claude/pocketinspect-agent-sync-a33d88` (see next entry if this changes)
