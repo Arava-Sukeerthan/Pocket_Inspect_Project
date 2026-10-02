@@ -263,3 +263,89 @@ Step 8.2: Review literature coding definitions in `research/literature/README.md
 - Commit: see `git log -- docs/agent_sync/CHANGELOG.md`
 - Push status: pending push
 
+
+---
+
+## 2026-10-03 — Claude Code
+
+### Task
+Step 8.3: apply the eight literature-coding decisions approved by the researcher/ChatGPT. This includes a schema change (29 → 31 columns) and recoding all 54 records. No new searches; no gap analysis.
+
+### Changes
+- **Schema:** `confidence_gating` (Yes/No/Unknown) added after `uncertainty`; `efficiency_metrics` (free text) added after `accuracy_metrics`.
+  - `src/literature/schema.py`: headers, `BOOLEAN_FIELDS`.
+  - `src/literature/analyzer.py`: literature-matrix rows and columns.
+  - `src/literature/exporter.py`: Markdown export gains a Confidence Gating column.
+  - The validator needed no code change; it reads the schema constants.
+- **Tests:**
+  - `tests/test_literature.py`: 31-column schema; positions and types of the new fields; matrix/export of the new fields; the old 29-column header is rejected.
+  - `tests/test_literature_data.py`: every row has exactly 31 fields; surveys are `No` for all characteristic fields; every `latency_evaluation = Yes` names its timing type.
+- **`research/literature/papers.csv`:** recoded under README §7 v1.1.
+  - 95 values in the original 12 fields changed, across 20 records:
+    - Unknown→No: 71
+    - Yes→Unknown: 14
+    - Unknown→Yes: 7
+    - Yes→No: 3
+  - New fields: `confidence_gating` is Yes 1 (P025), No 6 (surveys), Unknown 47. `efficiency_metrics` is populated for 6 records (P007, P018, P028, P029, P034, P039).
+  - `accuracy_metrics` changed for 5 records (efficiency figures moved out).
+  - P042 `limitations` marked field-level.
+  - Evidence items appended for 24 records.
+  - A `Paper type:` tag was added to `notes` for all 54, plus recoding notes.
+  - No records added or deleted; title, authors, year, venue, DOI, URL, domain, application, dataset, model, hardware and future_work are unchanged.
+- **`research/literature/literature_matrix.csv`:** regenerated (`manage_literature.py matrix`) with the new columns.
+- **`research/literature/README.md`:** §3 schema (31 columns, 13 characteristic fields, `efficiency_metrics`); §4 blank fields; §7 updated to v1.1. The §7 changes are:
+  - the ⚑ items are now ✓A (approved);
+  - new `confidence_gating` definition;
+  - Decision 3 (qualitative speed claims → Unknown);
+  - dynamic vs static partitioning;
+  - split inference → `on_device = No`;
+  - external identification requires an authoritative source;
+  - `efficiency_metrics` recording rules;
+  - timing-type labels;
+  - distinction 11 and new consistency rules.
+- **`research/literature/coding_decisions.md`** (v1.1):
+  - new §0 approval record;
+  - an approval-outcome line under each ⚑ decision, with the v1.0 text kept;
+  - §2 marked as superseded by the recoding report;
+  - §3/§4 status updates.
+- **`research/literature/recoding_report.md`** (new): every changed value with its old and new value, reason, decision, evidence source and support level; also lists metadata corrections, new-field initialisation and values deliberately not changed.
+- **`research/literature/selected_papers.md`:** the "Characteristics marked Yes" line for each paper was regenerated from `papers.csv` (17 lines changed), with a dated note. The rest of the file is unchanged.
+
+### Research decisions
+- Applied approved Decisions 1–8 as specified. Choices made while applying them (recorded in `coding_decisions.md` §0):
+  - surveys are also `No` for the new `confidence_gating` field;
+  - measured **relative** timing values (+18.1% FPS, 3.1x latency, 2.0x frame rate) count as measured under Decision 3;
+  - P004 keeps `latency_evaluation = Yes`: the abstract names throughput as a reported benchmark metric, though no value is given, so `efficiency_metrics` is blank;
+  - P031 `adaptive_inference` is set to `Unknown`, not `No`: the abstract alone cannot establish that the model computation never changes.
+- Metadata corrections from the audit:
+  - P006: evidence source label corrected; arXiv 2109.13963 recorded;
+  - P007: thematic group G1 and retrieval query G4 both recorded; assignment unchanged;
+  - P054: SSRN DOI recorded.
+- P013 relevance (audit class D) is **not** resolved; only `edge_device`/`cloud` were recoded to `Unknown` under the definitions.
+- P031 smartphone classification: Xiaomi official specifications page (dual nano-SIM, 4G cellular, Android 11; accessed 2026-10-03). The page does not use the word "smartphone"; this is recorded in `notes`.
+- All changes are **abstract-supported**; no full text was read. 14 records are flagged `Requires full-text verification`.
+
+### Verification
+- `python scripts/manage_literature.py validate`: 54 records, VALID, 0 warnings, 0 duplicates.
+- `python -m pytest -q`: **24 passed** (18 → 24; 6 new tests).
+- Header equals the 31-column schema; all 54 rows have exactly 31 fields.
+- The change log was reconciled with a before/after diff of `papers.csv`: only the declared fields changed.
+- `git diff` reviewed. Gap-analysis files and `audit_report.*` are unchanged; no unrelated files changed.
+
+### Uncertain items
+- P045/P046 `confidence_gating` stays Unknown. P046 rejects via a learned selection head, contrasted with confidence thresholds. **Researcher decision:** does a learned selection score count?
+- Antigravity's Step 8.2 questions remain open:
+  - does design-time NAS or compression under device budgets count as `resource_awareness`?
+  - how should tablets and industrial PCs be classified for `smartphone`/`edge_device`?
+- `research/gap_analysis/*` is still stale (generated from an empty corpus). It now also predates the recoding. Not regenerated; gap analysis is deferred.
+- The `hardware` role-prefix formatting (README §7.6, CD-17) has not been applied to existing rows.
+
+### Remaining work
+- Full-text review of the 14 flagged records, then of class A papers, and P013.
+- Researcher decisions on the open items above.
+- Optional: apply `hardware` role prefixes in a formatting-only task.
+
+### Git
+- Previous Claude Code entry (Step 8.1 definitions): commit `8585ad5`, merged to `main` via PR #4 as `f4ef3c1`.
+- Commit: see `git log -- research/literature/recoding_report.md` (hash recorded in the next entry)
+- Push status: pushed to `origin/claude/pocketinspect-agent-sync-a33d88` (see next entry if this changes)

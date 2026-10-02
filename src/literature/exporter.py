@@ -19,7 +19,8 @@ class MatrixExporter:
 
         headers = [
             "Paper ID", "Title", "Year", "Venue", "Domain", "Hardware",
-            "Smartphone", "On-Device", "Adaptive", "Resource-Aware", "Thermal Eval"
+            "Smartphone", "On-Device", "Adaptive", "Resource-Aware", "Thermal Eval",
+            "Confidence Gating"
         ]
         
         md = []
@@ -38,7 +39,8 @@ class MatrixExporter:
                 r.get("on_device", ""),
                 r.get("adaptive_inference", ""),
                 r.get("resource_awareness", ""),
-                r.get("thermal_evaluation", "")
+                r.get("thermal_evaluation", ""),
+                r.get("confidence_gating", "")
             ]
             # Escape pipe symbols in strings
             line_clean = [str(x).replace("|", "\\|") for x in line]

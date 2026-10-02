@@ -54,7 +54,7 @@ Rejected and deferred candidates are listed with reasons at the end of `selected
 
 ## 3. `papers.csv` schema
 
-29 columns in this exact order (enforced by `src/literature/schema.py`):
+31 columns in this exact order (enforced by `src/literature/schema.py`). The schema grew from 29 to 31 columns on 2026-10-03 (Step 8.3), when `confidence_gating` and `efficiency_metrics` were added:
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
@@ -70,18 +70,19 @@ Rejected and deferred candidates are listed with reasons at the end of `selected
 | `dataset` | String | Dataset(s) as stated by the source |
 | `model` | String | Model or algorithm as stated by the source |
 | `hardware` | String | Hardware platform as stated by the source |
-| `smartphone` … `latency_evaluation` | `Yes` / `No` / `Unknown` | 12 characteristic fields: `smartphone`, `edge_device`, `on_device`, `cloud`, `adaptive_inference`, `resource_awareness`, `energy_evaluation`, `thermal_evaluation`, `multi_view`, `uncertainty`, `anomaly_detection`, `latency_evaluation` |
-| `accuracy_metrics` | String | Metric values exactly as reported by the source |
+| `smartphone` … `latency_evaluation` | `Yes` / `No` / `Unknown` | 13 characteristic fields, in this order: `smartphone`, `edge_device`, `on_device`, `cloud`, `adaptive_inference`, `resource_awareness`, `energy_evaluation`, `thermal_evaluation`, `multi_view`, `uncertainty`, `confidence_gating`, `anomaly_detection`, `latency_evaluation` |
+| `accuracy_metrics` | String | Task-performance metrics exactly as reported by the source (§7.6) |
+| `efficiency_metrics` | String | Efficiency measurements exactly as reported by the source: latency, FPS/throughput, energy, power, RAM, model size, CPU utilisation, etc. (§7.6) |
 | `limitations` | String | Limitations stated by the authors |
 | `future_work` | String | Future work stated by the authors |
 | `evidence` | String | `[Verified; source: …]` followed by `claim -> evidence` items separated by ` \| ` |
-| `notes` | String | Search group, extraction depth/date, caveats |
+| `notes` | String | Search group, extraction depth/date, paper type, recoding history, caveats |
 
 ## 4. What `Unknown`, `No` and blank mean
 
 - **`Unknown`** means the examined source (currently the abstract) does not establish the characteristic. It is **not** evidence of absence and must never be converted to `No` without a full-text check.
 - **`No`** is used only when the source explicitly describes a contrary setup (e.g., the hardware is stated to be a Raspberry Pi, so `smartphone = No`), when a full-text reading confirms the characteristic is absent, or when the paper is a survey/review (§7.1).
-- **Blank free-text fields** (`limitations`, `future_work`, `accuracy_metrics`) mean nothing was extracted at the current extraction depth, not that none exists.
+- **Blank free-text fields** (`limitations`, `future_work`, `accuracy_metrics`, `efficiency_metrics`) mean nothing was extracted at the current extraction depth, not that none exists.
 - The validator also accepts legacy `true`/`false`/empty values (see `src/literature/schema.py`). New records should use `Yes`/`No`/`Unknown`.
 
 Operational definitions of `Yes` / `No` / `Unknown` for each field are in §7.
@@ -122,11 +123,11 @@ python -m pytest -q
 
 ## 7. Literature Coding Definitions
 
-_Version 1.0, 2026-10-03. Drafted by Claude Code._
+_Version 1.1, 2026-10-03. v1.0 was drafted by Claude Code (Step 8.1). v1.1 applies the eight decisions approved by the researcher/ChatGPT (Step 8.3)._
 
-These definitions are meant to let two coders who read the same paper reach the same value. Items marked **⚑** are coding choices that **require researcher/ChatGPT approval**. Borderline cases and worked examples are in [`coding_decisions.md`](coding_decisions.md).
+These definitions are meant to let two coders who read the same paper reach the same value. Items marked **✓A** were open questions in v1.0 that the researcher/ChatGPT **approved** on 2026-10-03; where the approval changed the rule, v1.1 states the approved rule. Borderline cases, worked examples and the approval record are in [`coding_decisions.md`](coding_decisions.md).
 
-The definitions apply to new records and to any later correction of existing records. Records coded before 2026-10-03 have not yet been re-checked against them.
+All 54 batch-1 records were recoded under v1.1 on 2026-10-03. Every changed value is listed in [`recoding_report.md`](recoding_report.md).
 
 ### 7.1 General rules
 
@@ -138,7 +139,7 @@ The definitions apply to new records and to any later correction of existing rec
 
 **Evaluated configuration.** A field describes what the authors actually built, ran or measured. A capability that is claimed but not demonstrated (e.g. "can be deployed on mobile devices") is not enough for `Yes`.
 
-**Values.** These apply to all 12 characteristic fields.
+**Values.** These apply to all 13 characteristic fields.
 
 | Value | Use when |
 | :-- | :-- |
@@ -161,8 +162,8 @@ The definitions apply to new records and to any later correction of existing rec
 
 The CSV has no paper-type column, so `notes` is used.
 
-**Survey and review papers.** ⚑
-- A survey does not evaluate a system. All 12 characteristic fields are therefore coded **`No`** once the paper is confirmed to be a survey or review with no original experiments. The abstract states "survey" or "review" and reports no original experiments; full-text reading confirms it.
+**Survey and review papers.** ✓A (Decision 1)
+- A survey does not evaluate a system. All 13 characteristic fields are therefore coded **`No`** once the paper is confirmed to be a survey or review with no original experiments. The abstract states "survey" or "review" and reports no original experiments; full-text reading confirms it.
 - If the survey also reports its own experiments, code only those experiments.
 - Record the topics the survey covers in `notes` (`Survey topics: ...`) and in `domain`/`application`. Topics are **never** recorded in the characteristic fields.
 - Benchmark and measurement studies (e.g. smartphone inference benchmarks) are **not** surveys. They are coded by what they measured.
@@ -186,7 +187,11 @@ Every `Yes` must have an evidence item in the `evidence` field. Every `No` that 
 - qualitative claims such as "real-time", "lightweight", "efficient" or "edge-friendly" without a reported measurement or a described mechanism;
 - the coder's general knowledge of the method.
 
-**External identification.** Identifying a named product is allowed and must be labelled as such in the evidence item. Example: a named phone model is a smartphone (`external identification: manufacturer product page`). ⚑
+**External identification.** ✓A (Decision 6) A named commercial device may be classified using an external source only when both conditions hold:
+1. the paper itself names the device model;
+2. an authoritative external source confirms the classification. The manufacturer's official product or specification page is preferred.
+
+Record the external source (URL and access date) in `notes`, and label the evidence item `external identification`. Never classify a device silently or from memory.
 
 **Format.**
 - The `evidence` field keeps its existing prefix, `[Verified; source: <source>]`. The prefix names where the text was read, e.g. `abstract via OpenAlex` or `full text`.
@@ -205,7 +210,8 @@ Every `Yes` must have an evidence item in the `evidence` field. Every `No` that 
 - **Yes:**
   - the paper states that a smartphone, or a named smartphone model, captures the inspection data in the proposed pipeline, or runs the processing;
   - an app running on a smartphone is part of the evaluated system;
-  - the paper benchmarks smartphones as compute devices.
+  - the paper benchmarks smartphones as compute devices;
+  - the paper names a commercial device model that an authoritative external source confirms is a smartphone (see External identification, §7.2).
 - **No:**
   - the evaluated hardware is explicitly a non-phone device (Raspberry Pi, Jetson, industrial camera + PC, MCU, tablet) with no smartphone role;
   - a smartphone appears **only** as the camera used to collect a dataset that is then processed offline, and the phone plays no part in the proposed system. Record "captured with smartphone" in `dataset` instead.
@@ -226,7 +232,7 @@ Every `Yes` must have an evidence item in the `evidence` field. Every `No` that 
 - **Yes:** the paper states the model is deployed and executed on the capturing/end device, e.g. "runs on the phone", "deployed on OAK-D for real-time detection", or on-device benchmark results.
 - **No:**
   - all evaluated configurations send data off-device for inference (cloud-only or server-only);
-  - or only part of the model ever runs locally (split computing). In that case record `partial on-device (split)` in `notes`. ⚑
+  - or the inference is split between the device and an edge server and/or the cloud (device + edge, device + cloud, or device + edge + cloud). In that case record `Execution: split/partial on-device inference (<parts>)` in `notes`. ✓A (Decision 7)
 - **Unknown:** the location of inference is not stated, e.g. "a smartphone app detects defects" without saying where inference runs.
 - **Never inferred from:** a model being lightweight, the existence of an app, or models found inside app packages (static analysis) without execution.
 
@@ -248,7 +254,8 @@ Qualifies:
 | Dynamic model selection or model switching at runtime (e.g. choosing among model variants by input or condition) | Yes |
 | Dynamic computation: layer/block skipping, dynamic width/depth, runtime sub-network selection, dynamic resolution | Yes |
 | Input-dependent computation (spatial/temporal dynamic networks, cascades) | Yes |
-| Runtime DNN partitioning/offloading decisions that change where model layers execute ⚑ | Yes |
+| **Dynamic** runtime partitioning/offloading, where the device/edge/cloud partition point or computation path changes at runtime ✓A (Decision 4) | Yes |
+| **Static** partitioning (a fixed split chosen once) | No |
 | DVFS, CPU/GPU frequency scaling, core/processor allocation or task scheduling **with the model computation unchanged** | **No.** This is system-level adaptation; it is coded under `resource_awareness` if it is resource-driven |
 | A model chosen once at design or deployment time and fixed afterwards | No |
 | Changing physical process parameters (e.g. printer settings) based on predictions | No (adaptation of the process, not of inference) |
@@ -311,12 +318,12 @@ Qualifies:
 
 | Concept | Qualifies? |
 | :-- | :-- |
-| Raw softmax score, class probability or "confidence" reported or thresholded, without being estimated or evaluated as uncertainty | **No** on its own ⚑ |
-| Confidence or entropy thresholds used for control decisions (early exit, recapture, human referral) without evaluating that score as uncertainty | **No** on its own ⚑; record `confidence-gated decision` in `notes` |
+| Raw softmax score, class probability or "confidence" reported or thresholded, without being estimated or evaluated as uncertainty | **No** on its own ✓A (Decision 5) |
+| Confidence or entropy thresholds used to trigger an action (early exit, recapture, human referral, rejection, fallback) without evaluating that score as uncertainty | **No** for `uncertainty`; code it in **`confidence_gating`** ✓A (Decision 5) |
 | Calibrated confidence (temperature scaling, calibration evaluated with ECE or reliability diagrams) | Yes |
 | Predictive uncertainty from Bayesian methods (MC dropout, variational, Bayesian NNs), deep ensembles, Gaussian processes, evidential learning, conformal prediction | Yes |
 | Epistemic and/or aleatoric uncertainty explicitly modelled | Yes |
-| Predictive entropy or mutual information presented **and evaluated** as an uncertainty measure | Yes |
+| Entropy-based uncertainty: predictive entropy or mutual information presented **and evaluated** as an uncertainty measure | Yes |
 | Selective prediction / reject option with risk-coverage evaluation | Yes |
 | Out-of-distribution detection used to flag unreliable predictions | Yes |
 
@@ -324,6 +331,26 @@ Qualifies:
   - the full text was read and none of the qualifying items occur;
   - or the paper is a survey (§7.1).
 - **Unknown:** the abstract mentions confidence or reliability without detail.
+
+#### `confidence_gating`
+_Added 2026-10-03, ✓A (Decision 5)._
+
+**Definition.** A prediction confidence or probability score is used to **trigger a downstream action**. Qualifying actions:
+- recapture or an additional view;
+- additional inference (a larger model or a further stage);
+- early exit;
+- human referral;
+- rejection;
+- fallback.
+
+- **Yes:** the paper states that a confidence or probability score (softmax, class probability, entropy, margin, or a learned confidence or selection score that the paper describes as confidence) is compared with a threshold or policy, and that the result triggers one of these actions.
+- **No:**
+  - the full text was read and confidence scores are only reported, or not used for any decision;
+  - or the paper is a survey (§7.1).
+- **Unknown:**
+  - the source does not say whether a confidence score drives an action;
+  - or the score driving the action is not described as confidence (e.g. a learned selection head). Such cases are noted for researcher review.
+- **Independent of `uncertainty`.** Confidence gating is **not** formal uncertainty. A paper can be `confidence_gating = Yes` and `uncertainty = No/Unknown` (e.g. early exit on raw softmax confidence), or the reverse.
 
 #### `anomaly_detection`
 **Definition.** The inspection task is formulated as detecting deviations from normality. The model is trained or fitted mainly on normal (defect-free) data, or is unsupervised or self-supervised with respect to real defect labels. Examples: one-class, reconstruction-based, density- or feature-distance-based, or memory-bank methods. Methods trained on normal data with **synthetic** anomalies count, as do datasets built for this setting.
@@ -335,20 +362,21 @@ Qualifies:
 - **Does not qualify:** OOD detection used for prediction reliability (coded under `uncertainty`); detecting anomalies in non-visual process signals is recorded in `domain`.
 
 #### `latency_evaluation`
-The schema has a single latency field. **No schema change is made.** The field is defined as follows, and the type of timing must be recorded in the evidence item as `latency type: inference | end-to-end | throughput`.
+The schema has a single latency field. The field is defined as follows. The **type of timing must be recorded** in the evidence item as `latency type: inference latency`, `latency type: end-to-end latency` or `latency type: throughput/FPS`. The three types are never merged into one statement ✓A (Decision 2). Measured values go in `efficiency_metrics`.
 
 **Definition.** The paper reports a **measured timing result** of the evaluated inference pipeline on stated or identifiable hardware.
 
 | Timing quantity | Qualifies? |
 | :-- | :-- |
-| Inference latency (time per forward pass / per input) | Yes (`inference`) |
-| End-to-end latency (capture or request to result, including pre/post-processing or network transfer) | Yes (`end-to-end`) |
-| Throughput: FPS, images/s, parts/min, or a measured relative FPS/speed change | Yes (`throughput`) ⚑ |
+| Inference latency (time per forward pass / per input) | Yes (`inference latency`) |
+| End-to-end latency (capture or request to result, including pre/post-processing or network transfer) | Yes (`end-to-end latency`) |
+| Throughput: FPS, images/s, parts/min, or a measured relative FPS/speed change (e.g. "+18.1% FPS", "3.1x lower latency") | Yes (`throughput/FPS`, or the type that was measured) ✓A (Decision 2) |
 | Adaptation, reconfiguration or switching time **only** | **No**; record it in `notes` |
 | Training time only | No |
 | FLOPs, MACs, parameter count, model size | No (not timing) |
 | "Real-time" or "fast" claimed without a reported measurement or comparison | Unknown (not Yes) |
-| A comparative result ("faster than X") stated as an experimental finding, with no figures | Yes, flagged in evidence as `comparative, no figure` ⚑ |
+| A qualitative statement ("faster than the baseline", "significantly reduces inference time", "low latency", "consistent frame rate") with **no measured timing value** | **Unknown**, plus `Requires full-text verification` in `notes` ✓A (Decision 3) |
+| The paper names a timing metric it measured (e.g. "real-time throughput" as a benchmark metric) but the examined source gives no value | Yes, provided the metric is explicitly reported as measured; leave `efficiency_metrics` blank and note that the values are not in the source |
 
 - **No:**
   - the full text was read and no timing is reported;
@@ -360,22 +388,25 @@ The schema has a single latency field. **No schema change is made.** The field i
 | :-- | :-- | :-- |
 | 1 | Resource measurement vs resource-aware adaptation | Only a resource-driven **decision** sets `resource_awareness = Yes`. Measurement goes to `energy_evaluation`, `latency_evaluation` or `notes`. |
 | 2 | Adaptive inference vs system-level adaptation (DVFS) | `adaptive_inference` requires the model computation to change. DVFS or scheduling with an unchanged model is `adaptive_inference = No`, and is `resource_awareness = Yes` if resource-driven. |
-| 3 | Inference latency vs throughput/FPS vs adaptation time | Inference latency, end-to-end latency and throughput all qualify (record the type). Adaptation time alone does not. |
-| 4 | Confidence score vs uncertainty estimation/calibration | A softmax confidence alone, used or thresholded, is not `uncertainty`. Calibration, a UQ method, an evaluated uncertainty measure, or selective prediction is. |
+| 3 | Inference latency vs throughput/FPS vs adaptation time | Inference latency, end-to-end latency and throughput all qualify (record the type separately). Adaptation time alone does not. Qualitative speed claims without a measured value are `Unknown`. |
+| 4 | Confidence score vs uncertainty estimation/calibration | A softmax confidence alone, used or thresholded, is not `uncertainty`. Calibration, a UQ method, an evaluated uncertainty measure, selective prediction or OOD uncertainty is. A confidence score that triggers an action is coded in `confidence_gating`. |
 | 5 | Multiple images vs true multi-view | Only distinct camera poses of the same object, used jointly, count. Repeated shots, time series and multi-modal capture from one pose do not. |
 | 6 | Smartphone as inspection device vs smartphone mentioned | The phone must capture or compute in the evaluated system. A phone used only to collect a dataset processed offline is `smartphone = No` (note it in `dataset`). |
 | 7 | Edge infrastructure vs edge inference on a device | `edge_device` requires inference on resource-constrained device hardware. Edge servers, MEC and "edge cloud" do not count. |
-| 8 | Cloud-assisted vs cloud-only | Both are `cloud = Yes`. Record the mode in `notes`. Cloud-only implies `on_device = No`. |
+| 8 | Cloud-assisted vs cloud-only | Both are `cloud = Yes`. Record the mode in `notes`. Cloud-only implies `on_device = No`, and so does split inference. |
 | 9 | Anomaly detection vs supervised defect detection | Training on normal data (± synthetic anomalies) or unsupervised with respect to defect labels counts. Supervised defect classes do not, whatever the paper's wording. |
-| 10 | Survey/review vs evaluated system | Surveys are coded `No` for all 12 fields. Their topics go in `notes`/`domain`/`application`. |
+| 10 | Survey/review vs evaluated system | Surveys are coded `No` for all 13 fields. Their topics go in `notes`/`domain`/`application`. |
+| 11 | Dynamic vs static partitioning | Dynamic runtime partitioning is `adaptive_inference = Yes`. A static split is `No`. DVFS or scheduling with unchanged model computation is `No` (and `resource_awareness = Yes` if resource-driven). |
 
 ### 7.5 Consistency rules
 
 - `smartphone = Yes` and `on_device = Yes` ⇒ `edge_device = Yes`.
 - `on_device = Yes` ⇒ `edge_device = Yes`, except when the end device is not resource-constrained (e.g. a workstation directly attached to the camera). In that case explain it in `notes`.
 - Cloud-only processing (`cloud mode: cloud-only`) ⇒ `on_device = No`.
+- Split device/edge/cloud inference ⇒ `on_device = No`. `edge_device = Yes` still applies if the device part runs on resource-constrained hardware.
 - `adaptive_inference = Yes` does not imply `resource_awareness = Yes`: input-dependent early exit can be resource-agnostic. Code each field separately.
-- A `survey/review` paper type ⇒ all 12 characteristic fields are `No`.
+- A `survey/review` paper type ⇒ all 13 characteristic fields are `No`.
+- `latency_evaluation = Yes` ⇒ the evidence names the timing type, and `efficiency_metrics` holds the value when the source gives one.
 
 ### 7.6 Free-text fields
 
@@ -384,7 +415,8 @@ The schema has a single latency field. **No schema change is made.** The field i
 | `dataset` | Dataset names exactly as the source states them, separated by `; `. For custom data, give a short description (object, defect types, size if stated, acquisition device), illustrative example: `Custom: <N> images of FDM parts, <k> defect classes (captured with smartphone)`. If the abstract does not state it, write `Not stated in abstract`. `Unknown` is reserved for characteristic fields. |
 | `model` | The model or algorithm as named by the source (e.g. `Improved YOLOv8 (group-convolution head)`), separated by `; ` if several. Do not name a backbone the paper does not state. |
 | `hardware` | Prefix each component with its role, using only the roles the source states: `Inference: ...; Acquisition: ...; Training: ...`. Illustrative example: `Inference: OAK-D on Raspberry Pi; Acquisition: camera on a moving vehicle`. Use device model names as stated. If no hardware is stated, write `Not stated in abstract` (or `Not stated` after full-text reading). |
-| `accuracy_metrics` | Quantitative **task-performance** results exactly as reported: metric name, value with the source's units and precision, and the dataset or condition, separated by `; `. Never recompute, round or convert values. Efficiency results (latency, FPS, energy, GFLOPs, model size) may also be recorded here **only** with the prefix `Efficiency:` (e.g. `Efficiency: 31.76 FPS on OAK-D`), because the schema has no separate efficiency column ⚑. Relative results must stay relative (`+18.1% FPS vs YOLOv8`). Leave the field blank if no figures were extracted. |
+| `accuracy_metrics` | Quantitative **task-performance** results exactly as reported: metric name, value with the source's units and precision, and the dataset or condition, separated by `; `. Examples: accuracy, precision, recall, F1, mAP, AUROC, IoU, Dice, calibration error, risk/coverage. Never recompute, round or convert values. Leave the field blank if no figures were extracted. |
+| `efficiency_metrics` | ✓A (Decision 8) Quantitative **efficiency** results exactly as reported, separated by `; `. Examples: inference or end-to-end latency, FPS/throughput, energy, power, RAM, model size, FLOPs/GFLOPs, CPU/GPU utilisation, adaptation time. Give the metric, the value, and the hardware or baseline if stated (e.g. `Tiny-YOLOv4 31.76 FPS on OAK-D`). Relative results stay relative (`FPS +18.1% vs baseline YOLOv8`). Do not duplicate a Boolean field: the Boolean records *whether* something was evaluated; this field records *what was reported*. Leave the field blank if no figures were reported in the examined source. |
 | `limitations` | Limitations of **this paper's own** method or study, stated by the authors. A limitation of the field in general must be marked `(field-level)`. Each entry needs an evidence item. |
 | `future_work` | Future work stated by the authors, with an evidence item. Do not record the coder's suggestions. |
 
@@ -393,6 +425,6 @@ The schema has a single latency field. **No schema change is made.** The field i
 - A coding change in `papers.csv` must:
   - cite the definition subsection that applies (e.g. `§7.3 latency_evaluation`);
   - update the evidence item;
-  - append a dated note to `notes`, such as `Recoded latency_evaluation Yes→Unknown under README §7 v1.0 (2026-10-xx)`.
+  - append a dated note to `notes`, such as `Recoded latency_evaluation Yes→Unknown under README §7 v1.1 (2026-10-03), Decision 3 (qualitative speed claims). Requires full-text verification.`
 - Upgrading `Unknown` to `Yes` or `No` after full-text reading needs a full-text evidence item.
 - Recoding is done as a separate, logged task (`docs/agent_sync/CHANGELOG.md`), never silently.

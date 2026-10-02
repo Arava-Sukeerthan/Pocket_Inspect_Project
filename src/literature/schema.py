@@ -3,7 +3,9 @@ Schema definitions and field metadata for PocketInspect literature management.
 """
 from typing import List, Set, Dict
 
-# Exact 29-column schema required for papers.csv
+# Exact 31-column schema required for papers.csv.
+# confidence_gating and efficiency_metrics were added on 2026-10-03 (Step 8.3);
+# see research/literature/README.md §3 and §7.
 PAPERS_SCHEMA_HEADERS: List[str] = [
     "paper_id",
     "title",
@@ -27,9 +29,11 @@ PAPERS_SCHEMA_HEADERS: List[str] = [
     "thermal_evaluation",
     "multi_view",
     "uncertainty",
+    "confidence_gating",
     "anomaly_detection",
     "latency_evaluation",
     "accuracy_metrics",
+    "efficiency_metrics",
     "limitations",
     "future_work",
     "evidence",
@@ -48,6 +52,7 @@ BOOLEAN_FIELDS: Set[str] = {
     "thermal_evaluation",
     "multi_view",
     "uncertainty",
+    "confidence_gating",
     "anomaly_detection",
     "latency_evaluation"
 }

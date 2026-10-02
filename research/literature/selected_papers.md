@@ -2,6 +2,8 @@
 
 _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 
+_2026-10-03 (Step 8.3): the "Characteristics marked Yes" lines were regenerated from `papers.csv` after recoding under README §7 v1.1. `papers.csv` is the authoritative record; see `recoding_report.md` for every changed value. Other text in this file is unchanged from 2026-10-01 and may describe the earlier coding._
+
 **Epistemic status.** Every entry is a real publication. Its metadata was verified against Crossref and/or OpenAlex, and every DOI resolves through the doi.org handle registry. Characteristic fields were extracted from the **abstract only** (Fact = stated in the abstract). Anything the abstract does not state is recorded as `Unknown`, and full-text review is pending. Nothing in this file is a research-gap or novelty claim.
 
 ## Papers by search group
@@ -52,7 +54,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.3390/s24072099](https://doi.org/10.3390/s24072099)
 - **Application:** Road defect classification (speed bumps, manholes, potholes)
 - **Dataset / Model / Hardware:** Automatically collected and labelled smartphone data / CNN-based classifier / Commercial smartphones
-- **Characteristics marked Yes:** smartphone, latency_evaluation
+- **Characteristics marked Yes:** smartphone
 - **Why relevant:** Shows smartphone-collected data and a smartphone-oriented CNN for defect classification; road domain.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Shows smartphone-collected data and a smartphone-oriented CNN for defect classification
@@ -79,7 +81,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1109/iccvw.2019.00447](https://doi.org/10.1109/iccvw.2019.00447)
 - **Application:** Benchmarking AI inference acceleration on smartphone SoCs
 - **Dataset / Model / Hardware:** AI Benchmark tasks / Multiple DNNs / Mobile chipsets from Qualcomm, HiSilicon, Samsung, MediaTek, Unisoc
-- **Characteristics marked Yes:** smartphone, on_device, latency_evaluation
+- **Characteristics marked Yes:** smartphone, edge_device, on_device
 - **Why relevant:** Reference for how heterogeneous smartphone accelerators differ, relevant to running inspection models on older or low-resource phones.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Reference for how heterogeneous smartphone accelerators differ, relevant to running inspection models on older or low-resource phones.
@@ -106,7 +108,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.3390/make1010027](https://doi.org/10.3390/make1010027)
 - **Application:** Real-time deployment of DL inference networks as smartphone apps
 - **Dataset / Model / Hardware:** Unknown / Six CNN models / Android and iOS smartphones
-- **Characteristics marked Yes:** smartphone, on_device, resource_awareness, latency_evaluation
+- **Characteristics marked Yes:** smartphone, edge_device, on_device, latency_evaluation
 - **Why relevant:** Practical deployment and benchmarking methodology (accuracy, CPU/GPU use, throughput) relevant to PocketInspect's evaluation protocol.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Practical deployment and benchmarking methodology (accuracy, CPU/GPU use, throughput) relevant to PocketInspect's evaluation protocol.
@@ -132,7 +134,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1145/3308558.3313591](https://doi.org/10.1145/3308558.3313591)
 - **Application:** Empirical study of deep learning usage in Android apps
 - **Dataset / Model / Hardware:** 16,500 popular Android apps / DL models extracted from apps / Android smartphones
-- **Characteristics marked Yes:** smartphone, on_device
+- **Characteristics marked Yes:** smartphone
 - **Why relevant:** Context on how DL is actually deployed on smartphones; not an inspection paper.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Context on how DL is actually deployed on smartphones
@@ -153,7 +155,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1145/3487552.3487863](https://doi.org/10.1145/3487552.3487863)
 - **Application:** Measurement of DNN deployment and performance across smartphones
 - **Dataset / Model / Hardware:** Over 16k popular Google Play apps / DNNs extracted from apps / Smartphones across tiers and generations
-- **Characteristics marked Yes:** smartphone, on_device, energy_evaluation, latency_evaluation
+- **Characteristics marked Yes:** smartphone, edge_device, on_device, energy_evaluation
 - **Why relevant:** Directly relevant to device heterogeneity (older vs newer phones) and energy cost of on-device inference.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Directly relevant to device heterogeneity (older vs newer phones) and energy cost of on-device inference.
@@ -346,7 +348,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1016/j.aei.2020.101101](https://doi.org/10.1016/j.aei.2020.101101)
 - **Application:** Predictive model-based quality inspection in SMT manufacturing
 - **Dataset / Model / Hardware:** Real industrial SMT use case / Machine learning (models not stated in abstract) / Edge Cloud Computing infrastructure
-- **Characteristics marked Yes:** edge_device, cloud
+- **Characteristics marked Yes:** none (all Unknown/No at abstract level)
 - **Why relevant:** Shows edge-cloud deployment for reducing inspection load; relevant to deciding when full inspection is needed.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Shows edge-cloud deployment for reducing inspection load
@@ -642,7 +644,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1109/icpr.2016.7900006](https://doi.org/10.1109/icpr.2016.7900006)
 - **Application:** Early-exit deep networks for faster inference
 - **Dataset / Model / Hardware:** MNIST, CIFAR10 / BranchyNet applied to LeNet, AlexNet, ResNet / Unknown
-- **Characteristics marked Yes:** adaptive_inference, uncertainty, latency_evaluation
+- **Characteristics marked Yes:** adaptive_inference, confidence_gating
 - **Why relevant:** Foundational confidence-gated adaptive inference; directly related to confidence-triggered extra computation or recapture.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Foundational confidence-gated adaptive inference
@@ -669,7 +671,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1109/tpami.2021.3117837](https://doi.org/10.1109/tpami.2021.3117837)
 - **Application:** Survey of dynamic neural networks
 - **Dataset / Model / Hardware:** Survey / Sample-wise, spatial-wise and temporal-wise dynamic networks / Unknown
-- **Characteristics marked Yes:** adaptive_inference
+- **Characteristics marked Yes:** none (all Unknown/No at abstract level)
 - **Why relevant:** Taxonomy reference for adaptive inference design options.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Taxonomy reference for adaptive inference design options.
@@ -690,7 +692,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1109/twc.2019.2946140](https://doi.org/10.1109/twc.2019.2946140)
 - **Application:** Device-edge collaborative DNN inference with partitioning and early exit
 - **Dataset / Model / Hardware:** Unknown / Edgent (DNN partitioning + right-sizing via early exit) / Raspberry Pi and desktop PC prototype
-- **Characteristics marked Yes:** edge_device, adaptive_inference, resource_awareness, latency_evaluation
+- **Characteristics marked Yes:** edge_device, adaptive_inference, resource_awareness
 - **Why relevant:** Accuracy-latency trade-off under changing conditions; offloading is an alternative PocketInspect may compare against.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Accuracy-latency trade-off under changing conditions
@@ -723,7 +725,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1145/3037697.3037698](https://doi.org/10.1145/3037697.3037698)
 - **Application:** Layer-level DNN partitioning between mobile device and datacenter
 - **Dataset / Model / Hardware:** 8 intelligent applications (vision, speech, NLP) / Neurosurgeon scheduler / Mobile development platform (model not stated in abstract)
-- **Characteristics marked Yes:** cloud, adaptive_inference, resource_awareness, energy_evaluation, latency_evaluation
+- **Characteristics marked Yes:** edge_device, cloud, adaptive_inference, resource_awareness, energy_evaluation, latency_evaluation
 - **Why relevant:** Foundational mobile/cloud split reference for energy-latency trade-offs.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Foundational mobile/cloud split reference for energy-latency trade-offs.
@@ -751,7 +753,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1145/3241539.3241559](https://doi.org/10.1145/3241539.3241559)
 - **Application:** Resource-aware multi-tenant on-device deep learning for continuous mobile vision
 - **Dataset / Model / Hardware:** Unknown / NestDNN / Mobile vision systems (platform not stated in abstract)
-- **Characteristics marked Yes:** on_device, adaptive_inference, resource_awareness, energy_evaluation, latency_evaluation
+- **Characteristics marked Yes:** edge_device, on_device, adaptive_inference, resource_awareness, energy_evaluation, latency_evaluation
 - **Why relevant:** Runtime resource-accuracy trade-off on mobile vision; close to PocketInspect's adaptive-inference direction.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Runtime resource-accuracy trade-off on mobile vision
@@ -806,7 +808,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1145/3649329.3657310](https://doi.org/10.1145/3649329.3657310)
 - **Application:** Thermal and latency-variation management for two-stage detectors
 - **Dataset / Model / Hardware:** Unknown / LOTUS (DRL-based joint CPU/GPU frequency scaling) / NVIDIA Jetson Orin Nano; Mi 11 Lite mobile platform
-- **Characteristics marked Yes:** smartphone, edge_device, on_device, adaptive_inference, resource_awareness, thermal_evaluation, latency_evaluation
+- **Characteristics marked Yes:** smartphone, edge_device, on_device, resource_awareness, thermal_evaluation
 - **Why relevant:** Directly relevant: thermal-aware on-device detection on a smartphone-class platform.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Directly relevant: thermal-aware on-device detection on a smartphone-class platform.
@@ -833,7 +835,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1145/3793860](https://doi.org/10.1145/3793860)
 - **Application:** Thermal-aware multi-DNN on-device inference for mobile video
 - **Dataset / Model / Hardware:** Two benchmarks + Virtual YouTuber streaming app / Phoenix (RL task allocation + multi-exit networks) / Mobile devices with heterogeneous processors
-- **Characteristics marked Yes:** on_device, adaptive_inference, resource_awareness, thermal_evaluation, latency_evaluation
+- **Characteristics marked Yes:** edge_device, on_device, adaptive_inference, resource_awareness, thermal_evaluation
 - **Why relevant:** Combines thermal awareness with early-exit adaptation on mobile devices, a combination PocketInspect is exploring.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Combines thermal awareness with early-exit adaptation on mobile devices, a combination PocketInspect is exploring.
@@ -860,7 +862,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1145/3665868](https://doi.org/10.1145/3665868)
 - **Application:** Constraint-aware runtime adaptation for single- and multi-DNN workloads on heterogeneous mobile devices
 - **Dataset / Model / Hardware:** Text classification, scene recognition, face analysis tasks / CARIn (multi-objective optimisation + RASS solver) / Heterogeneous mobile devices
-- **Characteristics marked Yes:** on_device, adaptive_inference, resource_awareness
+- **Characteristics marked Yes:** edge_device, on_device, adaptive_inference, resource_awareness
 - **Why relevant:** Runtime configuration switching on heterogeneous mobile hardware.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Runtime configuration switching on heterogeneous mobile hardware.
@@ -887,7 +889,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1109/tmc.2025.3594214](https://doi.org/10.1109/tmc.2025.3594214)
 - **Application:** Deep subnetworks that adapt to dynamic resource constraints on edge devices
 - **Dataset / Model / Hardware:** Visual Wake Words, Google Speech Commands, Fashion-MNIST, CIFAR-10, ImageNet-1K / REDS / Four mobile and embedded platforms incl. Arduino Nano 33 BLE
-- **Characteristics marked Yes:** edge_device, on_device, adaptive_inference, resource_awareness, latency_evaluation
+- **Characteristics marked Yes:** edge_device, on_device, adaptive_inference, resource_awareness
 - **Why relevant:** Runtime model downsizing driven by resource state.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Runtime model downsizing driven by resource state.
@@ -914,7 +916,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1145/3527155](https://doi.org/10.1145/3527155)
 - **Application:** Survey of split computing and early exiting
 - **Dataset / Model / Hardware:** Survey / Split computing and early-exit methods / Unknown
-- **Characteristics marked Yes:** adaptive_inference
+- **Characteristics marked Yes:** none (all Unknown/No at abstract level)
 - **Why relevant:** Survey of the two main runtime adaptation families for mobile inference.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Survey of the two main runtime adaptation families for mobile inference.
@@ -1348,7 +1350,7 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 - **DOI / URL:** [10.1016/j.inffus.2021.05.008](https://doi.org/10.1016/j.inffus.2021.05.008)
 - **Application:** Review of uncertainty quantification in deep learning
 - **Dataset / Model / Hardware:** Review / Bayesian approximation, ensemble methods and others / Unknown
-- **Characteristics marked Yes:** uncertainty
+- **Characteristics marked Yes:** none (all Unknown/No at abstract level)
 - **Why relevant:** Background reference for UQ method selection.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Background reference for UQ method selection.
