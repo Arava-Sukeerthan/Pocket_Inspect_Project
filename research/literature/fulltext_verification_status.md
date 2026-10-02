@@ -1,5 +1,55 @@
 # Full-Text Verification Status
 
+## Step 9.2 update (2026-10-04)
+
+_Evidence collection only. `papers.csv` unchanged; relevance classes unchanged; no gap analysis._
+
+| Measure | Value |
+| :-- | :-- |
+| Papers attempted | 18 (17 proposed class A + P013) |
+| Fully verified (version of record or journal-formatted copy read) | 9: P001, P002, P007, P015, P016, P020, P033, P034, P013 |
+| Partially verified (full text read, but only a preprint version was available) | 3: P011, P029, P031 |
+| Abstract-only papers (blocked) | 4: P018, P019, P022, P023 |
+| Inaccessible papers (blocked) | 2: P017, P032 |
+| Total blocked | 6 |
+| Conflict rows | 146 (see `fulltext_conflicts.md`) |
+
+"Fully verified" means the full text was examined for all 15 coded fields and 11 contextual items. It does **not** mean every field was resolved: Ambiguous rows remain and need researcher decisions.
+
+### Version differences
+
+| Paper | Version used | Note |
+| :-- | :-- | :-- |
+| P001 | Publisher version of record (Struct. Control Health Monit. 28(7) e2751; HTML) | No (version of record) |
+| P002 | Publisher version of record (Sensors 24(7):2099; HTML) | No (version of record) |
+| P007 | Publisher version of record (Adv. Civil Eng. 2022, 9221211; HTML) | No (version of record) |
+| P011 | Author preprint (arXiv v2); published version is Information Fusion 2025 (10.1016/j.inffus.2024.102782) | Possibly; preprint not compared with the version of record (ScienceDirect bot check) |
+| P015 | Publisher version of record (Nat. Commun. 13:4654, 2022) | No (version of record) |
+| P016 | Publisher version of record (Processes 8(11):1464; HTML) | No (version of record) |
+| P020 | Publisher version of record (ASI 4(2):34; HTML) | No (version of record) |
+| P029 | Author preprint carrying the MobiCom 2018 ACM copyright block; not confirmed identical to the ACM version of record | Possibly; not compared (ACM bot check) |
+| P031 | Author preprint carrying the DAC 2024 ACM copyright block; publisher version is closed access | Possibly; not compared (closed access) |
+| P033 | Copy formatted as the published article (ACM TECS 23(4), Article 60, June 2024; pages 60:1-60:xx) | Unlikely (journal layout), but not formally confirmed against the ACM page |
+| P034 | Copy with IEEE TMC 25(1), Jan 2026 journal pagination (pp. 451-463); OpenAlex labels this repository copy "submittedVersion" | Unlikely (journal layout), label conflict noted |
+| P013 | Publisher version of record PDF (Adv. Eng. Inform. 45 (2020) 101101; CC BY-NC-ND) | No (publisher PDF) |
+
+### Remaining blockers
+
+1. **Abstract only (subscription): P018, P019, P022, P023.** Full text needs institutional access, interlibrary loan or an author copy. This is a researcher action.
+2. **P017:** gold open access per OpenAlex and Semantic Scholar, but ScienceDirect served a bot check. Not bypassed; a manual browser check is needed.
+3. **P032:** the only open copy is in the Uppsala DiVA repository, which is unreachable from this environment (network connection failed; browser navigation refused). Needs a manual check or institutional access.
+4. **Preprint-only verification (P011, P029, P031):** the publisher versions were not compared. A later check against the versions of record is recommended before recoding.
+5. **Open definition questions**, now with full-text cases:
+   - industrial PCs as `edge_device` (P013);
+   - design-time selection under a timing constraint as `resource_awareness` (P013);
+   - vote or consistency gates as `confidence_gating` (P002, P013, P015);
+   - timing reported without stated hardware (P002, P011).
+6. **Relevance:** P002 and P013 are not image-based. Their class decisions are the researcher's.
+
+---
+
+## Step 9.1 status (historical, 2026-10-04)
+
 _Step 9.1, 2026-10-04. Preparation only: no full-text coding has started, and `papers.csv` is unchanged._
 
 ## Summary

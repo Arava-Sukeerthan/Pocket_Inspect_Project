@@ -463,3 +463,91 @@ Step 9.1: prepare the full-text verification queue. Preparation only; no full-te
 - Previous Claude Code entry (Step 8.3): commit `e618fd1`, merged to `main` via PR #5 as `1d85914`.
 - Commit: see `git log -- research/literature/fulltext_verification_queue.md` (hash recorded in the next entry)
 - Push status: pushed to `origin/claude/pocketinspect-agent-sync-a33d88`; not merged.
+
+---
+
+## 2026-10-04 — Claude Code
+
+### Task
+Step 9.2: collect full-text evidence for the verification queue (17 proposed class-A papers + P013). Evidence collection only: no recoding, no relevance-class change, no gap analysis, no new literature search.
+
+### Changes
+- `research/literature/fulltext_verification_template.md`: populated with full-text evidence for 12 papers. Each paper has a source/version block and 26 rows (Current / Full-Text Value / Location / Paraphrase / Confidence / Action). The six blocked papers keep empty rows marked "not examined". The Step 9.1 "Issues to resolve" lines are preserved.
+- `research/literature/fulltext_evidence_report.md` (new): per paper, Source, Version, Evidence by characteristic, Other evidence, Conflicts with abstract-level coding, and Recommended action.
+- `research/literature/fulltext_conflicts.md` (new): every row where the full text differs from or could change the current coding, with type, proposed value and decision required.
+- `research/literature/fulltext_verification_status.md`: Step 9.2 summary (verified, partial, blocked, version differences, remaining blockers). The Step 9.1 content is kept below as history.
+- `docs/agent_sync/CHANGELOG.md`: this entry.
+
+### Results
+- **Papers attempted:** 18.
+- **Fully verified (9):** P001, P002, P007, P013, P015, P016, P020, P033, P034. These used the version of record, or a copy carrying the journal pagination (P033, P034).
+- **Partially verified (3):** P011, P029, P031. The full text was read, but only as an arXiv preprint; the publisher versions were not compared.
+- **Blocked (6):**
+  - abstract only: P018, P019, P022, P023;
+  - inaccessible from this environment: P017 (ScienceDirect bot check, not bypassed) and P032 (DiVA repository unreachable).
+- **Conflict rows: 146.**
+
+  | Type | Rows |
+  | :-- | --: |
+  | Contradicts a current Yes/No value | 0 |
+  | Resolves Unknown | 112 |
+  | Ambiguous, leaning change | 1 |
+  | Ambiguous, no change | 15 |
+  | Free-text metric rows | 16 |
+  | Relevance | 2 |
+
+- **Important Unknown→Yes candidates:**
+  - P001: `on_device`, `edge_device`
+  - P011: `smartphone`, `cloud` (GPT-4 Vision API for explanations)
+  - P016: `confidence_gating` (probability threshold triggers a stop-print notification), `on_device`, `edge_device`, `latency_evaluation` (14 FPS on Raspberry Pi 4)
+  - P029: `smartphone` (Galaxy S8/S7, Nexus 5)
+  - P031: `latency_evaluation`
+  - P033: `smartphone`, `latency_evaluation`
+  - P034: `smartphone`, `energy_evaluation` (20-61 mJ), `latency_evaluation`
+- **P002 finding: NOT image-based.** The deployed 1D-CNN classifies smartphone accelerometer signals (three phones, 100 Hz). Dashcam video and YOLOv5m are used only to auto-label training data. `smartphone = Yes` is supported as a sensing device. Whether inference runs on the phone, and the latency, are Ambiguous: on-phone execution is stated in the conclusions, but no hardware is given for the timing. The proposed class A needs researcher review; it was not changed.
+- **P013 finding: NOT image-based.** The ML input is seven numeric SPI measurements per solder joint. The task is predicting X-ray results to reduce X-ray inspection volume (about 29% at field-of-view level).
+  - A GBT model runs on an edge industrial PC (Intel Celeron N2930) at the line.
+  - Training uses a Spark cluster; storage is AWS S3, so `cloud = No` (training/storage only).
+  - `edge_device` and `on_device` are Ambiguous; they depend on the open industrial-PC question.
+  - Relevance class D was not changed.
+- **P031 finding:**
+  - Exact phone: Mi 11 Lite 5G (Snapdragon 780G; Table 2 caption, §4.4).
+  - The detectors (Faster R-CNN, Mask R-CNN) run on the device. The DRL frequency agent runs on a separate desktop RTX 2080Ti over a socket.
+  - Resource and thermal evidence confirmed. No energy results, so `energy_evaluation` candidate is No.
+  - Lotus only scales CPU/GPU frequencies (DVFS). The detector computation is unchanged; the two-width network is the agent's Q-network. Candidate `adaptive_inference` Unknown→No under Decision 4, for researcher confirmation.
+  - Measured latency in Tables 1-2, so candidate `latency_evaluation` Unknown→Yes.
+- **P045/P046:** not examined (outside the queue); no observation recorded.
+
+### Verification
+- **`papers.csv` NOT modified:** byte-for-byte identical (SHA-256 `8a9da369…0a16` before and after; `git diff` empty).
+- `python -m pytest -q`: 24 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID, 0 warnings, 0 duplicates.
+- `git diff` reviewed: only the four full-text files and this changelog changed. No gap-analysis, relevance or definition files touched.
+- **Sources:** publisher open-access pages, arXiv, and the UTS and FH JOANNEUM institutional repositories only. No pirated sources. Bot checks were not bypassed. Downloaded PDFs were kept in scratch space and not committed.
+
+### Uncertain items (researcher/ChatGPT decisions)
+- Relevance classes for P002 and P013 (both not image-based).
+- 16 Ambiguous rows, including:
+  - industrial PCs as `edge_device`/`on_device` (P013);
+  - design-time selection under a timing constraint as `resource_awareness` (P013);
+  - vote or consistency gates as `confidence_gating` (P002 labelling gate, P013 routing, P015 mode threshold);
+  - timing reported without stated hardware (P001 screenshots, P002, P011);
+  - energy profiled but not reported (P033);
+  - where inference runs (P002, P020).
+- Internal inconsistencies found in the papers (recorded, not resolved):
+  - P001 stain precision (0.95 vs 0.85);
+  - P007 dataset size (665 images vs a 1,066/264 split) and IoU threshold (0.3 vs mAP@0.5);
+  - P016 59 FPS (benchmark) vs 14 FPS (measured);
+  - P020 second-best accuracies.
+- **P007 metadata:** the publisher page lists a fifth author (Afaq Ahmad) not in `papers.csv`/registry metadata. Needs a metadata check.
+- The P011, P029 and P031 preprints should be compared with the versions of record before recoding.
+
+### Remaining work
+- Researcher/ChatGPT review of `fulltext_conflicts.md` and the Ambiguous rows.
+- Obtain full texts for P017, P018, P019, P022, P023 and P032.
+- After approval, a separate controlled recoding step (README §7.7).
+
+### Git
+- Previous Claude Code entry (Step 9.1): commit `b77072f` (branch `claude/pocketinspect-agent-sync-a33d88`; not merged at the time of writing).
+- Commit: see `git log -- research/literature/fulltext_evidence_report.md` (hash recorded in the next entry)
+- Push status: pushed to `origin/claude/pocketinspect-agent-sync-a33d88`; not merged.
