@@ -847,3 +847,67 @@ No gap synthesis was done.
 - Branch: `claude/nice-babbage-51qfba` (from `main` at `d3f428e`).
 - Commit: see `git log -- research/literature/fulltext_version_verification.md`.
 - Push status: pushed to `origin/claude/nice-babbage-51qfba`; not merged into `main`.
+
+---
+
+## 2026-10-03 — Claude Code
+
+### Task
+Step 9.6 follow-up: complete the evidence items before PR #7 is merged. Builds on Step 9.6 commit `29aaf78`. The items are:
+- P029/P031/P033 using the strongest accessible same-version copies;
+- P013 Tables 4-5 visual verification;
+- optional P011 Fig. 4.
+
+No merge, no Step 9.7, no gap analysis.
+
+### Changes
+- `research/literature/papers.csv`:
+  - **P029:** 7 characteristic values recoded from Unknown (smartphone Yes; cloud, thermal_evaluation, multi_view, uncertainty, confidence_gating, anomaly_detection No). dataset, hardware, model and limitations filled or refined.
+  - **P031:** 8 characteristic values recoded from Unknown (latency_evaluation Yes; cloud, adaptive_inference, energy_evaluation, multi_view, uncertainty, confidence_gating, anomaly_detection No). dataset, hardware, model and efficiency_metrics filled or refined.
+  - **P033:** 9 characteristic values recoded from Unknown (smartphone, latency_evaluation Yes; cloud, energy_evaluation, thermal_evaluation, multi_view, uncertainty, confidence_gating, anomaly_detection No). dataset, hardware, model, accuracy_metrics, efficiency_metrics and limitations filled or refined.
+  - Evidence items and README §7.7 notes appended for all three papers.
+  - **P013:** `notes` gained the required sentence: "Unable to visually verify Tables 4–5; extracted text is internally inconsistent; no metrics reconstructed."
+- `research/literature/literature_matrix.csv`: regenerated (LF line endings); only the P013, P029, P031 and P033 rows changed.
+- `research/literature/selected_papers.md`: "Characteristics marked Yes" lines for P029, P031 and P033 regenerated, plus a dated header note.
+- `research/literature/fulltext_version_verification.md`: follow-up §8-12 appended (version identity table, per-field decisions, blockers). §1-7 are kept as the Step 9.6 record.
+- `research/literature/fulltext_verification_status.md`, `fulltext_recoding_applied.md`: follow-up sections added; earlier text unchanged.
+
+### Research decisions
+- **Version identity.** Each accessible copy carries the publisher's citation data for the exact DOI in `papers.csv`. Under the follow-up rule, each is accepted as demonstrably the same paper and version:
+  - P029: arXiv v1 camera-ready with the MobiCom '18 ACM permission block, ISBN and DOI;
+  - P031: arXiv v1 camera-ready with the DAC '24 ACM copyright block, ISBN and DOI; consistent with the earlier UMich Deep Blue copy;
+  - P033: arXiv v1 in the final ACM TECS production layout (23(4), Article 60, received/accepted dates, DOI).
+- **Coverage.** The complete text of each copy was read and term-searched.
+- **Residual risk.** A post-camera-ready difference in the ACM PDF cannot be excluded. This is recorded in each paper's `notes`.
+- **P031 adaptive_inference.** No: DVFS/frequency control only, and the detector computation path is unchanged.
+- **P031 latency_evaluation.** Yes: measured per-image inference latency (Tables 1-2), not adaptation time.
+- **P031 cloud.** No under README §7.3: the off-device DQN controller runs on a proximal desktop GPU that the paper does not call cloud.
+- **P033 energy_evaluation.** No: energy is profiled but never reported (rule 4D).
+- **P033 thermal_evaluation.** No: no temperature measurement.
+- **P013 Tables 4-5.** Still blocked. No rendered page can be obtained: UTS OPUS, CORE, archives, Semantic Scholar and Unpaywall are all blocked by the egress proxy, and the reader returns text only. `accuracy_metrics` stays blank; no metrics were reconstructed. The approved P013 characteristic values are unchanged.
+- **P011 Fig. 4.** Unavailable: the PDF cannot be rendered here. P011 is unchanged.
+- **Relevance.** P002 and P013 are unchanged (peripheral/contextual, proposed). No relevance column was added; `audit_report.csv` is unchanged.
+
+### Verification
+- `python -m pytest -q`: 24 passed.
+  - The first run failed `test_latency_yes_records_timing_type`, because the new P031/P033 latency evidence lacked the required `latency type:` label.
+  - The labels were added (P031: inference latency; P033: throughput/FPS plus inference latency) and the suite re-run.
+- `python scripts/manage_literature.py validate`: 54 records, VALID. No duplicate paper IDs; the only repeated DOI value is the pre-existing empty DOI.
+- Compared with `main` (`d3f428e`):
+  - only P002, P011, P013, P029, P031 and P033 differ;
+  - no title, author, year, venue, DOI or URL changed.
+- `research/gap_analysis/` is untouched.
+
+### Uncertain items
+- P013 Tables 4-5 need a visual check of p. 7 of the version of record. This needs a browser, a local PDF, or network access to `opus.lib.uts.edu.au`.
+- P011 Fig. 4 (optional) needs access to `www.cs.unb.ca`.
+- Optional: compare the ACM PDFs of P029/P031/P033 in a browser to remove the residual camera-ready versus ACM-PDF risk.
+- Researcher approval of the P002/P013 relevance proposals.
+
+### Remaining work
+- Researcher review of PR #7. Do not start Step 9.7 or gap synthesis.
+
+### Git
+- Branch: `claude/nice-babbage-51qfba` (PR #7). Previous Step 9.6 commit: `29aaf78`.
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
+- Push status: pushed to `origin/claude/nice-babbage-51qfba`; not merged; `main` not touched.

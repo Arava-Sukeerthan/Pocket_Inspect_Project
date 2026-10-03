@@ -8,6 +8,8 @@ _2026-10-03 (Step 9.4): the "Characteristics marked Yes" lines for P002, P013, P
 
 _2026-10-03 (Step 9.6): the "Characteristics marked Yes" line for P011 was regenerated from `papers.csv` after verification against the Information Fusion version of record; see `fulltext_version_verification.md`. Other text for P011 still reflects the abstract-level extraction. P029, P031 and P033 are unchanged (version of record not reachable)._
 
+_2026-10-03 (Step 9.6 follow-up): the "Characteristics marked Yes" lines for P029, P031 and P033 were regenerated from `papers.csv` after verification against the strongest accessible same-version copies; see `fulltext_version_verification.md` §8. Other text for these papers still reflects the abstract-level extraction._
+
 **Epistemic status.** Every entry is a real publication. Its metadata was verified against Crossref and/or OpenAlex, and every DOI resolves through the doi.org handle registry. Characteristic fields were extracted from the **abstract only** (Fact = stated in the abstract). Anything the abstract does not state is recorded as `Unknown`, and full-text review is pending. Nothing in this file is a research-gap or novelty claim.
 
 ## Papers by search group
@@ -757,7 +759,7 @@ _2026-10-03 (Step 9.6): the "Characteristics marked Yes" line for P011 was regen
 - **DOI / URL:** [10.1145/3241539.3241559](https://doi.org/10.1145/3241539.3241559)
 - **Application:** Resource-aware multi-tenant on-device deep learning for continuous mobile vision
 - **Dataset / Model / Hardware:** Unknown / NestDNN / Mobile vision systems (platform not stated in abstract)
-- **Characteristics marked Yes:** edge_device, on_device, adaptive_inference, resource_awareness, energy_evaluation, latency_evaluation
+- **Characteristics marked Yes:** smartphone, edge_device, on_device, adaptive_inference, resource_awareness, energy_evaluation, latency_evaluation
 - **Why relevant:** Runtime resource-accuracy trade-off on mobile vision; close to PocketInspect's adaptive-inference direction.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Runtime resource-accuracy trade-off on mobile vision
@@ -812,7 +814,7 @@ _2026-10-03 (Step 9.6): the "Characteristics marked Yes" line for P011 was regen
 - **DOI / URL:** [10.1145/3649329.3657310](https://doi.org/10.1145/3649329.3657310)
 - **Application:** Thermal and latency-variation management for two-stage detectors
 - **Dataset / Model / Hardware:** Unknown / LOTUS (DRL-based joint CPU/GPU frequency scaling) / NVIDIA Jetson Orin Nano; Mi 11 Lite mobile platform
-- **Characteristics marked Yes:** smartphone, edge_device, on_device, resource_awareness, thermal_evaluation
+- **Characteristics marked Yes:** smartphone, edge_device, on_device, resource_awareness, thermal_evaluation, latency_evaluation
 - **Why relevant:** Directly relevant: thermal-aware on-device detection on a smartphone-class platform.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Directly relevant: thermal-aware on-device detection on a smartphone-class platform.
@@ -866,7 +868,7 @@ _2026-10-03 (Step 9.6): the "Characteristics marked Yes" line for P011 was regen
 - **DOI / URL:** [10.1145/3665868](https://doi.org/10.1145/3665868)
 - **Application:** Constraint-aware runtime adaptation for single- and multi-DNN workloads on heterogeneous mobile devices
 - **Dataset / Model / Hardware:** Text classification, scene recognition, face analysis tasks / CARIn (multi-objective optimisation + RASS solver) / Heterogeneous mobile devices
-- **Characteristics marked Yes:** edge_device, on_device, adaptive_inference, resource_awareness
+- **Characteristics marked Yes:** smartphone, edge_device, on_device, adaptive_inference, resource_awareness, latency_evaluation
 - **Why relevant:** Runtime configuration switching on heterogeneous mobile hardware.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Runtime configuration switching on heterogeneous mobile hardware.
