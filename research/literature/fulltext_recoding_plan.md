@@ -2,6 +2,10 @@
 
 _2026-10-03, Claude Code, branch `claude/blissful-gauss-ub29pl`. A plan for a **future** controlled recoding task (README §7.7). **Nothing has been applied: `papers.csv` is unchanged.** Every row cites the evidence location recorded in the Step 9.2 evidence report (commit `86a087b`, [`fulltext_evidence_report.md`](fulltext_evidence_report.md)). Ambiguous rows are resolved in [`fulltext_decision_table.md`](fulltext_decision_table.md)._
 
+## Step 9.4 status
+
+_2026-10-03. The researcher/ChatGPT approved the four open decisions: P011 `cloud` = Yes (remote explanation generation only), P011 `latency_evaluation` = No, P013 `resource_awareness` = No, P013 `latency_evaluation` = No. 63 characteristic values from version-confirmed papers were applied; all P011, P029, P031 and P033 changes are **DEFERRED — VERSION CHECK REQUIRED**; P013 `accuracy_metrics` is deferred for table verification. See [`fulltext_recoding_applied.md`](fulltext_recoding_applied.md). The tables below are unchanged except for the added *Step 9.4 status* column._
+
 ## How to apply (future recoding task)
 
 - Apply only the **Approved changes** below, one evidence item per changed field: `[<field>] <claim> -> <evidence> (<location>)` with the source prefix naming the full-text source and version (README §7.2).
@@ -22,111 +26,111 @@ Approved changes = 90 Confirmed Unknown→value rows from Step 9.2 + 4 ambiguous
 
 ### Approved changes
 
-| Paper | Field | Current | New value | Evidence location (Step 9.2) | Basis |
-|---|---|---|---|---|---|
-| P002 | cloud | Unknown | No | §5 | Confirmed full-text evidence (Step 9.2) |
-| P002 | adaptive_inference | Unknown | No | §3.2 (Algorithm 1); §4.3 | Rule 4C: the sliding window only changes where/how often the fixed RDD-CNN is invoked on the accelerometer stream; the model's computation per window never changes. README §7.3: static inference graph → No. The full text was read. |
-| P002 | resource_awareness | Unknown | No | §3.2; §4.3 | Confirmed full-text evidence (Step 9.2) |
-| P002 | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P002 | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P002 | multi_view | Unknown | No | §3.2; §4.1 | Confirmed full-text evidence (Step 9.2) |
-| P002 | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P002 | anomaly_detection | Unknown | No | §3.2; §4.3 | Confirmed full-text evidence (Step 9.2) |
-| P011 ⚠ | smartphone | Unknown | Yes | §5.5.1-5.5.2, pp. 13-14; Fig. 7, p. 15 | Confirmed full-text evidence (Step 9.2) |
-| P011 ⚠ | adaptive_inference | Unknown | No | §5.5 | Confirmed full-text evidence (Step 9.2) |
-| P011 ⚠ | resource_awareness | Unknown | No | §5.5.1, pp. 13-14 | Confirmed full-text evidence (Step 9.2) |
-| P011 ⚠ | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P011 ⚠ | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P011 ⚠ | multi_view | Unknown | No | §6.1; §7.1 | Confirmed full-text evidence (Step 9.2) |
-| P011 ⚠ | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P011 ⚠ | confidence_gating | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P011 ⚠ | anomaly_detection | Unknown | No | §5.1 | Confirmed full-text evidence (Step 9.2) |
-| P015 | smartphone | Unknown | No | Methods - CAXTON system | Confirmed full-text evidence (Step 9.2) |
-| P015 | edge_device | Unknown | No | Online correction and parameter discovery pipeline; Computing and software requirements | Confirmed full-text evidence (Step 9.2) |
-| P015 | on_device | Unknown | No | Same as edge_device | Confirmed full-text evidence (Step 9.2) |
-| P015 | cloud | Unknown | No | Online correction pipeline; Computing and software requirements | Confirmed full-text evidence (Step 9.2) |
-| P015 | adaptive_inference | Unknown | No | Online correction and parameter discovery pipeline | Confirmed full-text evidence (Step 9.2) |
-| P015 | resource_awareness | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P015 | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P015 | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P015 | multi_view | Unknown | No | Methods - CAXTON system; Discussion | Confirmed full-text evidence (Step 9.2) |
-| P015 | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P015 | anomaly_detection | Unknown | No | Results - Dataset generation; Model architecture | Confirmed full-text evidence (Step 9.2) |
-| P016 | smartphone | Unknown | No | §3, p. 12 | Confirmed full-text evidence (Step 9.2) |
-| P016 | edge_device | Unknown | Yes | §3, p. 12 | Confirmed full-text evidence (Step 9.2) |
-| P016 | on_device | Unknown | Yes | §3, p. 12 | Confirmed full-text evidence (Step 9.2) |
-| P016 | cloud | Unknown | No | §2.2, p. 8; §3, p. 12 | Confirmed full-text evidence (Step 9.2) |
-| P016 | adaptive_inference | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P016 | resource_awareness | Unknown | No | §2.2, p. 7 | Confirmed full-text evidence (Step 9.2) |
-| P016 | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P016 | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P016 | multi_view | Unknown | No | §3, p. 12; §1.2, p. 3 | Confirmed full-text evidence (Step 9.2) |
-| P016 | uncertainty | Unknown | No | §2.3, p. 10; §3 | Confirmed full-text evidence (Step 9.2) |
-| P016 | confidence_gating | Unknown | Yes | §3, pp. 12-13; §4, p. 13 | Confirmed full-text evidence (Step 9.2) |
-| P016 | anomaly_detection | Unknown | No | §2.1-2.2, p. 7 | Confirmed full-text evidence (Step 9.2) |
-| P016 | latency_evaluation | Unknown | Yes | §3, p. 12; §2.2, p. 7 | Confirmed full-text evidence (Step 9.2) |
-| P020 | smartphone | Unknown | No | §3, p. 5; §4.1, p. 13 | Confirmed full-text evidence (Step 9.2) |
-| P020 | cloud | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P020 | adaptive_inference | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P020 | resource_awareness | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P020 | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P020 | thermal_evaluation | Unknown | No | Table 3, p. 14 | Confirmed full-text evidence (Step 9.2) |
-| P020 | multi_view | Unknown | No | §4.2, p. 13; §5.4, p. 17 | Confirmed full-text evidence (Step 9.2) |
-| P020 | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P020 | confidence_gating | Unknown | No | §3.3, pp. 9-10 | Confirmed full-text evidence (Step 9.2) |
-| P020 | anomaly_detection | Unknown | No | §3.4, p. 10 | Confirmed full-text evidence (Step 9.2) |
-| P029 ⚠ | smartphone | Unknown | Yes | §4.3.1 | Confirmed full-text evidence (Step 9.2) |
-| P029 ⚠ | cloud | Unknown | No | §4.3.1; §6 | Confirmed full-text evidence (Step 9.2) |
-| P029 ⚠ | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P029 ⚠ | multi_view | Unknown | No | §4.1 | Confirmed full-text evidence (Step 9.2) |
-| P029 ⚠ | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P029 ⚠ | confidence_gating | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P029 ⚠ | anomaly_detection | Unknown | No | §4.1 | Confirmed full-text evidence (Step 9.2) |
-| P031 ⚠ | cloud | Unknown | No | §4.4 | Confirmed full-text evidence (Step 9.2) |
-| P031 ⚠ | adaptive_inference | Unknown | No | §4.1-4.4 | Confirmed full-text evidence (Step 9.2); Decision B |
-| P031 ⚠ | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2); Decision B |
-| P031 ⚠ | multi_view | Unknown | No | §5.1.2 | Confirmed full-text evidence (Step 9.2) |
-| P031 ⚠ | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P031 ⚠ | confidence_gating | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P031 ⚠ | anomaly_detection | Unknown | No | §5.1.2 | Confirmed full-text evidence (Step 9.2) |
-| P031 ⚠ | latency_evaluation | Unknown | Yes | Tables 1-2; §5.2.1 | Confirmed full-text evidence (Step 9.2); Decision B |
-| P033 ⚠ | smartphone | Unknown | Yes | §6.3, p. 60:19 | Confirmed full-text evidence (Step 9.2) |
-| P033 ⚠ | cloud | Unknown | No | Fig. 2, p. 60:15 | Confirmed full-text evidence (Step 9.2) |
-| P033 ⚠ | energy_evaluation | Unknown | No | §4.1; §6.4, pp. 60:19-60:20; §7 | Rule 4D: §6.4 describes profiling latency and energy (100 runs), but §7 reports no energy or power value. README §7.3: no energy results after reading the full text → No. Evidence is from an arXiv copy whose version is not confirmed; apply only with the P033 version check. |
-| P033 ⚠ | thermal_evaluation | Unknown | No | §2.1.2; §4.3; §6.4 | Confirmed full-text evidence (Step 9.2) |
-| P033 ⚠ | multi_view | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P033 ⚠ | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P033 ⚠ | confidence_gating | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P033 ⚠ | anomaly_detection | Unknown | No | §6.2 | Confirmed full-text evidence (Step 9.2) |
-| P033 ⚠ | latency_evaluation | Unknown | Yes | §7; Figs. 7-8 | Confirmed full-text evidence (Step 9.2) |
-| P034 | smartphone | Unknown | Yes | §VI, p. 461; Fig. 10, p. 462 | Confirmed full-text evidence (Step 9.2) |
-| P034 | cloud | Unknown | No | §IV-A, p. 458; Acknowledgment, p. 463 | Confirmed full-text evidence (Step 9.2) |
-| P034 | energy_evaluation | Unknown | Yes | Table VI and text, p. 463 | Confirmed full-text evidence (Step 9.2) |
-| P034 | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P034 | multi_view | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P034 | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P034 | confidence_gating | Unknown | No | §I, p. 452; Fig. 11, p. 462 | Confirmed full-text evidence (Step 9.2) |
-| P034 | anomaly_detection | Unknown | No | §IV | Confirmed full-text evidence (Step 9.2) |
-| P034 | latency_evaluation | Unknown | Yes | §VI, pp. 461-463; Fig. 10 | Confirmed full-text evidence (Step 9.2) |
-| P013 | smartphone | Unknown | No | §4.2, p. 7 | Confirmed full-text evidence (Step 9.2); Decision A |
-| P013 | edge_device | Unknown | Yes | §2.2, p. 2; §4.2, p. 7 | Decision A (approved): an industrial PC performing inference locally at the production line is an edge device. The GBT model runs on the Intel Celeron N2930 industrial PC at the SMT line (§4.2, p. 7). |
-| P013 | on_device | Unknown | Yes | §4.2, p. 7 | Decision A (approved): inference runs locally on the industrial PC at the physical production site (§4.2, p. 7). Training/storage infrastructure (Spark cluster, AWS S3) is not the inference location. |
-| P013 | cloud | Unknown | No | §4.2, p. 7; §5, p. 8 | Confirmed full-text evidence (Step 9.2); Decision A |
-| P013 | adaptive_inference | Unknown | No | §3.3, p. 5; §4.2, pp. 6-7 | Confirmed full-text evidence (Step 9.2) |
-| P013 | energy_evaluation | Unknown | No | §3.4, p. 5 | Confirmed full-text evidence (Step 9.2) |
-| P013 | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P013 | multi_view | Unknown | No | §4, Table 2, p. 6 | Confirmed full-text evidence (Step 9.2) |
-| P013 | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) |
-| P013 | anomaly_detection | Unknown | No | §3.2, p. 4; §4.1, p. 6 | Confirmed full-text evidence (Step 9.2) |
+| Paper | Field | Current | New value | Evidence location (Step 9.2) | Basis | Step 9.4 status |
+|---|---|---|---|---|---|---|
+| P002 | cloud | Unknown | No | §5 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P002 | adaptive_inference | Unknown | No | §3.2 (Algorithm 1); §4.3 | Rule 4C: the sliding window only changes where/how often the fixed RDD-CNN is invoked on the accelerometer stream; the model's computation per window never changes. README §7.3: static inference graph → No. The full text was read. | APPLIED (Step 9.4) |
+| P002 | resource_awareness | Unknown | No | §3.2; §4.3 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P002 | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P002 | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P002 | multi_view | Unknown | No | §3.2; §4.1 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P002 | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P002 | anomaly_detection | Unknown | No | §3.2; §4.3 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P011 ⚠ | smartphone | Unknown | Yes | §5.5.1-5.5.2, pp. 13-14; Fig. 7, p. 15 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P011 ⚠ | adaptive_inference | Unknown | No | §5.5 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P011 ⚠ | resource_awareness | Unknown | No | §5.5.1, pp. 13-14 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P011 ⚠ | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P011 ⚠ | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P011 ⚠ | multi_view | Unknown | No | §6.1; §7.1 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P011 ⚠ | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P011 ⚠ | confidence_gating | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P011 ⚠ | anomaly_detection | Unknown | No | §5.1 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P015 | smartphone | Unknown | No | Methods - CAXTON system | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P015 | edge_device | Unknown | No | Online correction and parameter discovery pipeline; Computing and software requirements | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P015 | on_device | Unknown | No | Same as edge_device | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P015 | cloud | Unknown | No | Online correction pipeline; Computing and software requirements | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P015 | adaptive_inference | Unknown | No | Online correction and parameter discovery pipeline | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P015 | resource_awareness | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P015 | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P015 | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P015 | multi_view | Unknown | No | Methods - CAXTON system; Discussion | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P015 | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P015 | anomaly_detection | Unknown | No | Results - Dataset generation; Model architecture | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | smartphone | Unknown | No | §3, p. 12 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | edge_device | Unknown | Yes | §3, p. 12 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | on_device | Unknown | Yes | §3, p. 12 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | cloud | Unknown | No | §2.2, p. 8; §3, p. 12 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | adaptive_inference | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | resource_awareness | Unknown | No | §2.2, p. 7 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | multi_view | Unknown | No | §3, p. 12; §1.2, p. 3 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | uncertainty | Unknown | No | §2.3, p. 10; §3 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | confidence_gating | Unknown | Yes | §3, pp. 12-13; §4, p. 13 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | anomaly_detection | Unknown | No | §2.1-2.2, p. 7 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P016 | latency_evaluation | Unknown | Yes | §3, p. 12; §2.2, p. 7 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P020 | smartphone | Unknown | No | §3, p. 5; §4.1, p. 13 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P020 | cloud | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P020 | adaptive_inference | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P020 | resource_awareness | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P020 | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P020 | thermal_evaluation | Unknown | No | Table 3, p. 14 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P020 | multi_view | Unknown | No | §4.2, p. 13; §5.4, p. 17 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P020 | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P020 | confidence_gating | Unknown | No | §3.3, pp. 9-10 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P020 | anomaly_detection | Unknown | No | §3.4, p. 10 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P029 ⚠ | smartphone | Unknown | Yes | §4.3.1 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P029 ⚠ | cloud | Unknown | No | §4.3.1; §6 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P029 ⚠ | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P029 ⚠ | multi_view | Unknown | No | §4.1 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P029 ⚠ | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P029 ⚠ | confidence_gating | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P029 ⚠ | anomaly_detection | Unknown | No | §4.1 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P031 ⚠ | cloud | Unknown | No | §4.4 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P031 ⚠ | adaptive_inference | Unknown | No | §4.1-4.4 | Confirmed full-text evidence (Step 9.2); Decision B | DEFERRED — VERSION CHECK REQUIRED |
+| P031 ⚠ | energy_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2); Decision B | DEFERRED — VERSION CHECK REQUIRED |
+| P031 ⚠ | multi_view | Unknown | No | §5.1.2 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P031 ⚠ | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P031 ⚠ | confidence_gating | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P031 ⚠ | anomaly_detection | Unknown | No | §5.1.2 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P031 ⚠ | latency_evaluation | Unknown | Yes | Tables 1-2; §5.2.1 | Confirmed full-text evidence (Step 9.2); Decision B | DEFERRED — VERSION CHECK REQUIRED |
+| P033 ⚠ | smartphone | Unknown | Yes | §6.3, p. 60:19 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P033 ⚠ | cloud | Unknown | No | Fig. 2, p. 60:15 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P033 ⚠ | energy_evaluation | Unknown | No | §4.1; §6.4, pp. 60:19-60:20; §7 | Rule 4D: §6.4 describes profiling latency and energy (100 runs), but §7 reports no energy or power value. README §7.3: no energy results after reading the full text → No. Evidence is from an arXiv copy whose version is not confirmed; apply only with the P033 version check. | DEFERRED — VERSION CHECK REQUIRED (approved: No) |
+| P033 ⚠ | thermal_evaluation | Unknown | No | §2.1.2; §4.3; §6.4 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P033 ⚠ | multi_view | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P033 ⚠ | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P033 ⚠ | confidence_gating | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P033 ⚠ | anomaly_detection | Unknown | No | §6.2 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P033 ⚠ | latency_evaluation | Unknown | Yes | §7; Figs. 7-8 | Confirmed full-text evidence (Step 9.2) | DEFERRED — VERSION CHECK REQUIRED |
+| P034 | smartphone | Unknown | Yes | §VI, p. 461; Fig. 10, p. 462 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P034 | cloud | Unknown | No | §IV-A, p. 458; Acknowledgment, p. 463 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P034 | energy_evaluation | Unknown | Yes | Table VI and text, p. 463 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P034 | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P034 | multi_view | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P034 | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P034 | confidence_gating | Unknown | No | §I, p. 452; Fig. 11, p. 462 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P034 | anomaly_detection | Unknown | No | §IV | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P034 | latency_evaluation | Unknown | Yes | §VI, pp. 461-463; Fig. 10 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P013 | smartphone | Unknown | No | §4.2, p. 7 | Confirmed full-text evidence (Step 9.2); Decision A | APPLIED (Step 9.4) |
+| P013 | edge_device | Unknown | Yes | §2.2, p. 2; §4.2, p. 7 | Decision A (approved): an industrial PC performing inference locally at the production line is an edge device. The GBT model runs on the Intel Celeron N2930 industrial PC at the SMT line (§4.2, p. 7). | APPLIED (Step 9.4) |
+| P013 | on_device | Unknown | Yes | §4.2, p. 7 | Decision A (approved): inference runs locally on the industrial PC at the physical production site (§4.2, p. 7). Training/storage infrastructure (Spark cluster, AWS S3) is not the inference location. | APPLIED (Step 9.4) |
+| P013 | cloud | Unknown | No | §4.2, p. 7; §5, p. 8 | Confirmed full-text evidence (Step 9.2); Decision A | APPLIED (Step 9.4) |
+| P013 | adaptive_inference | Unknown | No | §3.3, p. 5; §4.2, pp. 6-7 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P013 | energy_evaluation | Unknown | No | §3.4, p. 5 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P013 | thermal_evaluation | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P013 | multi_view | Unknown | No | §4, Table 2, p. 6 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P013 | uncertainty | Unknown | No | full text read; no occurrence | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
+| P013 | anomaly_detection | Unknown | No | §3.2, p. 4; §4.1, p. 6 | Confirmed full-text evidence (Step 9.2) | APPLIED (Step 9.4) |
 
 ### Researcher decision required
 
-| Paper | Field | Current | New value | Evidence location (Step 9.2) | Open question |
-|---|---|---|---|---|---|
-| P011 ⚠ | cloud | Unknown | Unknown | §4 (module 6); §5.6, p. 14; Fig. 4 | GPT-4 Vision is called remotely to generate explanation text; the inspection inference (segmentation) runs on the phone. README §7.3 `cloud` covers "inference or decision processing"; whether remote explanation generation counts is not decided by the definition. Evidence is from an arXiv preprint. |
-| P011 ⚠ | latency_evaluation | Unknown | Unknown (candidate No) | Table 4 caption; §8.3, p. 25 | No timing value anywhere; the Table 4 caption mentions running time but the table has no time column; §8.3 mentions possible explanation latency only as a limitation. README §7.3 `No` (full text read, no timing) would apply, but the evidence is from an arXiv preprint and the version of record was not checked. |
-| P013 | resource_awareness | Unknown | Unknown | §3.2, p. 4; §3.4, p. 5; §4.1, p. 6 | GBT was chosen over SVM because scoring was eight times faster "with future scaling" in mind, and takt time sets the real-time constraint; but the paper says the scoring-time constraint is mostly not delimiting and states no device budget. Whether this is a resource-driven deployment decision (README §7.3) is a judgement call. |
-| P013 | latency_evaluation | Unknown | Unknown | §4.1, Table 3, pp. 6-7; §4.2, p. 7 | Table 3 scoring times give no hardware ("description of hardware used is omitted"). On the stated edge PC, test sets are processed in "less than one minute", an upper bound with no test-set size, so it is neither per-inference latency nor throughput. Whether such a coarse bound on stated hardware qualifies under Rule 4E is a researcher decision. |
+| Paper | Field | Current | New value | Evidence location (Step 9.2) | Open question | Step 9.4 status |
+|---|---|---|---|---|---|---|
+| P011 ⚠ | cloud | Unknown | Unknown | §4 (module 6); §5.6, p. 14; Fig. 4 | GPT-4 Vision is called remotely to generate explanation text; the inspection inference (segmentation) runs on the phone. README §7.3 `cloud` covers "inference or decision processing"; whether remote explanation generation counts is not decided by the definition. Evidence is from an arXiv preprint. | DEFERRED — VERSION CHECK REQUIRED (approved: Yes) |
+| P011 ⚠ | latency_evaluation | Unknown | Unknown (candidate No) | Table 4 caption; §8.3, p. 25 | No timing value anywhere; the Table 4 caption mentions running time but the table has no time column; §8.3 mentions possible explanation latency only as a limitation. README §7.3 `No` (full text read, no timing) would apply, but the evidence is from an arXiv preprint and the version of record was not checked. | DEFERRED — VERSION CHECK REQUIRED (approved: No) |
+| P013 | resource_awareness | Unknown | Unknown | §3.2, p. 4; §3.4, p. 5; §4.1, p. 6 | GBT was chosen over SVM because scoring was eight times faster "with future scaling" in mind, and takt time sets the real-time constraint; but the paper says the scoring-time constraint is mostly not delimiting and states no device budget. Whether this is a resource-driven deployment decision (README §7.3) is a judgement call. | APPLIED (Step 9.4) |
+| P013 | latency_evaluation | Unknown | Unknown | §4.1, Table 3, pp. 6-7; §4.2, p. 7 | Table 3 scoring times give no hardware ("description of hardware used is omitted"). On the stated edge PC, test sets are processed in "less than one minute", an upper bound with no test-set size, so it is neither per-inference latency nor throughput. Whether such a coarse bound on stated hardware qualifies under Rule 4E is a researcher decision. | APPLIED (Step 9.4) |
 
 Also open (not CSV characteristic changes):
 
@@ -137,23 +141,23 @@ Also open (not CSV characteristic changes):
 
 ### Keep current value
 
-| Paper | Field | Current | New value | Evidence location (Step 9.2) | Reason |
-|---|---|---|---|---|---|
-| P002 | edge_device | Unknown | Unknown | §3.2 (last paragraph); §4.1; §5 | Rule 4A: the TFLite model is "designed for execution on smartphones" and on-phone classification is stated as the scope, but local execution is never demonstrated or measured. README §7.3: intended deployment is not enough for Yes. |
-| P002 | on_device | Unknown | Unknown | §3.2; §4.1; §5 | Rule 4A, same evidence as edge_device. Intended on-phone deployment, not demonstrated execution. |
-| P002 | confidence_gating | Unknown | Unknown | §3.1.2; §4.2 | Rule 4B: the only gate is the label-quality verifier (≥90% agreement among 30 YOLOv5m frame labels) used to build the training set. It is a vote-agreement check during data generation, not a confidence/probability score triggering an action in the deployed system. Not Yes; documented as Unknown rather than forced to No. |
-| P002 | latency_evaluation | Unknown | Unknown | §4.1; §4.3; §5 | Rule 4E is met for quantity (processing time per minute of data), but README §7.3 also requires stated or identifiable hardware, and none is given for the timing. Not Yes. |
-| P015 | confidence_gating | Unknown | Unknown | Online correction and parameter discovery pipeline | Rule 4B: a correction fires when one predicted class reaches the mode-threshold share of the last L predictions. This is a vote frequency over repeated predictions, not a confidence/probability score. Not Yes. |
-| P020 | edge_device | Unknown | Unknown | §3, p. 5; §4.1, p. 13; §5.4, p. 17 | Rule 4A: a Raspberry Pi 4B is "used for the processing", but programming, training and testing were done in MATLAB and the location of real-time classification is never stated. |
-| P020 | on_device | Unknown | Unknown | §3, p. 5; §4.1, p. 13 | Rule 4A, same evidence as edge_device. |
-| P020 | latency_evaluation | Unknown | Unknown | §5.4, p. 17; §6, p. 18 | Rule 4E: "less computational time" is a qualitative claim with no timing value, so not Yes. README Decision 3 keeps qualitative speed claims Unknown. |
-| P013 | confidence_gating | Unknown | Unknown | §3.3, p. 5; §4.1-4.2, pp. 6-7 | Rule 4B: fields of view predicted defect-free skip X-ray, and the model is tuned to be conservative, but the action is triggered by the predicted class; no confidence/probability score or threshold is described. Not Yes; Unknown rather than No because the conservativeness tuning mechanism is not described. |
+| Paper | Field | Current | New value | Evidence location (Step 9.2) | Reason | Step 9.4 status |
+|---|---|---|---|---|---|---|
+| P002 | edge_device | Unknown | Unknown | §3.2 (last paragraph); §4.1; §5 | Rule 4A: the TFLite model is "designed for execution on smartphones" and on-phone classification is stated as the scope, but local execution is never demonstrated or measured. README §7.3: intended deployment is not enough for Yes. | KEPT (Unknown) |
+| P002 | on_device | Unknown | Unknown | §3.2; §4.1; §5 | Rule 4A, same evidence as edge_device. Intended on-phone deployment, not demonstrated execution. | KEPT (Unknown) |
+| P002 | confidence_gating | Unknown | Unknown | §3.1.2; §4.2 | Rule 4B: the only gate is the label-quality verifier (≥90% agreement among 30 YOLOv5m frame labels) used to build the training set. It is a vote-agreement check during data generation, not a confidence/probability score triggering an action in the deployed system. Not Yes; documented as Unknown rather than forced to No. | KEPT (Unknown) |
+| P002 | latency_evaluation | Unknown | Unknown | §4.1; §4.3; §5 | Rule 4E is met for quantity (processing time per minute of data), but README §7.3 also requires stated or identifiable hardware, and none is given for the timing. Not Yes. | KEPT (Unknown) |
+| P015 | confidence_gating | Unknown | Unknown | Online correction and parameter discovery pipeline | Rule 4B: a correction fires when one predicted class reaches the mode-threshold share of the last L predictions. This is a vote frequency over repeated predictions, not a confidence/probability score. Not Yes. | KEPT (Unknown) |
+| P020 | edge_device | Unknown | Unknown | §3, p. 5; §4.1, p. 13; §5.4, p. 17 | Rule 4A: a Raspberry Pi 4B is "used for the processing", but programming, training and testing were done in MATLAB and the location of real-time classification is never stated. | KEPT (Unknown) |
+| P020 | on_device | Unknown | Unknown | §3, p. 5; §4.1, p. 13 | Rule 4A, same evidence as edge_device. | KEPT (Unknown) |
+| P020 | latency_evaluation | Unknown | Unknown | §5.4, p. 17; §6, p. 18 | Rule 4E: "less computational time" is a qualitative claim with no timing value, so not Yes. README Decision 3 keeps qualitative speed claims Unknown. | KEPT (Unknown) |
+| P013 | confidence_gating | Unknown | Unknown | §3.3, p. 5; §4.1-4.2, pp. 6-7 | Rule 4B: fields of view predicted defect-free skip X-ray, and the model is tuned to be conservative, but the action is triggered by the predicted class; no confidence/probability score or threshold is described. Not Yes; Unknown rather than No because the conservativeness tuning mechanism is not described. | KEPT (Unknown) |
 
 ### Insufficient evidence
 
-| Paper | Field | Current | New value | Evidence location (Step 9.2) | Reason |
-|---|---|---|---|---|---|
-| P015 | latency_evaluation | Unknown | Unknown | Online correction pipeline; Methods; Discussion | Step 9.2: deciding content (figures/supplement) not visible. |
+| Paper | Field | Current | New value | Evidence location (Step 9.2) | Reason | Step 9.4 status |
+|---|---|---|---|---|---|---|
+| P015 | latency_evaluation | Unknown | Unknown | Online correction pipeline; Methods; Discussion | Step 9.2: deciding content (figures/supplement) not visible. | INSUFFICIENT EVIDENCE (Unknown kept) |
 
 Also insufficient evidence (whole paper, no full text): P001, P007, P017, P018, P019, P022, P023, P032. Their abstract-level coding stays.
 

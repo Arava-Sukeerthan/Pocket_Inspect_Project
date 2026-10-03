@@ -4,6 +4,8 @@ _Last updated: 2026-10-01. Records: 54 retained (P001–P054)._
 
 _2026-10-03 (Step 8.3): the "Characteristics marked Yes" lines were regenerated from `papers.csv` after recoding under README §7 v1.1. `papers.csv` is the authoritative record; see `recoding_report.md` for every changed value. Other text in this file is unchanged from 2026-10-01 and may describe the earlier coding._
 
+_2026-10-03 (Step 9.4): the "Characteristics marked Yes" lines for P002, P013, P015, P016, P020 and P034 were regenerated from `papers.csv` after the controlled full-text recoding; see `fulltext_recoding_applied.md`. Other text for these papers (e.g. Dataset / Model / Hardware lines) still reflects the abstract-level extraction._
+
 **Epistemic status.** Every entry is a real publication. Its metadata was verified against Crossref and/or OpenAlex, and every DOI resolves through the doi.org handle registry. Characteristic fields were extracted from the **abstract only** (Fact = stated in the abstract). Anything the abstract does not state is recorded as `Unknown`, and full-text review is pending. Nothing in this file is a research-gap or novelty claim.
 
 ## Papers by search group
@@ -348,7 +350,7 @@ _2026-10-03 (Step 8.3): the "Characteristics marked Yes" lines were regenerated 
 - **DOI / URL:** [10.1016/j.aei.2020.101101](https://doi.org/10.1016/j.aei.2020.101101)
 - **Application:** Predictive model-based quality inspection in SMT manufacturing
 - **Dataset / Model / Hardware:** Real industrial SMT use case / Machine learning (models not stated in abstract) / Edge Cloud Computing infrastructure
-- **Characteristics marked Yes:** none (all Unknown/No at abstract level)
+- **Characteristics marked Yes:** edge_device, on_device
 - **Why relevant:** Shows edge-cloud deployment for reducing inspection load; relevant to deciding when full inspection is needed.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Shows edge-cloud deployment for reducing inspection load
@@ -406,7 +408,7 @@ _2026-10-03 (Step 8.3): the "Characteristics marked Yes" lines were regenerated 
 - **DOI / URL:** [10.1038/s41467-022-31985-y](https://doi.org/10.1038/s41467-022-31985-y)
 - **Application:** Real-time error detection and correction in material extrusion 3D printing
 - **Dataset / Model / Hardware:** 1.2 million images from 192 parts labelled with printing parameters / Multi-head neural network with control loop / Unknown
-- **Characteristics marked Yes:** none (all Unknown/No at abstract level)
+- **Characteristics marked Yes:** none (full-text extraction)
 - **Why relevant:** Key 3D-printing monitoring reference; in-process (during printing) rather than post-print part inspection.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Key 3D-printing monitoring reference
@@ -432,7 +434,7 @@ _2026-10-03 (Step 8.3): the "Characteristics marked Yes" lines were regenerated 
 - **DOI / URL:** [10.3390/pr8111464](https://doi.org/10.3390/pr8111464)
 - **Application:** Real-time stringing defect detection during FFF printing from camera video
 - **Dataset / Model / Hardware:** Images showing stringing defects / Deep CNN / Microprocessor plus camera (not specified in abstract)
-- **Characteristics marked Yes:** none (all Unknown/No at abstract level)
+- **Characteristics marked Yes:** edge_device, on_device, confidence_gating, latency_evaluation
 - **Why relevant:** In-process camera-based 3D-printing defect detection with live deployment.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** In-process camera-based 3D-printing defect detection with live deployment.
@@ -523,7 +525,7 @@ _2026-10-03 (Step 8.3): the "Characteristics marked Yes" lines were regenerated 
 - **DOI / URL:** [10.3390/asi4020034](https://doi.org/10.3390/asi4020034)
 - **Application:** Layer-wise fault detection in FDM printing
 - **Dataset / Model / Hardware:** Unknown / Pretrained CNN features + ML classifiers (AlexNet + SVM best) / Unknown
-- **Characteristics marked Yes:** none (all Unknown/No at abstract level)
+- **Characteristics marked Yes:** none (full-text extraction)
 - **Why relevant:** Low-compute-cost FDM fault detection.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Low-compute-cost FDM fault detection.
@@ -889,7 +891,7 @@ _2026-10-03 (Step 8.3): the "Characteristics marked Yes" lines were regenerated 
 - **DOI / URL:** [10.1109/tmc.2025.3594214](https://doi.org/10.1109/tmc.2025.3594214)
 - **Application:** Deep subnetworks that adapt to dynamic resource constraints on edge devices
 - **Dataset / Model / Hardware:** Visual Wake Words, Google Speech Commands, Fashion-MNIST, CIFAR-10, ImageNet-1K / REDS / Four mobile and embedded platforms incl. Arduino Nano 33 BLE
-- **Characteristics marked Yes:** edge_device, on_device, adaptive_inference, resource_awareness
+- **Characteristics marked Yes:** smartphone, edge_device, on_device, adaptive_inference, resource_awareness, energy_evaluation, latency_evaluation
 - **Why relevant:** Runtime model downsizing driven by resource state.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Runtime model downsizing driven by resource state.

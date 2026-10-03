@@ -103,3 +103,16 @@ No full-text evidence contradicts Decision B. P031 evidence is from the arXiv v1
 | P034 | FH JOANNEUM repository copy in IEEE TMC final layout (pp. 451-464, CC BY); OpenAlex labels it "submittedVersion" | Fully verified, label conflict recorded (unchanged) |
 
 None of P011, P029, P031 or P033 is treated as publisher-version verified.
+
+## Step 9.4 resolution (2026-10-03)
+
+The researcher/ChatGPT approved the four NEEDS RESEARCHER DECISION rows. The rows above are kept as the Step 9.3 record.
+
+| ID | Paper | Field | Approved value | Reason | Applied to `papers.csv`? |
+|---|---|---|---|---|---|
+| D06 | P011 | cloud | Yes | Remote GPT-4 Vision computation is used for the explanation-generation component; the inspection runs on the phone (not a cloud-based inspection system) | No: DEFERRED — VERSION CHECK REQUIRED (preprint) |
+| D07 | P011 | latency_evaluation | No | No quantitative latency, throughput or FPS evaluation after full-text review | No: DEFERRED — VERSION CHECK REQUIRED (preprint) |
+| D10 | P013 | resource_awareness | No | Faster scoring as a model-selection/efficiency consideration is not a runtime resource-driven decision (README §7.3) | Yes (Step 9.4) |
+| D12 | P013 | latency_evaluation | No | An upper-bound test-set processing time is not per-inference latency, end-to-end latency, FPS or throughput | Yes (Step 9.4) |
+
+Of the four Step 9.3 APPROVED FOR RECODING rows, D03 (P002 `adaptive_inference`), D08 and D09 (P013 `edge_device`, `on_device`) were applied in Step 9.4. D17 (P033 `energy_evaluation`) is DEFERRED — VERSION CHECK REQUIRED. P002 and P013 remain proposed classes A and D requiring reassessment.
