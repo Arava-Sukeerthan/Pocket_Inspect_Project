@@ -1,0 +1,519 @@
+# Gap-analysis configuration (Step 9.7).
+#
+# Read by `python scripts/manage_literature.py gap`, which regenerates
+# research/gap_analysis/gap_matrix.csv and gap_candidates.md from
+# research/literature/papers.csv.
+#
+# Everything here is ANALYSIS-ONLY. Nothing in this file changes the canonical
+# literature database (papers.csv), its schema or audit_report.csv. Subset
+# definitions and the derived `visual_inspection` attribute are auditor
+# proposals pending researcher review, except where marked researcher-approved.
+#
+# Candidate gaps listed here are NOT a final research gap. They are not
+# scored, ranked or prioritised. research/gap_analysis/research_gap.md is
+# not written by the generator.
+
+schema_version: 1
+
+# The corpus state the narrative text below was written against.
+# The generator compares this hash with the current papers.csv and adds a
+# warning to gap_candidates.md when they differ.
+corpus_freeze:
+  record: research/gap_analysis/corpus_freeze.md
+  git_commit: c6ba9d5185cd4924e4280345142a5dfd4983666d
+  papers_sha256: c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521
+  record_count: 54
+
+# ---------------------------------------------------------------------------
+# Analysis populations
+# ---------------------------------------------------------------------------
+populations:
+  # Researcher-approved relevance decisions (Step 9.6 recovery,
+  # research/literature/fulltext_version_verification.md §13). These records
+  # stay in papers.csv but are not core evidence for PocketInspect gap
+  # reasoning. They are reported separately in every combination.
+  peripheral_contextual:
+    status: researcher-approved
+    paper_ids: [P002, P013]
+    source: research/literature/fulltext_version_verification.md §13
+  # Secondary literature (surveys and reviews), identified from the
+  # `domain`/`application` fields of papers.csv. They remain in the core
+  # subset, but their coded No values describe the review itself, not the
+  # field, so they are never counted as primary evidence of absence. They are
+  # reported in a separate column.
+  review_records:
+    status: analysis-only (auditor proposal, pending researcher review)
+    paper_ids: [P010, P024, P026, P035, P036, P052]
+
+# ---------------------------------------------------------------------------
+# Derived attributes (not columns of papers.csv)
+# ---------------------------------------------------------------------------
+# A derived attribute is Yes for `yes_ids`, No for `no_ids` and Unknown for
+# every other record. Every record of the frozen corpus is assigned below.
+derived_attributes:
+  visual_inspection:
+    status: analysis-only (auditor proposal, pending researcher review)
+    definition: >-
+      Camera/optical image-based inspection, defect detection or anomaly
+      detection of physical objects, manufactured components, structures or
+      infrastructure, including datasets, benchmarks and viewpoint planning
+      for such inspection. Non-optical sensing (accelerometer, numeric process
+      data, magnetic flux leakage, ultrasonic imaging), point-cloud-only input
+      and general-purpose vision workloads are not counted.
+    basis: domain, application and dataset fields of papers.csv
+    yes_ids: [P001, P007, P008, P009, P010, P011, P012, P014, P015, P016,
+              P017, P018, P019, P020, P022, P023, P024, P037, P038, P039,
+              P041, P042, P043, P044, P047, P049, P050, P053, P054]
+    no_ids: [P002, P003, P004, P005, P006, P013, P021, P025, P026, P027,
+             P028, P029, P030, P031, P032, P033, P034, P035, P036, P040,
+             P045, P046, P048, P051, P052]
+  three_d_print_inspection:
+    status: analysis-only (auditor proposal, pending researcher review)
+    definition: >-
+      Optical inspection of 3D-printed / additively manufactured parts
+      (PocketInspect's initial target application, PROJECT_SPEC.md §1).
+    basis: domain = "3D-Print Inspection" in papers.csv, optical input only
+    yes_ids: [P015, P016, P017, P018, P019, P020, P022, P023, P024]
+    no_ids: [P001, P002, P003, P004, P005, P006, P007, P008, P009, P010,
+             P011, P012, P013, P014, P021, P025, P026, P027, P028, P029,
+             P030, P031, P032, P033, P034, P035, P036, P037, P038, P039,
+             P040, P041, P042, P043, P044, P045, P046, P047, P048, P049,
+             P050, P051, P052, P053, P054]
+
+# ---------------------------------------------------------------------------
+# Combinations
+# ---------------------------------------------------------------------------
+# `criteria` is a list of groups. All groups must hold (AND). A group lists
+# one or more fields; the group holds if any field is Yes (OR).
+# Group value: Yes if any field is Yes; No if every field is No; else Unknown.
+combinations:
+  - id: C-A
+    label: Smartphone + visual inspection + on-device inference
+    dimensions: [1, 2]
+    criteria: [[smartphone], [visual_inspection], [on_device]]
+  - id: C-B
+    label: Smartphone + visual inspection + resource awareness
+    dimensions: [1, 3, 4]
+    criteria: [[smartphone], [visual_inspection], [resource_awareness]]
+  - id: C-C
+    label: Smartphone + visual inspection + adaptive inference
+    dimensions: [1, 5]
+    criteria: [[smartphone], [visual_inspection], [adaptive_inference]]
+  - id: C-D
+    label: Smartphone + visual inspection + energy evaluation
+    dimensions: [1, 8]
+    criteria: [[smartphone], [visual_inspection], [energy_evaluation]]
+  - id: C-E
+    label: Smartphone + visual inspection + thermal evaluation
+    dimensions: [1, 9]
+    criteria: [[smartphone], [visual_inspection], [thermal_evaluation]]
+  - id: C-F
+    label: Smartphone + resource awareness + adaptive inference
+    dimensions: [1, 4, 5]
+    criteria: [[smartphone], [resource_awareness], [adaptive_inference]]
+  - id: C-G
+    label: Adaptive inference + energy evaluation + latency evaluation
+    dimensions: [5, 7, 8]
+    criteria: [[adaptive_inference], [energy_evaluation], [latency_evaluation]]
+  - id: C-H
+    label: Confidence gating + multi-view (proxy for confidence-triggered additional view)
+    dimensions: [11, 12, 13]
+    criteria: [[confidence_gating], [multi_view]]
+    note: >-
+      The schema does not code which action a confidence gate triggers.
+      The action of every confidence_gating = Yes record is read from its
+      evidence text in gap_candidates.md.
+  - id: C-I
+    label: Multi-view + resource awareness
+    dimensions: [4, 11]
+    criteria: [[multi_view], [resource_awareness]]
+  - id: C-J
+    label: Anomaly detection + resource awareness
+    dimensions: [4, 14]
+    criteria: [[anomaly_detection], [resource_awareness]]
+  - id: C-K
+    label: Smartphone + latency + energy evaluation
+    dimensions: [1, 6, 7, 8, 16]
+    criteria: [[smartphone], [latency_evaluation], [energy_evaluation]]
+    note: >-
+      Accuracy reporting is a free-text field (accuracy_metrics); it is listed
+      per matching record in gap_candidates.md, not used as a criterion.
+  - id: C-L
+    label: Smartphone + visual inspection + runtime adaptation (adaptive or resource-aware) + confidence-aware decision (gating or uncertainty)
+    dimensions: [1, 4, 5, 12, 13, 15]
+    criteria: [[smartphone], [visual_inspection], [adaptive_inference, resource_awareness], [confidence_gating, uncertainty]]
+  # Supplementary checks (dimensions not covered by A-L).
+  - id: C-S1
+    label: Visual inspection + edge or on-device + energy evaluation
+    dimensions: [2, 3, 8]
+    criteria: [[visual_inspection], [edge_device, on_device], [energy_evaluation]]
+  - id: C-S2
+    label: Adaptive inference + thermal evaluation + energy evaluation
+    dimensions: [5, 8, 9]
+    criteria: [[adaptive_inference], [thermal_evaluation], [energy_evaluation]]
+  - id: C-S3
+    label: Uncertainty + edge or on-device inference
+    dimensions: [2, 12]
+    criteria: [[uncertainty], [edge_device, on_device]]
+  - id: C-S4
+    label: 3D-print inspection + edge or on-device inference
+    dimensions: [1, 2, 14]
+    criteria: [[three_d_print_inspection], [edge_device, on_device]]
+  - id: C-S5
+    label: Visual inspection + edge or on-device + latency evaluation
+    dimensions: [2, 6, 7]
+    criteria: [[visual_inspection], [edge_device, on_device], [latency_evaluation]]
+
+# Research dimensions (Step 9.7 task, Part H). Dimensions without a
+# papers.csv field are listed under `not_coded`.
+dimensions:
+  1: smartphone-based visual inspection
+  2: edge/on-device inference
+  3: resource-constrained deployment
+  4: runtime resource awareness
+  5: adaptive inference
+  6: accuracy/efficiency trade-offs
+  7: latency evaluation
+  8: energy evaluation
+  9: thermal evaluation
+  10: image quality / acquisition robustness
+  11: multi-view inspection
+  12: uncertainty/confidence-aware decisions
+  13: confidence-triggered recapture or additional inspection
+  14: anomaly/defect detection
+  15: practical PASS/REVIEW inspection decisions
+  16: integrated accuracy + latency + energy/resource evaluation
+not_coded:
+  10: No papers.csv field codes image quality or acquisition robustness.
+  13: confidence_gating codes that a gate exists, not which action it triggers.
+  15: No papers.csv field codes PASS/REVIEW (accept / refer-to-human) decision outputs.
+
+# ---------------------------------------------------------------------------
+# Candidate gaps (narrative written against the corpus freeze above)
+# ---------------------------------------------------------------------------
+# Unordered. Not scored, ranked or prioritised. None is a final gap.
+# `combinations` link each candidate to generated counts in gap_matrix.csv.
+candidate_gaps:
+  - id: GC-01
+    title: Runtime resource awareness / adaptive inference applied to smartphone visual inspection
+    dimensions: [1, 2, 3, 4, 5]
+    combinations: [C-A, C-B, C-C, C-F]
+    description: >-
+      Within the verified corpus, smartphone runtime adaptation and smartphone
+      visual inspection appear in separate papers. Records with smartphone +
+      resource awareness + adaptive inference (C-F) all run general vision
+      workloads (visual_inspection = No). The only full-text-verified
+      smartphone visual-inspection record codes resource_awareness and
+      adaptive_inference as No. No core record combines smartphone visual
+      inspection with either runtime capability (C-B, C-C).
+    supporting: >-
+      P011 (smartphone, on-device segmentation for industrial visual
+      inspection; resource_awareness = No, adaptive_inference = No; version of
+      record read). P029, P033, P034 (smartphone + resource awareness +
+      adaptive inference; non-inspection workloads). P031 (smartphone, resource
+      awareness via DVFS; adaptive_inference = No; general two-stage detector,
+      not inspection).
+    counterexamples: >-
+      None for C-B or C-C in the core subset. C-F counterexamples (P029, P033,
+      P034) show that smartphone runtime adaptation exists, but not for
+      inspection. C-A counterexample P011 shows that smartphone on-device
+      visual inspection exists, but without runtime adaptation.
+    relevant_count: >-
+      10 core primary records with smartphone = Yes; 2 of them are visual
+      inspection (P001, P011). P001 is Unknown on every runtime field.
+    evidence_basis: >-
+      Direct full-text evidence for P011, P029, P031, P033, P034. P001 is
+      abstract-level only (full text inaccessible). 22 records are unresolved
+      for C-B and C-C, mostly visual-inspection papers whose smartphone field
+      is Unknown at abstract level.
+    characteristics: [smartphone, visual_inspection, on_device, resource_awareness, adaptive_inference]
+    limitations: >-
+      Rests on one full-text-verified smartphone visual-inspection record
+      (P011). P001 could not be read. Batch 1 screened only the top 12-15
+      results per query. The visual_inspection attribute is an analysis-only
+      proposal.
+    gap_type: integration (with deployment context)
+    evidence_strength: >-
+      Limited. The separation is directly observed in verified records, but the
+      smartphone visual-inspection side has a single verified paper.
+  - id: GC-02
+    title: Energy and thermal evaluation of smartphone or edge visual inspection
+    dimensions: [1, 2, 7, 8, 9, 16]
+    combinations: [C-D, C-E, C-S1, C-K]
+    description: >-
+      Within the verified corpus, no visual-inspection record reports a
+      qualifying energy or thermal evaluation. Every energy_evaluation = Yes
+      record (P006, P028, P029, P030, P034) and every thermal_evaluation = Yes
+      record (P031, P032) concerns general mobile/edge workloads, not
+      inspection. Both full-text-verified edge visual-inspection systems code
+      energy and thermal evaluation as No.
+    supporting: >-
+      P011 (smartphone visual inspection; energy, thermal and latency
+      evaluation = No). P016 (3D-print stringing detection on Raspberry Pi 4;
+      energy and thermal evaluation = No, latency = Yes, 14 FPS).
+    counterexamples: >-
+      None among visual-inspection records. Outside inspection: energy P006,
+      P028, P029, P030, P034; thermal P031, P032; C-K all-Yes P029 and P034
+      (smartphone + latency + energy, non-inspection workloads).
+    relevant_count: >-
+      27 core primary visual-inspection records; 3 have edge_device or
+      on_device = Yes (P007, P011, P016). P001 (smartphone) is Unknown on both
+      fields. 23 records are unresolved for C-S1.
+    evidence_basis: >-
+      Direct full-text No for P011 and P016. P007 (OAK-D on Raspberry Pi,
+      31.76 FPS) has energy and thermal Unknown: full text inaccessible.
+      Coverage counts from gap_candidates.md §2.
+    characteristics: [visual_inspection, smartphone, edge_device, on_device, energy_evaluation, thermal_evaluation, latency_evaluation]
+    limitations: >-
+      Most visual-inspection records are coded at abstract level (energy and
+      thermal Unknown). Abstracts rarely report energy, so Unknown here must not
+      be read as No.
+    gap_type: evaluation
+    evidence_strength: >-
+      Limited to moderate. No counterexample among visual-inspection records,
+      but only two of them have full-text-verified No values.
+  - id: GC-03
+    title: Integrated smartphone inspection with runtime adaptation and confidence-aware verification
+    dimensions: [1, 4, 5, 12, 13, 15]
+    combinations: [C-L, C-A, C-F]
+    description: >-
+      No core record combines smartphone visual inspection, runtime adaptation
+      (adaptive or resource-aware) and a confidence-aware decision (gating or
+      uncertainty). No record satisfies three of the four criteria either
+      (near-miss list empty). The components appear separately: smartphone
+      runtime adaptation (P029, P033, P034); confidence gating (P016 on an
+      edge 3D-print system, P025 early exit); uncertainty estimation (P045-P051,
+      P053, P054, none with a known edge or smartphone deployment).
+    supporting: >-
+      C-L: 0 all-Yes, 0 near miss, 22 unresolved, 24 excluded by No.
+      P011 is excluded by No on runtime adaptation and on both
+      confidence-aware fields.
+    counterexamples: None in the core subset.
+    relevant_count: >-
+      2 smartphone visual-inspection records (P001 unresolved, P011 excluded by
+      No).
+    evidence_basis: >-
+      Direct for P011 (version of record). Indirect for the component
+      separation: each component's Yes records are listed in gap_candidates.md
+      §2.
+    characteristics: [smartphone, visual_inspection, adaptive_inference, resource_awareness, confidence_gating, uncertainty]
+    limitations: >-
+      The corpus was not searched for the full combination as one query. The
+      absence of an integrated record says nothing about work outside the
+      corpus. Each component is itself sparsely and mostly abstract-level coded.
+    gap_type: integration
+    evidence_strength: >-
+      Limited. The integrated combination is absent from the corpus, but the
+      underlying evidence is thin and largely Unknown.
+  - id: GC-04
+    title: Confidence-triggered recapture or additional view
+    dimensions: [11, 12, 13]
+    combinations: [C-H]
+    description: >-
+      The two core confidence_gating = Yes records trigger human referral /
+      stop-print (P016) and early exit (P025). Neither triggers recapture or an
+      additional view. No multi-view record has confidence_gating = Yes.
+    supporting: >-
+      P016 (probability above a predefined value -> user notified whether to
+      stop the print; full text). P025 (high confidence -> early exit; abstract).
+      Multi-view records P037, P038, P039, P041, P042, P043: confidence_gating
+      Unknown.
+    counterexamples: None in the core subset.
+    relevant_count: >-
+      2 confidence_gating = Yes; 6 confidence_gating = No; 38 Unknown among 46
+      core primary records.
+    evidence_basis: >-
+      Gate actions are read from the evidence text (gap_candidates.md §4),
+      because the schema does not code the action. The multi-view side is
+      abstract-level only.
+    characteristics: [confidence_gating, multi_view]
+    limitations: >-
+      38 of 46 records are Unknown for confidence_gating. The action type is
+      not a coded field. The Batch 1 query "image quality assessment defect
+      inspection blur recapture" returned 0 hits, so this topic was barely
+      searched.
+    gap_type: capability (with evidence limitation)
+    evidence_strength: >-
+      Weak. Absence is observed only in the two known gates; the corpus is
+      mostly Unknown on this dimension.
+  - id: GC-05
+    title: Multi-view inspection under resource-aware or on-device execution
+    dimensions: [2, 4, 11]
+    combinations: [C-I]
+    description: >-
+      All six multi-view records (P037, P038, P039, P041, P042, P043) are
+      Unknown for resource_awareness, smartphone and on_device. All
+      full-text-verified resource-aware records (P029, P031, P033, P034) code
+      multi_view as No. No record links the two.
+    supporting: >-
+      P029, P031, P033, P034 (multi_view = No, full text). P037-P043
+      (multi-view, resource fields Unknown).
+    counterexamples: None in the core subset.
+    relevant_count: 6 multi-view records; 8 resource-aware records.
+    evidence_basis: >-
+      Direct No on the resource-aware side; abstract-level Unknown on the
+      multi-view side (none of these records was in the full-text queue).
+    characteristics: [multi_view, resource_awareness, on_device, smartphone]
+    limitations: >-
+      The multi-view records were never read in full text. Deployment details
+      are often absent from abstracts.
+    gap_type: evidence limitation (possible deployment gap)
+    evidence_strength: >-
+      Insufficient to establish a gap. Full-text review of the multi-view
+      records is needed.
+  - id: GC-06
+    title: Anomaly detection with resource-aware runtime or edge deployment
+    dimensions: [2, 4, 14]
+    combinations: [C-J]
+    description: >-
+      Every anomaly_detection = Yes record (P009, P037, P038, P040, P043, P047,
+      P050) is Unknown for resource_awareness, edge_device and on_device.
+      Full-text-verified resource-aware records (P029, P031, P033, P034) code
+      anomaly_detection as No.
+    supporting: P009, P037, P038, P040, P043, P047, P050; P029, P031, P033, P034.
+    counterexamples: None in the core subset.
+    relevant_count: 7 anomaly-detection records; 8 resource-aware records.
+    evidence_basis: Abstract-level Unknown on the anomaly-detection side; direct No on the resource-aware side.
+    characteristics: [anomaly_detection, resource_awareness, edge_device, on_device]
+    limitations: >-
+      Anomaly-detection records were not full-text reviewed. Several are
+      datasets or benchmarks (P009, P037, P038), for which deployment fields
+      may not apply.
+    gap_type: evidence limitation (possible deployment gap)
+    evidence_strength: Insufficient to establish a gap.
+  - id: GC-07
+    title: Uncertainty estimation in edge or on-device inspection deployment
+    dimensions: [2, 12]
+    combinations: [C-S3]
+    description: >-
+      All nine uncertainty = Yes records (P045-P051, P053, P054) are Unknown
+      for edge_device and on_device. Every full-text-verified edge/on-device
+      record (P011, P016, P029, P031, P033, P034) codes uncertainty as No.
+    supporting: P045, P046, P047, P048, P049, P050, P051, P053, P054; P011, P016, P029, P031, P033, P034.
+    counterexamples: None in the core subset.
+    relevant_count: 9 uncertainty records; 13 edge_device = Yes records.
+    evidence_basis: Abstract-level Unknown on the uncertainty side; direct No on the edge side.
+    characteristics: [uncertainty, edge_device, on_device]
+    limitations: >-
+      Uncertainty records were not full-text reviewed. P045 and P046 are
+      generic selective-prediction methods, not inspection systems.
+    gap_type: deployment (with evidence limitation)
+    evidence_strength: Insufficient to limited.
+  - id: GC-08
+    title: Joint thermal and energy evaluation of adaptive inference
+    dimensions: [5, 8, 9]
+    combinations: [C-S2, C-G]
+    description: >-
+      No core record evaluates adaptive inference for both energy and thermal
+      behaviour. Adaptive records with energy evaluation (P029, P034) code
+      thermal as No. The thermal record P031 codes adaptive inference and
+      energy as No. P032 (adaptive + thermal) has energy Unknown. By contrast,
+      adaptive inference + energy + latency (C-G) is covered by P028, P029 and
+      P034.
+    supporting: P029, P031, P034 (full text); P032 (energy Unknown; full text inaccessible).
+    counterexamples: >-
+      None for C-S2. P032 is a potential counterexample that cannot be resolved
+      without its full text.
+    relevant_count: 8 adaptive-inference records; 2 thermal-evaluation records.
+    evidence_basis: Direct for P029, P031, P034; unresolved for P032.
+    characteristics: [adaptive_inference, thermal_evaluation, energy_evaluation, latency_evaluation]
+    limitations: >-
+      Hinges on P032, whose full text was inaccessible. Only two thermal
+      records exist in the corpus.
+    gap_type: evaluation
+    evidence_strength: Limited; may be overturned by P032.
+  - id: GC-09
+    title: Image-quality / acquisition robustness and PASS/REVIEW decision outputs
+    dimensions: [10, 15]
+    combinations: []
+    description: >-
+      These dimensions are not coded in papers.csv, and the targeted Batch 1
+      query on image quality / blur / recapture returned 0 hits. The frozen
+      corpus therefore cannot show whether this is a gap.
+    supporting: None (dimension not coded).
+    counterexamples: Not assessable.
+    relevant_count: Not assessable.
+    evidence_basis: search_log.md Batch 1 1b (G6 query, 0 hits); papers.csv schema.
+    characteristics: []
+    limitations: >-
+      A search limitation, not evidence of absence. Assessing it needs new
+      coding fields or a dedicated search, both outside Step 9.7.
+    gap_type: evidence limitation
+    evidence_strength: Insufficient; not assessable from the frozen corpus.
+
+not_proposed:
+  - combination: C-A (smartphone + visual inspection + on-device)
+    reason: >-
+      Counterexample P011 (smartphone on-device segmentation for industrial
+      visual inspection, version of record). It informs GC-01 but is not itself
+      a gap.
+  - combination: C-F (smartphone + resource awareness + adaptive inference)
+    reason: Counterexamples P029, P033, P034 (general mobile vision workloads).
+  - combination: C-G (adaptive inference + energy + latency)
+    reason: Counterexamples P028, P029, P034.
+  - combination: C-K (smartphone + latency + energy)
+    reason: >-
+      Counterexamples P029, P034 (non-inspection; accuracy reported, see §4).
+      The inspection-specific version is covered by GC-02.
+  - combination: C-S4 (3D-print inspection + edge/on-device)
+    reason: Counterexample P016 (Raspberry Pi 4, on-device stringing detection).
+  - combination: C-S5 (visual inspection + edge/on-device + latency)
+    reason: Counterexamples P007 (OAK-D, 31.76 FPS) and P016 (14 FPS).
+
+limitations:
+  - >-
+    Search scope: one search batch (2026-10-01), OpenAlex primary with Crossref
+    verification, publication date >= 2016, top 15 (broad) or top 12
+    (targeted) results screened per query, plus 11 known-item lookups. No
+    IEEE Xplore, Scopus or Web of Science search and no citation snowballing.
+    Absence from the corpus is not absence from the literature.
+  - >-
+    Full-text coverage: 10 of 54 records are full-text verified (P002, P011,
+    P013, P015, P016, P020, P029, P031, P033, P034). 8 queued records stayed
+    blocked: P001, P007, P017 and P032 inaccessible; P018, P019, P022 and P023
+    abstract only. The other 36 records are coded from abstracts.
+  - >-
+    Unknown dominates: for every characteristic, 29-38 of the 46 core primary
+    records are Unknown. Unknown is never counted as No.
+  - >-
+    Version limitations: P029, P031 and P033 were read from same-version
+    camera-ready / journal-layout copies; the ACM PDFs were not compared. The
+    P011 Fig. 4 labels were read in arXiv v2 only.
+  - >-
+    P013 Tables 4-5 are visually unverified and P013 accuracy_metrics is blank.
+    This is an unresolved evidence field. It is not evidence of poor accuracy,
+    missing evaluation or a gap. P013 is peripheral/contextual and not counted
+    as core evidence.
+  - >-
+    Publisher sites (ACM DL, ScienceDirect, doi.org and others) are blocked by
+    this environment's network policy. Access limits are not evidence of a
+    gap.
+  - >-
+    The visual_inspection, three_d_print_inspection and review_records
+    assignments are analysis-only auditor proposals pending researcher review.
+    The audit A-E relevance classes were not used, because they were never
+    approved.
+
+research_question_alignment:
+  - >-
+    PROJECT_SPEC.md §1 targets 3D-printed parts. No 3D-print record in the
+    corpus is coded smartphone = Yes; the three full-text-verified 3D-print
+    records (P015, P016, P020) are not smartphone systems. GC-01 and GC-02
+    rest on non-3D-print visual-inspection evidence (P011, power-grid assets).
+    The researcher should decide whether candidate gaps are framed for 3D-print
+    inspection specifically or for small-component visual inspection
+    generally.
+  - >-
+    Example research questions RQ1 (thermal throttling and latency on mobile)
+    and RQ2 (resource-aware resolution scaling vs mAP and battery) relate to
+    GC-01, GC-02 and GC-08. RQ3 (epistemic uncertainty for 3D-print OOD
+    defects under quantization) relates to GC-07, whose evidence is currently
+    insufficient.
+  - >-
+    The scope in PROJECT_SPEC.md §3 spans eight research domains. Integrated
+    combinations of these (GC-03) are absent from a corpus that was searched
+    per domain, not per combination. The researcher may want to decide whether
+    the scope is too broad for one gap statement.
+  - >-
+    Phase 2 image-quality pre-filtering (PROJECT_SPEC.md §6, src/quality/) has
+    no coded literature evidence in the corpus (GC-09).
