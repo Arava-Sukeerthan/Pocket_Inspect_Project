@@ -1,5 +1,21 @@
 # Full-Text Verification Status
 
+## Step 9.6 — version-of-record verification (2026-10-03, Claude Code)
+
+_Details: [`fulltext_version_verification.md`](fulltext_version_verification.md). Earlier sections below are unchanged history._
+
+| Paper | Step 9.6 status | Strongest version read | Applied to `papers.csv` |
+|---|---|---|---|
+| P011 | **Fully verified (version of record)** | Information Fusion 116 (2025) 102782, Elsevier-typeset PDF on the corresponding author's UNB host | Yes: 11 characteristic + 6 free-text values |
+| P029 | Partially verified (version of record not reachable) | arXiv 1810.10090v1 (MobiCom '18 permission block) | No: stopped |
+| P031 | Partially verified (version of record closed and not reachable) | UMich Deep Blue repository copy + arXiv 2410.10847v1 (both DAC '24 copyright block; consistent) | No: stopped |
+| P033 | Partially verified (version of record not reachable) | arXiv 2409.01089v1 with final ACM TECS citation (23(4), Article 60) + earlier author manuscript (consistent) | No: stopped |
+| P013 Tables 4-5 | Unresolved: no visual inspection possible; text layer inconsistent | UTS OPUS publisher PDF (text layer only) | No: `accuracy_metrics` stays blank |
+
+P002 and P013 relevance were reassessed as peripheral/contextual (not core). This is proposed and requires researcher approval; no schema or `audit_report.csv` change was made.
+
+---
+
 ## Step 9.2 — full-text evidence collection (2026-10-03, Claude Code)
 
 _Evidence collection only. `papers.csv` was not modified, no relevance class was changed, and no gap analysis was done. Evidence: [`fulltext_evidence_report.md`](fulltext_evidence_report.md); proposed changes: [`fulltext_conflicts.md`](fulltext_conflicts.md); field tables: [`fulltext_verification_template.md`](fulltext_verification_template.md)._

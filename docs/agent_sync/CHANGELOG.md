@@ -780,3 +780,70 @@ Step 9.5 Final: Confirm Step 9.4 merge reconciliation, push `main` to `origin`, 
 
 
 
+
+---
+
+## 2026-10-03 — Claude Code
+
+### Task
+Step 9.6: deferred full-text version verification for P011, P029, P031 and P033, plus two remaining evidence tasks:
+- P013 Tables 4-5 visual verification;
+- P002/P013 relevance reassessment.
+
+No gap synthesis was done.
+
+### Changes
+- `research/literature/fulltext_version_verification.md` (new): the Step 9.6 record. It covers version sources, per-field evidence (previous value, new value, location, evidence type), the P013 Tables 4-5 result, the relevance reassessment and open items.
+- `research/literature/papers.csv`: P011 (version of record read):
+  - 11 characteristic values recoded from Unknown:
+    - Yes: smartphone, cloud (auxiliary explanation component only);
+    - No: adaptive_inference, resource_awareness, energy_evaluation, thermal_evaluation, multi_view, uncertainty, confidence_gating, anomaly_detection, latency_evaluation;
+  - 6 free-text fields filled or refined: dataset, model, hardware, accuracy_metrics, efficiency_metrics, limitations;
+  - evidence and README §7.7 notes appended.
+- `research/literature/papers.csv`: P002 and P013 each got one dated relevance-reassessment sentence in `notes`. No other field or record changed. No bibliographic field changed.
+- `research/literature/literature_matrix.csv`: regenerated with `manage_literature.py matrix`. Line endings were normalised to LF to match the committed file. Only the P002, P011 and P013 rows differ.
+- `research/literature/selected_papers.md`: P011 "Characteristics marked Yes" line regenerated, plus a dated header note.
+- `research/literature/fulltext_verification_status.md`: Step 9.6 section added above the earlier history.
+- `research/literature/fulltext_recoding_applied.md`: Step 9.6 addendum appended.
+
+### Research decisions
+- **P011.** Verified against Information Fusion 116 (2025) 102782. This is the Elsevier-typeset version of record (CC BY-NC), read from the corresponding author's UNB host. It agrees with the arXiv v2 evidence.
+  - Approved Step 9.4 decisions D06 (cloud = Yes) and D07 (latency_evaluation = No) were applied.
+  - Not described as cloud-based inspection: segmentation runs on the phone, and GPT-4 Vision only generates explanations.
+  - The Fig. 4 "Call API"/"Cloud Environment" labels were read only in arXiv v2, because the VoR figure has no text layer.
+- **P029, P031, P033.** Stopped under the Step 9.6 stop rule: the versions of record cannot be reached from this environment (ACM DL and doi.org are blocked; DAC '24 is closed access).
+  - Strongest available copies were recorded:
+    - P029: arXiv v1;
+    - P031: UMich Deep Blue repository copy plus arXiv v1 (consistent);
+    - P033: arXiv v1 carrying the final TECS citation, plus an earlier author manuscript (consistent).
+  - No deferred value was applied, and no current value was contradicted.
+  - Side observation: the P031 repository copy names the "Mi 11 Lite 5G" (Table 2 caption). No field was changed.
+- **P013 Tables 4-5.** Unresolved. Visual inspection was impossible: the PDF download is blocked and the reader returns only text. The text-layer cells are internally inconsistent (e.g. Table 4: 36/(36+246) does not match the stated recall). `accuracy_metrics` stays blank; nothing was reconstructed. The approved P013 characteristic values were not changed.
+- **Relevance (proposed, needs researcher approval).**
+  - P002: **peripheral/contextual, not core**. Accelerometer input, road-condition classification, on-phone execution not demonstrated.
+  - P013: **peripheral/contextual, not core**. Numeric SPI data predicting X-ray results on an industrial PC.
+  - Neither paper is excluded from the corpus. No relevance field was added. `audit_report.csv` was not changed.
+
+### Verification
+- `python -m pytest -q`: 24 passed. pytest was installed into the environment for this run.
+- `python scripts/manage_literature.py validate`: 54 records, VALID.
+- Field-level diff against HEAD:
+  - P011: the 19 intended fields only;
+  - P002 and P013: `notes` only;
+  - all other 51 records unchanged;
+  - no title, author, year, venue, DOI or URL change.
+- `gap` was not run. `research/gap_analysis/` is untouched.
+
+### Uncertain items
+- P029, P031, P033: researcher to compare the ACM versions of record in a browser, or to accept the strongest available versions explicitly. The deferred values in `fulltext_recoding_applied.md` are then ready to apply.
+- P013 Tables 4-5: visual check of p. 7 needed.
+- P002 and P013 relevance: researcher approval needed.
+- P011: optional visual check of VoR Fig. 4 labels.
+
+### Remaining work
+- Wait for researcher review of Step 9.6. Do not start Step 9.7 or gap synthesis.
+
+### Git
+- Branch: `claude/nice-babbage-51qfba` (from `main` at `d3f428e`).
+- Commit: see `git log -- research/literature/fulltext_version_verification.md`.
+- Push status: pushed to `origin/claude/nice-babbage-51qfba`; not merged into `main`.
