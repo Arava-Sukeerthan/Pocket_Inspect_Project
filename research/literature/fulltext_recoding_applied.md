@@ -213,3 +213,17 @@ No new A–E class was assigned and both papers remain in the database. The find
 **P013.** `accuracy_metrics` remains **DEFERRED — TABLE VERIFICATION REQUIRED**.
 
 See [`fulltext_version_verification.md`](fulltext_version_verification.md).
+
+## Step 9.6 follow-up addendum (2026-10-03)
+
+**P029, P031, P033.** The deferred values for these papers were re-verified against the complete text of demonstrably same-version copies and applied to `papers.csv`. The copies are:
+- P029: arXiv camera-ready with the ACM permission block;
+- P031: arXiv camera-ready with the DAC copyright block, consistent with the UMich repository copy;
+- P033: arXiv copy in the final ACM TECS layout.
+
+The published values match the deferred values above. One exception: P033 `dataset` and `model`, and P029 `model`, were refined with dataset and model names read in the full text.
+
+**P013.** `accuracy_metrics` remains **DEFERRED — TABLE VERIFICATION REQUIRED**.
+
+See `fulltext_version_verification.md` §8-12.
+

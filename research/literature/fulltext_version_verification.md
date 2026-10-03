@@ -236,3 +236,164 @@ Some cell or label positions may be transposed in extraction. Reconstructing the
 2. **P013 Tables 4-5.** Visual check of p. 7 of the version of record (see §5).
 3. **P002 and P013 relevance decisions.** Researcher approval of §6.
 4. **P011 Fig. 4.** The figure labels were read only in arXiv v2. A visual check of the version-of-record figure would turn the `cloud` evidence from "consistent" into "directly verified in the version of record".
+
+---
+
+# Step 9.6 follow-up: evidence completion (2026-10-03, Claude Code)
+
+The researcher's follow-up instruction replaced the strict version-of-record requirement for P029, P031 and P033 with a narrower rule:
+
+- Use the strongest accessible version.
+- Apply a deferred value only if that copy is demonstrably the same paper and version and contains enough evidence for that field.
+
+Sections 1-7 above are kept as the original Step 9.6 record. Where this follow-up differs from them, it supersedes them.
+
+## 8. P029, P031, P033: strongest accessible versions
+
+**Access.** The egress proxy still blocks:
+- dl.acm.org, doi.org and arxiv.org (direct);
+- core.ac.uk, web.archive.org, scholar.archive.org;
+- Semantic Scholar, Unpaywall, ResearchGate;
+- the UMich Deep Blue host and the CARIn author site.
+
+All were checked with curl on 2026-10-03, and none of their PDFs can be downloaded here. The complete extracted text of each arXiv copy was retrieved through the alphaXiv full-text service and saved locally:
+
+| Paper | Lines saved | Coverage |
+|---|---|---|
+| P029 | 1,632 | full text |
+| P031 | 6 pages | full text |
+| P033 | 2,129 | full text |
+
+"No occurrence" below therefore means the whole text layer was searched. Text that exists only inside raster figures could not be searched.
+
+### Version identity
+
+| Paper | Accessible copy | Category | Bibliographic comparison with `papers.csv` | Same paper and version? |
+|---|---|---|---|---|
+| P029 | arXiv 1810.10090v1 (23 Oct 2018) | arXiv copy of the author camera-ready | Title, authors, year, venue (MobiCom '18, 24th Annual International Conference on Mobile Computing and Networking) and DOI all match. The first page carries the ACM permission block, the conference date and place, ACM ISBN 978-1-4503-5903-0/18/10 and the DOI. The ACM reference format states 13 pages. | **Yes.** It is the camera-ready layout with ACM's permission block. ACM's own PDF was not compared. |
+| P031 | arXiv 2410.10847v1 (1 Oct 2024); the UMich Deep Blue repository copy was read earlier | arXiv copy of the author camera-ready; the repository copy is an earlier author manuscript | Title, 8 authors, year, venue (DAC '24, 61st ACM/IEEE DAC) and DOI all match. Both copies carry the DAC '24 ACM copyright block, ISBN 979-8-4007-0601-1/24/06 and the DOI. arXiv v1 gives the code URL where Deep Blue still has "[link]". | **Yes.** It is the camera-ready layout. Tables 1-2, §4.4 and §5 are identical in both copies. The closed-access ACM PDF was not compared. |
+| P033 | arXiv 2409.01089v1 (2 Sep 2024) | arXiv copy of the final ACM-typeset article | Title, authors, year, venue (ACM TECS) and DOI all match. Every page footer reads "ACM Trans. Embedd. Comput. Syst., Vol. 23, No. 4, Article 60. Publication date: June 2024". The ACM reference format reads 31 pages, the running heads 60:x, and the history line "Received 14 November 2023; revised 9 April 2024; accepted 7 May 2024". | **Yes.** It is the production layout with final volume, issue, article number and DOI. |
+
+**Judgement.** Each copy carries the publisher's own citation data for the exact DOI in `papers.csv`, and the full text is present (all sections, tables and figure captions). They are treated as sufficient for the deferred fields under the follow-up rule. The residual risk is a post-camera-ready edit in the ACM PDF that the copy does not show. This is recorded here and in each paper's `notes`.
+
+### Field decisions applied to `papers.csv`
+
+All previous values below were `Unknown`.
+
+**P029** (arXiv 1810.10090v1):
+
+| Field | New | Evidence | Location | Evidence type |
+|---|---|---|---|---|
+| smartphone | Yes | Evaluated on Galaxy S8, Galaxy S7 and Nexus 5 (Android 7.0); results reported from the S8 | §4.3.1 | Directly verified |
+| cloud | No | On-device evaluation; §6 states the framework "does not rely on cloud connectivity" | §4.3.1; §6 | Directly verified |
+| thermal_evaluation | No | No thermal, temperature or throttling term | full text searched | Directly verified |
+| multi_view | No | Single-image datasets; frames from one camera are temporal, not multiple views | §4.1, Table 2 | Directly verified |
+| uncertainty | No | No occurrence | full text searched | Directly verified |
+| confidence_gating | No | No confidence score triggers an action; the scheduler responds to resources and app queries | full text searched; §3.3 | Directly verified |
+| anomaly_detection | No | Supervised recognition | §4.1, Table 2 | Directly verified |
+
+P029 free text was filled or refined from the same copy: dataset, hardware and model (§4.1, Table 2; §4.3.1) and limitations (§5).
+
+**P031** (arXiv 2410.10847v1):
+
+| Field | New | Evidence | Location | Evidence type |
+|---|---|---|---|---|
+| cloud | No | Detectors run on the device. The DQN frequency controller runs on a proximal desktop RTX 2080Ti over a socket, which the paper does not call cloud. Under README §7.3, a proximal server that the paper does not call cloud is `No`. | §4.4 | Directly verified + README rule |
+| adaptive_inference | No | Only CPU/GPU frequency changes, twice per frame. The detector computation path is unchanged; the varying proposal count is a property of the standard two-stage detector; the 0.75x/1x widths belong to the controller's Q-network. Rule: DVFS alone is not adaptive inference. | §4.1-4.4 | Directly verified + rule (Decision B) |
+| energy_evaluation | No | No energy, power or battery value. Power appears only as motivation. | full text read | Directly verified |
+| multi_view | No | Single-image detection on KITTI and VisDrone2019 | §5.1.2 | Directly verified |
+| uncertainty | No | No predictive uncertainty. "Uncertainty" in §3 means variable computation counts. | full text read | Directly verified |
+| confidence_gating | No | No occurrence | full text read | Directly verified |
+| anomaly_detection | No | Supervised Faster/Mask R-CNN detection | §5.1.2 | Directly verified |
+| latency_evaluation | Yes | Measured per-image detector inference latency (mean and SD in ms over 3,000 on-device iterations) plus satisfaction rate, on Jetson Orin Nano and Mi 11 Lite 5G. This is inference latency, not adaptation time. | Tables 1-2; §5.2.1 | Directly verified |
+
+P031 free text was filled or refined: dataset, hardware, model and efficiency_metrics. All efficiency figures were re-checked against Tables 1-2. The quoted percentage reductions follow arithmetically from the table values; for example, (768.4 − 531.4) / 768.4 = 30.8%.
+
+**P033** (arXiv 2409.01089v1):
+
+| Field | New | Evidence | Location | Evidence type |
+|---|---|---|---|---|
+| smartphone | Yes | Pixel 7, Galaxy S20 FE, Galaxy A71 | §6.3, Table 6 | Directly verified |
+| cloud | No | The server does only offline conversion, accuracy evaluation and design generation; inference and the Runtime Manager run on the device. Offline use does not qualify (README §7.3). | Fig. 2, p. 60:15 | Directly verified + README rule |
+| energy_evaluation | No | Energy is defined as a possible objective and profiled (100 runs), but no energy or power value appears in §7 or any table | §4.1; §6.4; §7 | Directly verified (rule 4D) |
+| thermal_evaluation | No | Temperature appears only as motivation and as a 2-minute idle period to keep device temperature consistent; no temperature is measured or reported | §2.1.2; §4.3.2; §6.4 | Directly verified |
+| multi_view | No | Single-input image, text and audio tasks; the UC4 face-attribute models share one image | §6.2 | Directly verified |
+| uncertainty | No | No occurrence | full text searched | Directly verified |
+| confidence_gating | No | Switching is triggered by processor and memory issue flags, not by confidence | §4.3.3-4.3.4; full text searched | Directly verified |
+| anomaly_detection | No | Supervised classification | §6.2 | Directly verified |
+| latency_evaluation | Yes | Measured on-device throughput (images/s, S20, Fig. 7), average latency and latency SD (A71, Fig. 8), and a 19.9% latency speed-up (UC2), all from on-device profiling | §6.4; §7.1.2; §7.2; Figs. 7-8 | Directly verified |
+
+P033 free text was filled or refined: dataset, hardware, model, accuracy_metrics, efficiency_metrics and limitations (§6.2-6.3; §7; Tables 9-10; §8).
+
+**Retained values (not reopened):** the current `Yes` values for these papers:
+- P029: edge_device, on_device, adaptive_inference, resource_awareness, energy_evaluation, latency_evaluation;
+- P031: smartphone, edge_device, on_device, resource_awareness, thermal_evaluation;
+- P033: edge_device, on_device, adaptive_inference, resource_awareness.
+
+Nothing in the full texts contradicts them. P031's Table 2 caption names the "Mi 11 Lite 5G"; this was noted, and no field changed.
+
+## 9. P013 Tables 4-5: still blocked
+
+**Attempts made:**
+- direct download of the UTS OPUS PDF (proxy CONNECT 403);
+- the reader service (text layer only, no rendering);
+- aggregators and archives (CORE, Internet Archive, Semantic Scholar, Unpaywall): all blocked.
+
+**Result:** no rendered page could be obtained, so the tables could not be inspected visually.
+
+**Recorded statement (also in P013 `notes`):** "Unable to visually verify Tables 4–5; extracted text is internally inconsistent; no metrics reconstructed."
+
+`accuracy_metrics` stays blank. The approved P013 characteristic values are unchanged.
+
+## 10. P011 Figure 4: unavailable
+
+The version-of-record PDF on the UNB host cannot be downloaded or rendered here; the reader returns text only, and the figure has no text layer. Per the instruction, nothing was changed. P011 keeps its Step 9.6 coding and its recorded evidence (VoR text plus arXiv v2 figure labels).
+
+## 11. Relevance: unchanged
+
+P002 and P013 stay **peripheral/contextual (not core)**, as proposed in §6:
+- no `relevance_class` column was added;
+- `audit_report.csv` was not modified.
+
+## 12. Remaining blockers after the follow-up
+
+1. **P013 Tables 4-5.** Visual inspection of p. 7 of the version of record. This needs a browser, a local copy of the PDF, or network access to `opus.lib.uts.edu.au`.
+2. **P011 Fig. 4 (optional).** Visual check of the version-of-record figure. This needs access to `www.cs.unb.ca` or the publisher.
+3. **Optional confirmation for P029/P031/P033.** Comparing the ACM PDFs in a browser would remove the residual camera-ready versus ACM-PDF risk noted in §8.
+
+---
+
+# Step 9.6 recovery and relevance approval (2026-10-03, Claude Code)
+
+**Branch history.**
+- PR #7 merged only the first Step 9.6 commit (`29aaf78`) into `main` (`0a63176`).
+- The follow-up commit `55873a3` (§8-12) was cherry-picked unchanged onto the new branch `claude/step-9-6-recovery`, created from `origin/main`.
+- No evidence, decision or methodology in §8-12 was redone or altered.
+
+## 13. Researcher-approved relevance decisions
+
+These decisions replace the *proposed* status recorded in §6 and §11.
+
+| Paper | Approved decision | Reason (researcher) |
+|---|---|---|
+| P002 | **Peripheral/contextual, not core** | Accelerometer-based road-condition classification rather than image-based inspection |
+| P013 | **Peripheral/contextual, not core** | Numeric solder-paste measurements predicting X-ray results rather than smartphone visual inspection |
+
+**Not changed:**
+- No `relevance_class` column was added to `papers.csv`.
+- No A-E class was assigned.
+- `audit_report.csv` is unchanged.
+- Both papers stay in the 54-record corpus.
+
+A dated sentence was appended to each paper's `notes`.
+
+## 14. P013 Tables 4-5: still unresolved
+
+No copy of the P013 PDF or a page image is available in this environment, and `opus.lib.uts.edu.au` is still blocked by the egress proxy.
+
+The §9 statement stands: "Unable to visually verify Tables 4–5; extracted text is internally inconsistent; no metrics reconstructed."
+
+- `accuracy_metrics` stays blank.
+- All approved P013 characteristic values are unchanged.
+
+A later, separate commit can resolve only this item once the PDF or a page image is supplied.
