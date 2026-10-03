@@ -562,3 +562,60 @@ Step 9.2: collect full-text evidence for the verification queue (17 proposed cla
 - Branch: `claude/blissful-gauss-ub29pl` (from `b77072f`).
 - Commit: see `git log -- research/literature/fulltext_evidence_report.md` (hash reported to the researcher and recorded in the next entry).
 - Push status: pushed to `origin/claude/blissful-gauss-ub29pl`; not merged.
+
+---
+
+## 2026-10-03 — Claude Code
+
+### Task
+Step 9.3: turn the 17 ambiguous Step 9.2 characteristic rows into a decision-ready table and write a recoding plan for a later controlled recoding step. Decision documentation only; no recoding.
+
+### Changes
+- `research/literature/fulltext_decision_table.md` (new):
+  - the 17 ambiguous rows, each with ID, paper, field, current value, full-text evidence, candidate value, decision status and reason;
+  - dedicated subsections for P002 (modality/relevance), P013 (industrial edge inference/relevance) and P031 (final candidate coding);
+  - a version-limitation table.
+- `research/literature/fulltext_recoding_plan.md` (new): characteristic changes in four sections (Approved changes / Researcher decision required / Keep current value / Insufficient evidence). Every row cites the Step 9.2 evidence location. A free-text summary table and application instructions are included.
+- `docs/agent_sync/CHANGELOG.md`: this entry.
+
+### Research decisions
+- **Basis.** Branch `claude/blissful-gauss-ub29pl`; evidence source is Step 9.2 commit `86a087b` only. The earlier attempt `9643e43` is not continued and was not used as evidence.
+- **Decision A (industrial PC, researcher-approved):** an industrial PC performing inference locally at the production line is an edge device. P013 candidate coding: `smartphone = No`, `edge_device = Yes`, `on_device = Yes`, `cloud = No`. Inference runs on the Intel Celeron N2930 PC at the SMT line; the Spark cluster and AWS S3 are training/storage only.
+- **Decision B (P031, researcher-approved):** `adaptive_inference = No` (DVFS only; detector computation unchanged) and `latency_evaluation = Yes` (Tables 1-2). Keep `thermal_evaluation = Yes`; `energy_evaluation = No`. No full-text evidence contradicts these. The evidence is from the arXiv v1 preprint, recorded as a version limitation.
+- **Decision C (relevance):** P002 = proposed Class A, requires reassessment; P013 = proposed Class D, requires reassessment. Both are not image-based visual inspection. No new class assigned; `audit_report.csv` unchanged; neither paper removed.
+- **Ambiguity rules applied (Step 9.3 §4):**
+  - P002 `adaptive_inference` → No (window skipping changes invocation, not model computation);
+  - P033 `energy_evaluation` → No (profiling described, no energy results reported);
+  - vote/consistency gates (P002, P013, P015) are not `confidence_gating` → Unknown kept and documented;
+  - intended phone deployment (P002) and unclear Pi-vs-MATLAB execution (P020) → Unknown kept.
+
+### Results
+- **Ambiguous rows:** 17.
+  - **APPROVED FOR RECODING (4):** P002 `adaptive_inference` → No; P013 `edge_device` → Yes; P013 `on_device` → Yes; P033 `energy_evaluation` → No (version check).
+  - **NEEDS RESEARCHER DECISION (4):** P011 `cloud`; P011 `latency_evaluation`; P013 `resource_awareness`; P013 `latency_evaluation`.
+  - **KEEP CURRENT VALUE (9):** P002 `edge_device`, `on_device`, `confidence_gating`, `latency_evaluation`; P013 `confidence_gating`; P015 `confidence_gating`; P020 `edge_device`, `on_device`, `latency_evaluation`.
+  - **INSUFFICIENT EVIDENCE (0)** among the 17. P015 `latency_evaluation` (outside the 17) stays Insufficient evidence.
+- **Recoding plan:** 94 approved characteristic changes (90 Confirmed Unknown→value rows from Step 9.2 + 4 from the decision table). 33 of them are version-limited (P011, P029, P031, P033: preprint or unconfirmed version, marked ⚠). Also 4 researcher-decision rows, 9 keep, 1 insufficient evidence.
+- **Version limitations recorded:** P011, P029, P031 (arXiv preprints), P033 (arXiv copy, version not confirmed). P034 keeps its documented status (repository copy in IEEE final layout; OpenAlex "submittedVersion" label conflict).
+
+### Verification
+- `git diff -- research/literature/papers.csv` empty before and after; SHA-256 `90bf99be…1bfc` unchanged. `audit_report.csv`, relevance classes and gap-analysis files unchanged.
+- `python -m pytest -q`: 24 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 0 duplicate IDs, DOIs or titles.
+- `git diff` reviewed: only the two new Step 9.3 files and this entry.
+
+### Uncertain items (researcher/ChatGPT decisions)
+- The 4 NEEDS RESEARCHER DECISION rows.
+- Whether to apply the 33 version-limited approved changes now (with the version noted in `notes`) or after a version-of-record check.
+- Final relevance reassessment of P002 and P013.
+- P013 Table 4-5 values need a visual check before `accuracy_metrics` is recorded.
+
+### Remaining work
+- Researcher review of the decision table and recoding plan.
+- Controlled recoding step (README §7.7) applying the approved changes.
+- Obtain full texts for the 8 blocked papers (P001, P007, P017, P032 inaccessible from this environment; P018, P019, P022, P023 abstract only).
+
+### Git
+- Previous Claude Code entry (Step 9.2): commit `86a087b` on `claude/blissful-gauss-ub29pl` (PR #6, not merged).
+- Commit: see `git log -- research/literature/fulltext_decision_table.md` (hash recorded in the next entry).
+- Push status: pushed to `origin/claude/blissful-gauss-ub29pl`; not merged.
