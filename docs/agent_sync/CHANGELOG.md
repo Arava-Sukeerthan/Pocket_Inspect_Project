@@ -565,6 +565,132 @@ Step 9.2: collect full-text evidence for the verification queue (17 proposed cla
 
 ---
 
+## 2026-10-03 — Claude Code
+
+### Task
+Step 9.3: turn the 17 ambiguous Step 9.2 characteristic rows into a decision-ready table and write a recoding plan for a later controlled recoding step. Decision documentation only; no recoding.
+
+### Changes
+- `research/literature/fulltext_decision_table.md` (new):
+  - the 17 ambiguous rows, each with ID, paper, field, current value, full-text evidence, candidate value, decision status and reason;
+  - dedicated subsections for P002 (modality/relevance), P013 (industrial edge inference/relevance) and P031 (final candidate coding);
+  - a version-limitation table.
+- `research/literature/fulltext_recoding_plan.md` (new): characteristic changes in four sections (Approved changes / Researcher decision required / Keep current value / Insufficient evidence). Every row cites the Step 9.2 evidence location. A free-text summary table and application instructions are included.
+- `docs/agent_sync/CHANGELOG.md`: this entry.
+
+### Research decisions
+- **Basis.** Branch `claude/blissful-gauss-ub29pl`; evidence source is Step 9.2 commit `86a087b` only. The earlier attempt `9643e43` is not continued and was not used as evidence.
+- **Decision A (industrial PC, researcher-approved):** an industrial PC performing inference locally at the production line is an edge device. P013 candidate coding: `smartphone = No`, `edge_device = Yes`, `on_device = Yes`, `cloud = No`. Inference runs on the Intel Celeron N2930 PC at the SMT line; the Spark cluster and AWS S3 are training/storage only.
+- **Decision B (P031, researcher-approved):** `adaptive_inference = No` (DVFS only; detector computation unchanged) and `latency_evaluation = Yes` (Tables 1-2). Keep `thermal_evaluation = Yes`; `energy_evaluation = No`. No full-text evidence contradicts these. The evidence is from the arXiv v1 preprint, recorded as a version limitation.
+- **Decision C (relevance):** P002 = proposed Class A, requires reassessment; P013 = proposed Class D, requires reassessment. Both are not image-based visual inspection. No new class assigned; `audit_report.csv` unchanged; neither paper removed.
+- **Ambiguity rules applied (Step 9.3 §4):**
+  - P002 `adaptive_inference` → No (window skipping changes invocation, not model computation);
+  - P033 `energy_evaluation` → No (profiling described, no energy results reported);
+  - vote/consistency gates (P002, P013, P015) are not `confidence_gating` → Unknown kept and documented;
+  - intended phone deployment (P002) and unclear Pi-vs-MATLAB execution (P020) → Unknown kept.
+
+### Results
+- **Ambiguous rows:** 17.
+  - **APPROVED FOR RECODING (4):** P002 `adaptive_inference` → No; P013 `edge_device` → Yes; P013 `on_device` → Yes; P033 `energy_evaluation` → No (version check).
+  - **NEEDS RESEARCHER DECISION (4):** P011 `cloud`; P011 `latency_evaluation`; P013 `resource_awareness`; P013 `latency_evaluation`.
+  - **KEEP CURRENT VALUE (9):** P002 `edge_device`, `on_device`, `confidence_gating`, `latency_evaluation`; P013 `confidence_gating`; P015 `confidence_gating`; P020 `edge_device`, `on_device`, `latency_evaluation`.
+  - **INSUFFICIENT EVIDENCE (0)** among the 17. P015 `latency_evaluation` (outside the 17) stays Insufficient evidence.
+- **Recoding plan:** 94 approved characteristic changes (90 Confirmed Unknown→value rows from Step 9.2 + 4 from the decision table). 33 of them are version-limited (P011, P029, P031, P033: preprint or unconfirmed version, marked ⚠). Also 4 researcher-decision rows, 9 keep, 1 insufficient evidence.
+- **Version limitations recorded:** P011, P029, P031 (arXiv preprints), P033 (arXiv copy, version not confirmed). P034 keeps its documented status (repository copy in IEEE final layout; OpenAlex "submittedVersion" label conflict).
+
+### Verification
+- `git diff -- research/literature/papers.csv` empty before and after; SHA-256 `90bf99be…1bfc` unchanged. `audit_report.csv`, relevance classes and gap-analysis files unchanged.
+- `python -m pytest -q`: 24 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 0 duplicate IDs, DOIs or titles.
+- `git diff` reviewed: only the two new Step 9.3 files and this entry.
+
+### Uncertain items (researcher/ChatGPT decisions)
+- The 4 NEEDS RESEARCHER DECISION rows.
+- Whether to apply the 33 version-limited approved changes now (with the version noted in `notes`) or after a version-of-record check.
+- Final relevance reassessment of P002 and P013.
+- P013 Table 4-5 cell values need a visual check before `accuracy_metrics` is recorded.
+
+### Remaining work
+- Researcher review of the decision table and recoding plan.
+- Controlled recoding step (README §7.7) applying the approved changes.
+- Obtain full texts for the 8 blocked papers (P001, P007, P017, P032 inaccessible from this environment; P018, P019, P022, P023 abstract only).
+
+### Git
+- Previous Claude Code entry (Step 9.2): commit `86a087b` on `claude/blissful-gauss-ub29pl` (PR #6, not merged).
+- Commit: see `git log -- research/literature/fulltext_decision_table.md` (hash recorded in the next entry).
+- Push status: pushed to `origin/claude/blissful-gauss-ub29pl`; not merged.
+
+---
+
+## 2026-10-03 — Claude Code
+
+### Task
+Step 9.4: controlled full-text recoding of `papers.csv`. Applied only approved changes backed by a version of record or publisher final layout. Deferred version-limited and table-dependent changes. No gap analysis, no new papers, no new relevance classes.
+
+### Changes
+- `research/literature/papers.csv`: 6 rows recoded (P002, P013, P015, P016, P020, P034):
+  - 63 characteristic values and 31 free-text values (`dataset`, `model`, `hardware`, `accuracy_metrics`, `efficiency_metrics`, `limitations`);
+  - per row, a full-text segment appended to `evidence` (one item per changed field, with location) and dated recoding notes appended to `notes` (README §7.7), plus relevance-reassessment notes for P002 and P013;
+  - no title, authors, year, venue, DOI, URL, domain, application, future-work or relevance field changed.
+- `research/literature/fulltext_recoding_applied.md` (new): four sections — Applied now; Deferred, version check required; Deferred, table/evidence verification required; Relevance reassessment required. Each applied change lists old/new value, source, location, reason and version status.
+- `research/literature/fulltext_recoding_plan.md`: added a Step 9.4 status note and a *Step 9.4 status* column (APPLIED / DEFERRED — VERSION CHECK REQUIRED / KEPT / INSUFFICIENT EVIDENCE). Evidence and proposed values are unchanged.
+- `research/literature/fulltext_decision_table.md`: appended a Step 9.4 resolution section for the four researcher decisions. Earlier rows unchanged.
+- `research/literature/literature_matrix.csv`: regenerated with `manage_literature.py matrix`. The tool writes CRLF; endings were normalised back to the committed LF, so only the 6 recoded rows differ.
+- `research/literature/selected_papers.md`: "Characteristics marked Yes" lines for the 6 recoded papers regenerated from `papers.csv` (Step 8.3 precedent), with a dated note.
+- `docs/agent_sync/CHANGELOG.md`: this entry.
+
+### Research decisions (approved by researcher/ChatGPT after Step 9.3)
+- **P011:**
+  - `cloud` = Yes: remote GPT-4 Vision computation for the explanation-generation component only; not a cloud-based inspection system.
+  - `latency_evaluation` = No.
+  - Both **deferred** (preprint evidence).
+- **P013:**
+  - `resource_awareness` = No: faster scoring is a model-selection/efficiency consideration.
+  - `latency_evaluation` = No: an upper-bound test-set processing time.
+  - Both applied.
+- **Industrial-PC decision (P013):** `smartphone` = No, `edge_device` = Yes, `on_device` = Yes, `cloud` = No. Applied.
+- **P031 final coding:**
+  - Yes: smartphone, edge_device, on_device, resource_awareness, thermal_evaluation, latency_evaluation.
+  - No: cloud, adaptive_inference (DVFS only), energy_evaluation, multi_view, uncertainty, confidence_gating, anomaly_detection.
+  - The 8 changes from Unknown are deferred (preprint).
+- **P002:** proposed Class A, requires reassessment. Accelerometer input; dashcam/YOLOv5m only for training labels; road-condition classification; not image-based. Class unchanged; `audit_report.csv` unchanged.
+- **P013:** proposed Class D, requires reassessment. Seven numeric SPI measurements; X-ray result prediction; local inference on an Intel Celeron N2930 industrial PC; AWS/Spark for training/storage only; not image-based. Class unchanged.
+- **Version-limited changes deferred:** all P011, P029, P031 and P033 changes are marked **DEFERRED — VERSION CHECK REQUIRED**: the 33 Step 9.3 changes plus the 2 newly approved P011 values.
+
+### Results
+- **Values recoded:** 63 characteristic + 31 free-text = 94 fields.
+- **Deferred, version check:** 35 characteristic values (P011 11, P029 7, P031 8, P033 9) plus 20 free-text values.
+- **Deferred, table/evidence verification:** 1 (P013 `accuracy_metrics`: "Accuracy figures require visual table verification before canonical metadata update").
+- **Kept:** the 9 Step 9.3 KEEP CURRENT VALUE rows; P015 `latency_evaluation` stays Unknown (insufficient evidence).
+
+### Verification
+- **`papers.csv` SHA-256:**
+  - before: `90bf99be84eb0fc42fac109aa53c2cf68aba9384f9fcb16bca1120afc5201bfc`;
+  - after: `679f059b232928a0a1dad8eeb1bbad4d62d000493474d41271f1c897d1a19ef3`.
+- Row-by-row comparison against `6699ce4`: changes only in the 6 recoded rows and only in the listed columns plus `evidence`/`notes`. No forbidden column touched; row order and IDs unchanged.
+- `python -m pytest -q`: 24 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 0 duplicate IDs, DOIs or titles.
+- Consistency rule checked: every `on_device = Yes` row also has `edge_device = Yes`.
+- `audit_report.csv`, relevance classes and gap-analysis files unchanged. `gap`/`all` not run.
+
+### Uncertain items
+- Version-of-record comparison for P011, P029, P031, P033 before applying the 35 deferred values.
+- Visual check of P013 Tables 4-5.
+- P002 and P013 relevance reassessment.
+- The `matrix` command writes CRLF while the committed file is LF. A tooling decision (fix the writer or add `.gitattributes`) is open.
+
+### Remaining work
+- Version checks, then a follow-up recoding of the deferred values.
+- P013 table verification.
+- Full texts for P001, P007, P017, P032 (inaccessible from this environment) and P018, P019, P022, P023 (abstract only).
+
+### Git
+- Previous Claude Code entry (Step 9.3): commit `6699ce4` on `claude/blissful-gauss-ub29pl` (PR #6, not merged).
+- Commit: see `git log -- research/literature/fulltext_recoding_applied.md` (hash recorded in the next entry).
+- Push status: pushed to `origin/claude/blissful-gauss-ub29pl`; not merged.
+
+---
+
 ## 2026-10-04 — Antigravity
 
 ### Task
@@ -599,4 +725,33 @@ Step 9.5: Independent verification of Claude Code Step 9.4 controlled full-text 
 ### Git
 - Verification commit: see `git log -- docs/agent_sync/CHANGELOG.md`
 - Push status: pending push
+
+---
+
+## 2026-10-04 — Antigravity
+
+### Task
+Step 9.5 Follow-up: Reconcile Git state, resolve changelog merge conflict, and complete the Step 9.4 branch merge into `main`.
+
+### Changes
+- `docs/agent_sync/CHANGELOG.md`: Resolved merge conflict in chronological order and appended Step 9.5 Git reconciliation entry.
+- Merged branch `origin/claude/blissful-gauss-ub29pl` (Step 9.4 implementation commit `db2da9d`) into `main`.
+
+### Verification & Reconciliation
+- **Pre-Merge Audit**:
+  - Implementation commit `db2da9d` confirmed containing Step 9.4 recoding for exactly 6 papers (`P002`, `P013`, `P015`, `P016`, `P020`, `P034`) with 63 characteristic changes (100% supported by full text).
+  - Version-limited papers (`P011`, `P029`, `P031`, `P033`) remain deferred; `P013` `accuracy_metrics` remains deferred/blank.
+  - Relevance classes and gap-analysis files unchanged.
+- **Git Merge**: Merged `origin/claude/blissful-gauss-ub29pl` into `main`. Ancestor relationship verified: `git merge-base --is-ancestor db2da9d main` returns True.
+- **Post-Merge Verification**:
+  - `python -m pytest -q`: **24 passed** in 0.33s.
+  - `python scripts/manage_literature.py validate`: **54 records VALID** (0 schema errors, 0 duplicates).
+  - Working tree clean.
+
+### Git
+- Implementation commit: `db2da9d`
+- Step 9.5 verification commit: `fcb6d4b`
+- Merge commit: see `git log --oneline -1`
+- Push status: pending push
+
 
