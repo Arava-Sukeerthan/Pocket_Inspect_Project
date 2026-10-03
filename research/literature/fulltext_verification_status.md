@@ -1,5 +1,19 @@
 # Full-Text Verification Status
 
+## Step 9.6 follow-up — evidence completion (2026-10-03, Claude Code)
+
+| Paper | Status | Version used | Applied |
+|---|---|---|---|
+| P029 | **Verified (same-version copy)** | arXiv 1810.10090v1, author camera-ready with the MobiCom '18 ACM permission block | Yes: 7 characteristic + 4 free-text |
+| P031 | **Verified (same-version copy)** | arXiv 2410.10847v1, author camera-ready with the DAC '24 ACM copyright block; consistent with the UMich Deep Blue copy | Yes: 8 characteristic + 4 free-text |
+| P033 | **Verified (same-version copy)** | arXiv 2409.01089v1 in the final ACM TECS layout (Article 60, received/accepted dates) | Yes: 9 characteristic + 6 free-text |
+| P013 Tables 4-5 | Still blocked: no rendered page obtainable | — | No; `accuracy_metrics` blank |
+| P011 Fig. 4 | Unavailable (optional) | — | No change |
+
+See `fulltext_version_verification.md` §8-12. The Step 9.6 rows below are history.
+
+---
+
 ## Step 9.6 — version-of-record verification (2026-10-03, Claude Code)
 
 _Details: [`fulltext_version_verification.md`](fulltext_version_verification.md). Earlier sections below are unchanged history._
