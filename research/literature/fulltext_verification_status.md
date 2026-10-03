@@ -1,8 +1,115 @@
 # Full-Text Verification Status
 
+## Step 9.2 — full-text evidence collection (2026-10-03, Claude Code)
+
+_Evidence collection only. `papers.csv` was not modified, no relevance class was changed, and no gap analysis was done. Evidence: [`fulltext_evidence_report.md`](fulltext_evidence_report.md); proposed changes: [`fulltext_conflicts.md`](fulltext_conflicts.md); field tables: [`fulltext_verification_template.md`](fulltext_verification_template.md)._
+
+The relevance classes used to build the queue are **proposed auditor classifications** from `audit_report.csv`, not approved classes.
+
+### Summary
+
+| Measure | Value |
+| :-- | :-- |
+| Papers attempted | 18 (17 proposed class-A papers + P013, proposed class D) |
+| Fully verified | 6: P002, P013, P015, P016, P020, P034 |
+| Partially verified | 4: P011, P029, P031 (arXiv preprints), P033 (arXiv copy in journal layout, version not confirmed) |
+| Abstract only (subscription; no legitimate open copy) | 4: P018, P019, P022, P023 |
+| Inaccessible from this environment (open copy exists) | 4: P001, P007, P017, P032 |
+| Blocked in total | 8 |
+| Characteristic-field conflict rows | 108 (90 resolve `Unknown`; 17 ambiguous, current value kept; 1 insufficient evidence; **0 contradict a current Yes/No value**) |
+| Free-text conflict rows | 15 metric rows; 37 metadata rows |
+| Papers additionally queued | None. P045/P046 were not examined (no full text was opened for them in this step), so no confidence-gating observation is recorded. |
+
+"Fully verified" means the whole text of the version of record (or a repository copy in the publisher's final layout) was read. "Partially verified" means the whole text was read, but only in a version that could not be confirmed as the version of record. A paper is never counted as verified from its abstract.
+
+### Status by paper
+
+| Paper | Step 9.2 status | Source used | Version | May differ from version of record |
+| :-- | :-- | :-- | :-- | :-- |
+| P001 | Blocked: inaccessible | none | - | - |
+| P002 | Fully verified | PubMed Central PMC11014122 (full text) | Publisher version in PMC | No. Tables/figures not in the PMC text extraction |
+| P007 | Blocked: inaccessible | none | - | - |
+| P011 | Partially verified | arXiv 2407.11771v2 | Author preprint | Possibly; Information Fusion version not compared |
+| P015 | Fully verified | PubMed Central PMC9378646 (full text) | Publisher version in PMC | No. Tables/figures/supplement not in the extraction |
+| P016 | Fully verified | MDPI publisher PDF (mdpi-res.com) | Version of record | No |
+| P017 | Blocked: inaccessible | none | - | - |
+| P018 | Blocked: abstract only | none | - | - |
+| P019 | Blocked: abstract only | none | - | - |
+| P020 | Fully verified | MDPI publisher PDF (mdpi-res.com) | Version of record | No |
+| P022 | Blocked: abstract only | none | - | - |
+| P023 | Blocked: abstract only | none | - | - |
+| P029 | Partially verified | arXiv 1810.10090v1 | Author preprint with MobiCom '18 permission block | Possibly; ACM version not compared |
+| P031 | Partially verified | arXiv 2410.10847v1 | Author preprint with DAC '24 copyright block | Possibly; publisher version closed access |
+| P032 | Blocked: inaccessible | none | - | - |
+| P033 | Partially verified | arXiv 2409.01089v1 | arXiv copy in ACM TECS layout (60:1-60:31) | Unlikely, not confirmed |
+| P034 | Fully verified | FH JOANNEUM ePUB repository PDF | IEEE TMC final layout, pp. 451-464, CC BY | Unlikely; OpenAlex labels the copy "submittedVersion" (label conflict noted) |
+| P013 | Fully verified | UTS OPUS repository copy of the publisher PDF | Publisher PDF, pp. 1-9 | No |
+
+### How the full texts were reached
+
+- This environment's network policy blocks direct access to publisher sites (MDPI, Wiley, ScienceDirect, ACM, IEEE), arXiv, OpenAlex, Semantic Scholar and institutional repositories.
+- Full texts were read through three services available in the session:
+  - the PubMed Central full-text service (P002, P015);
+  - the alphaXiv full-text service for arXiv papers (P011, P029, P031, P033);
+  - the alphaXiv document reader for open-access PDFs on publisher or institutional hosts (P013, P016, P020, P034). It was also used for open-access location lookups.
+- Bot checks (ScienceDirect, the KB/DiVA Anubis challenge) were not bypassed. No pirated or unauthorised repositories were used or searched.
+
+### Version differences
+
+- **Preprints only:** P011, P029 and P031 were read only as arXiv preprints. Compare them with the versions of record before any recoding.
+- **P033:** the arXiv copy carries the ACM TECS journal layout and pagination. It was not compared with the ACM page.
+- **P034:** the repository copy carries the IEEE TMC layout, pagination (pp. 451-464) and a CC BY licence line, but OpenAlex labels it "submittedVersion".
+- **P002, P015:** PMC holds the version of record, but the text extraction used omits table bodies and figures. Evidence that exists only in tables or figures was not seen. For P015 this matters for `latency_evaluation` (Insufficient evidence).
+- **P013:** some extracted cell values in Tables 4-5 look internally inconsistent. Check them visually in the PDF before recoding `accuracy_metrics`.
+
+### Remaining blockers
+
+1. **Inaccessible from this environment, open copy exists (4):**
+   - **P001:** Wiley open access (CC BY-NC); `onlinelibrary.wiley.com/doi/pdfdirect/10.1002/stc.2751` could not be fetched;
+   - **P007:** CC BY; `downloads.hindawi.com/journals/ace/2022/9221211.pdf` could not be fetched;
+   - **P017:** gold open access; ScienceDirect PII S2351978918307820 could not be fetched;
+   - **P032:** only open copy is the DiVA submitted version (urn:nbn:se:uu:diva-587035), behind an Anubis bot challenge.
+
+   A normal browser session, or an environment whose network policy allows these hosts, should be enough. P032's DiVA copy is a submitted version.
+2. **Abstract only (4):** P018, P019, P022, P023. These need institutional access, interlibrary loan or an author copy. This is a researcher action.
+3. **Version-of-record checks:** P011, P029, P031 and P033 before their candidate changes are applied.
+4. **Researcher decisions:** the 17 ambiguous characteristic rows in `fulltext_conflicts.md` §1, plus the P002 and P013 relevance observations (both not image-based). Themes:
+   - stated-but-unmeasured on-device execution (P002);
+   - industrial PCs as edge devices (P013);
+   - vote/consistency gates as `confidence_gating` (P002, P013, P015);
+   - timing without stated hardware (P002, P013);
+   - remote LVLM explanations as `cloud` (P011);
+   - energy profiled but not reported (P033);
+   - whether Decision 3 or the §7.3 `No` rule applies once the full text shows no timing value (P011, P020);
+   - stream-level window skipping as `adaptive_inference` (P002).
+5. **Relevance classes** remain the auditor's proposal. Whether they become a schema column is still a researcher decision (Step 9.1).
+
+### Relation to the earlier Step 9.2 attempt (commit `9643e43`)
+
+An earlier Claude Code session pushed a Step 9.2 attempt as commit `9643e43` on the unmerged branch `claude/pocketinspect-agent-sync-a33d88`. That attempt read P001 and P007 from the Wiley HTML, and its CHANGELOG entry is dated 2026-10-04.
+
+This step was redone independently on branch `claude/blissful-gauss-ub29pl`, starting from the Step 9.1 commit `b77072f`. The earlier attempt was used only as a checklist. Material differences:
+
+- **P001, P007:** counted as blocked here, because the source could not be reached. The earlier evidence is not adopted.
+- **P033:** counted as partially verified here (arXiv copy; version not confirmed), not fully verified.
+- **P011 `cloud`:** Ambiguous here, not Confirmed Yes. GPT-4 Vision generates explanation text only; the inspection inference stays on the phone.
+- **P011 `latency_evaluation`:** the Table 4 caption mentions running time, but no time values appear in the table read here.
+- **P011 `accuracy_metrics`:** adds the Substation dataset mIoU (Table 6).
+- **P002 `adaptive_inference`:** Ambiguous here, not Confirmed No (input-dependent sliding-window skipping). Also two new internal inconsistencies: threshold 12 vs 11 m/s², and accuracy gap 1% vs 0.4%.
+- **P015 `latency_evaluation`:** marked Insufficient evidence, because figures and supplement were not visible.
+- **P020 `latency_evaluation`:** flags the Decision 3 vs §7.3 `No`-rule question.
+- **P033:** the 4.06x figure is an optimality gain, not an efficiency value.
+- **P034:** adds ViT-Base and MobileNetV1 accuracy values; the page range is 451-464.
+- **P031:** the satisfaction-rate gains are percentage points.
+- **Dating:** this environment's date is 2026-10-03, earlier than the dates on the Step 9.1 and earlier Step 9.2 entries (2026-10-04).
+
+---
+
+## Step 9.1 — queue preparation (history, unchanged)
+
 _Step 9.1, 2026-10-04. Preparation only: no full-text coding has started, and `papers.csv` is unchanged._
 
-## Summary
+### Summary (Step 9.1)
 
 | Measure | Value |
 | :-- | :-- |
@@ -15,7 +122,7 @@ _Step 9.1, 2026-10-04. Preparation only: no full-text coding has started, and `p
 | Inaccessible from this environment (open copy listed but not confirmed) | 2 (P017, P032) |
 | Full-text coding started | No |
 
-## Accessibility by paper
+### Accessibility by paper (Step 9.1)
 
 | Paper | Status | Publisher / primary source | Alternative legitimate source |
 | :-- | :-- | :-- | :-- |
@@ -45,7 +152,7 @@ _Step 9.1, 2026-10-04. Preparation only: no full-text coding has started, and `p
 - ScienceDirect, ACM and some MDPI/Wiley PDF links return bot checks to automated requests. Bot checks were not bypassed. Where a publisher page could not be confirmed, the paper is listed under its confirmed alternative or as not confirmed.
 - No pirated sources were used or searched.
 
-## Immediate blockers
+### Immediate blockers (Step 9.1)
 
 1. **Four papers are abstract-only:** P018, P019, P022 and P023, all class A (3D-print inspection). Full text needs institutional access, interlibrary loan or an author copy. These are researcher actions.
 2. **Two papers are not confirmed:**

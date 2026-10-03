@@ -463,3 +463,102 @@ Step 9.1: prepare the full-text verification queue. Preparation only; no full-te
 - Previous Claude Code entry (Step 8.3): commit `e618fd1`, merged to `main` via PR #5 as `1d85914`.
 - Commit: see `git log -- research/literature/fulltext_verification_queue.md` (hash recorded in the next entry)
 - Push status: pushed to `origin/claude/pocketinspect-agent-sync-a33d88`; not merged.
+
+---
+
+## 2026-10-03 — Claude Code
+
+### Task
+Step 9.2: collect full-text evidence for the verification queue (17 proposed class-A papers + P013, proposed class D). Evidence collection only: no recoding, no relevance-class change, no gap analysis, no literature search. The A–E classes are treated as **proposed auditor classifications**, not approved classes.
+
+### Changes
+- `research/literature/fulltext_verification_template.md`:
+  - filled for the 10 papers whose full text was read; each has a source/version block (source, URL, version, version type, possible differences, parts read) and 26 evidence rows;
+  - the 8 blocked papers are marked "not examined / Insufficient evidence";
+  - the Action vocabulary was extended to the four Step 9.2 recommended actions (Keep current value / Candidate change / Needs researcher decision / Insufficient evidence), and a verification-status rule was added. The coding definitions are unchanged.
+- `research/literature/fulltext_evidence_report.md` (new): per paper, Source, Version, Evidence by characteristic, Other evidence, Conflicts with abstract-level coding, and Recommended action.
+- `research/literature/fulltext_conflicts.md` (new): only rows where the full text differs from, or may contradict, the current coding. Four sections: characteristic fields, free-text metrics, free-text metadata, relevance observations.
+- `research/literature/fulltext_verification_status.md`: new Step 9.2 section (verified, partial, abstract-only, inaccessible, version differences, remaining blockers, relation to the earlier attempt). The Step 9.1 content is kept below it unchanged.
+- `docs/agent_sync/CHANGELOG.md`: this entry.
+
+### Research decisions
+- None. `papers.csv`, relevance classes, coding definitions and gap-analysis files are unchanged.
+- **No additional papers were queued.** P045/P046 were not examined, so there is no confidence-gating observation for them.
+- **Branch base.** This branch started from `main` (`9ebbf89`) and was fast-forwarded to the Step 9.1 commit `b77072f`.
+- **Earlier attempt.** An earlier Claude Code session had already pushed a Step 9.2 attempt (commit `9643e43`, branch `claude/pocketinspect-agent-sync-a33d88`, unmerged; its entry is dated 2026-10-04). This step was redone independently from the sources read in this session. `9643e43` served only as a checklist and is **not** part of this branch. Differences are listed in `fulltext_verification_status.md`. **Researcher decision:** which of the two Step 9.2 branches to carry forward.
+
+### Results
+- **Papers attempted:** 18.
+- **Fully verified (6):** P002, P013, P015, P016, P020, P034.
+- **Partially verified (4):** P011, P029, P031 (arXiv preprints), P033 (arXiv copy in journal layout; version not confirmed).
+- **Blocked (8):**
+  - inaccessible from this environment although an open copy exists: P001, P007, P017, P032;
+  - abstract only: P018, P019, P022, P023.
+- **Access route:** the network policy blocks publisher, arXiv and repository hosts. Full texts were read through the PubMed Central full-text service, the alphaXiv full-text service, and the alphaXiv document reader for open-access PDFs. No bot check was bypassed and no pirated copy was used.
+- **Conflict rows:** 108 characteristic rows:
+  - 90 resolve `Unknown`;
+  - 17 are ambiguous and keep the current value;
+  - 1 is insufficient evidence;
+  - **0 contradict a current Yes/No value.**
+
+  Also 15 free-text metric rows and 37 free-text metadata rows.
+- **Important candidate changes (Unknown→Yes):**
+  - P011 `smartphone` (Android/iOS app; iOS UI for iPhone 11 Pro);
+  - P016 `edge_device`, `on_device`, `latency_evaluation` (14 FPS on Raspberry Pi 4) and `confidence_gating` (probability threshold triggers a stop-print notification);
+  - P029, P033, P034 `smartphone`;
+  - P031, P033, P034 `latency_evaluation`;
+  - P034 `energy_evaluation` (20-61 mJ).
+- **P002 finding: NOT image-based.**
+  - The deployed RDD-CNN (1D-CNN) classifies smartphone accelerometer RMS signals (Galaxy Note8, Redmi Note 10 Pro, LG Q7; 100 Hz).
+  - Dashcam video and YOLOv5m are used only to label training data automatically.
+  - The task is classifying speed bumps, manholes and potholes from vehicle vibration.
+  - `smartphone = Yes` is confirmed, as a sensing device only.
+  - On-phone execution is stated as the scope (TFLite model "designed for execution on smartphones"), but no on-phone run or timing hardware is described, so `edge_device`, `on_device` and `latency_evaluation` stay Ambiguous.
+  - New internal inconsistencies: threshold 12 vs 11 m/s²; accuracy gap 1% vs 0.4%.
+  - Proposed class A not changed; relevance needs researcher review.
+- **P013 finding: NOT image-based.**
+  - The ML input is seven numeric SPI measurements per solder joint; the task is predicting X-ray results so defect-free fields of view skip X-ray (about 29% volume reduction).
+  - Inference runs on an edge industrial PC (Intel Celeron N2930) at the SMT line that receives SPI files over TCP/IP. Training is on a company Spark cluster; storage is AWS S3. So `cloud` is a candidate No (training/storage only).
+  - `edge_device` and `on_device` remain Ambiguous (industrial-PC question).
+  - Proposed class D not changed.
+- **P031 finding:**
+  - Phone: "Mi 11 Lite" with Snapdragon 780G in §4.4; "Mi 11 Lite 5G" in the Table 2 caption.
+  - The detectors run on the device. The Lotus DRL agent runs on a separate desktop (RTX 2080Ti) over a socket; overhead 8.52 ms per inference.
+  - Thermal evidence is confirmed; there are no energy results (candidate No).
+  - Lotus is DVFS only: CPU/GPU frequency, two decisions per frame. Detector computation is unchanged; the two-width network is the agent's Q-network. The full text therefore resolves `adaptive_inference` as a **candidate Unknown→No** (Decision 4), flagged for explicit researcher confirmation.
+  - Measured mean/SD latency in Tables 1-2 gives candidate `latency_evaluation` Unknown→Yes.
+
+### Verification
+- **`papers.csv` NOT modified:** byte-for-byte identical (SHA-256 `90bf99be…1bfc` before and after; `git diff` empty for the file).
+- `python -m pytest -q`: 24 passed. pytest was installed into the session environment first; it was not present.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 0 duplicate IDs, DOIs or titles (also checked directly).
+- `git diff` reviewed: only the four full-text files and this changelog entry changed. No gap-analysis, relevance, definition or `papers.csv` change.
+
+### Uncertain items (researcher/ChatGPT decisions)
+- Relevance of P002 and P013 (both not image-based); whether the proposed classes are approved.
+- 17 ambiguous characteristic rows (`fulltext_conflicts.md` §1), including:
+  - stated-but-unmeasured on-device execution (P002);
+  - industrial PCs as edge devices (P013);
+  - vote/consistency gates as `confidence_gating` (P002, P013, P015);
+  - remote LVLM explanation generation as `cloud` (P011);
+  - energy profiled but not reported (P033);
+  - stream-level window skipping as `adaptive_inference` (P002);
+  - whether Decision 3 (`Unknown`) or the §7.3 "full text read, no timing → `No`" rule applies to qualitative speed claims after full-text reading (P011, P020).
+- P031 `adaptive_inference` Unknown→No needs explicit confirmation.
+- Versions of record for P011, P029, P031, P033 were not compared. The P034 repository copy is labelled "submittedVersion" by OpenAlex but has the publisher layout.
+- P013 Table 4-5 cell values looked inconsistent in the extracted text; check visually.
+- Which Step 9.2 branch to carry forward: this branch, or the earlier attempt `9643e43`.
+
+### Remaining work
+- Researcher/ChatGPT review of `fulltext_conflicts.md`.
+- Obtain full texts:
+  - P001, P007, P017, P032 need a normal browser or a less restricted network policy;
+  - P018, P019, P022, P023 need institutional access, interlibrary loan or an author copy.
+- Compare the preprint-based papers with their versions of record.
+- After approval, a separate controlled recoding step (README §7.7).
+
+### Git
+- Previous Claude Code entry in this branch lineage: Step 9.1, commit `b77072f` (not merged to `main`).
+- Branch: `claude/blissful-gauss-ub29pl` (from `b77072f`).
+- Commit: see `git log -- research/literature/fulltext_evidence_report.md` (hash reported to the researcher and recorded in the next entry).
+- Push status: pushed to `origin/claude/blissful-gauss-ub29pl`; not merged.
