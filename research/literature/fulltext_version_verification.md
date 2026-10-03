@@ -360,3 +360,40 @@ P002 and P013 stay **peripheral/contextual (not core)**, as proposed in §6:
 1. **P013 Tables 4-5.** Visual inspection of p. 7 of the version of record. This needs a browser, a local copy of the PDF, or network access to `opus.lib.uts.edu.au`.
 2. **P011 Fig. 4 (optional).** Visual check of the version-of-record figure. This needs access to `www.cs.unb.ca` or the publisher.
 3. **Optional confirmation for P029/P031/P033.** Comparing the ACM PDFs in a browser would remove the residual camera-ready versus ACM-PDF risk noted in §8.
+
+---
+
+# Step 9.6 recovery and relevance approval (2026-10-03, Claude Code)
+
+**Branch history.**
+- PR #7 merged only the first Step 9.6 commit (`29aaf78`) into `main` (`0a63176`).
+- The follow-up commit `55873a3` (§8-12) was cherry-picked unchanged onto the new branch `claude/step-9-6-recovery`, created from `origin/main`.
+- No evidence, decision or methodology in §8-12 was redone or altered.
+
+## 13. Researcher-approved relevance decisions
+
+These decisions replace the *proposed* status recorded in §6 and §11.
+
+| Paper | Approved decision | Reason (researcher) |
+|---|---|---|
+| P002 | **Peripheral/contextual, not core** | Accelerometer-based road-condition classification rather than image-based inspection |
+| P013 | **Peripheral/contextual, not core** | Numeric solder-paste measurements predicting X-ray results rather than smartphone visual inspection |
+
+**Not changed:**
+- No `relevance_class` column was added to `papers.csv`.
+- No A-E class was assigned.
+- `audit_report.csv` is unchanged.
+- Both papers stay in the 54-record corpus.
+
+A dated sentence was appended to each paper's `notes`.
+
+## 14. P013 Tables 4-5: still unresolved
+
+No copy of the P013 PDF or a page image is available in this environment, and `opus.lib.uts.edu.au` is still blocked by the egress proxy.
+
+The §9 statement stands: "Unable to visually verify Tables 4–5; extracted text is internally inconsistent; no metrics reconstructed."
+
+- `accuracy_metrics` stays blank.
+- All approved P013 characteristic values are unchanged.
+
+A later, separate commit can resolve only this item once the PDF or a page image is supplied.

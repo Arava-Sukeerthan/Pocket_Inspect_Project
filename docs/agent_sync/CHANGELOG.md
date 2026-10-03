@@ -911,3 +911,51 @@ No merge, no Step 9.7, no gap analysis.
 - Branch: `claude/nice-babbage-51qfba` (PR #7). Previous Step 9.6 commit: `29aaf78`.
 - Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
 - Push status: pushed to `origin/claude/nice-babbage-51qfba`; not merged; `main` not touched.
+
+---
+
+## 2026-10-03 — Claude Code
+
+### Task
+Step 9.6 recovery after the PR #7 merge:
+- recover the follow-up commit `55873a3` (P029/P031/P033) onto a new branch;
+- record the researcher-approved P002/P013 relevance decisions.
+
+### Changes
+- **Git context.** PR #7 had already merged only `29aaf78` into `main` (merge commit `0a63176`). `55873a3` was pushed to the closed PR branch afterwards and was not in `main`.
+- **Recovery.**
+  - Created `claude/step-9-6-recovery` from `origin/main` (`0a63176`).
+  - Cherry-picked `55873a3` cleanly with `-x`, as `f97235d`. No conflicts.
+  - The resulting tree is identical to `55873a3`. Its P029/P031/P033 evidence and decisions are unchanged and were not redone.
+- **`research/literature/papers.csv`.** Appended one dated relevance-approval sentence to the `notes` of P002 and P013. No other field changed.
+- **`research/literature/literature_matrix.csv`.** Regenerated (LF line endings); only the P002 and P013 rows differ.
+- **`research/literature/fulltext_version_verification.md`.** Appended a recovery note, §13 (approved relevance) and §14 (P013 still unresolved).
+- **`research/literature/fulltext_verification_status.md`.** Added a recovery section; earlier text unchanged.
+
+### Research decisions
+- **P002: peripheral/contextual, not core** (researcher-approved). Accelerometer-based road-condition classification rather than image-based inspection.
+- **P013: peripheral/contextual, not core** (researcher-approved). Numeric solder-paste measurements predicting X-ray results rather than smartphone visual inspection.
+- **No schema or class change.** No relevance column was added, no A-E class was assigned, and `audit_report.csv` was not modified.
+- **P013 Tables 4-5: still unresolved.** No PDF or page image is available in this environment. `accuracy_metrics` stays blank, the approved characteristic values are unchanged, and no metrics were reconstructed.
+- **Recovered P029/P031/P033 values confirmed:**
+  - P031: adaptive_inference = No (DVFS only), latency_evaluation = Yes (measured detector latency), cloud = No (README §7.3);
+  - P033: latency_evaluation = Yes, energy_evaluation = No (profiled, not reported).
+
+### Verification
+- `python -m pytest -q`: 24 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 54 unique paper IDs.
+- Compared with `origin/main`:
+  - only P002 and P013 (`notes`) and P029, P031 and P033 differ;
+  - no title, author, year, venue, DOI or URL changed.
+- `research/gap_analysis/` is untouched.
+
+### Uncertain items
+- **P013 Tables 4-5.** Needs the PDF or a page-7 image in this environment, or network access to `opus.lib.uts.edu.au`. To be resolved in a separate small commit.
+
+### Remaining work
+- Researcher review of `claude/step-9-6-recovery`. Do not merge without review. Do not start Step 9.7 or gap analysis.
+
+### Git
+- Branch: `claude/step-9-6-recovery` (from `origin/main` `0a63176`). Recovered commit: `f97235d` (cherry-pick of `55873a3`).
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md` on this branch.
+- Push status: branch pushed to `origin/claude/step-9-6-recovery`; no PR opened; not merged; `main` untouched; no force push.

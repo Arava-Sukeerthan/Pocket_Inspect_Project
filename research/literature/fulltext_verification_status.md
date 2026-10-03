@@ -1,5 +1,15 @@
 # Full-Text Verification Status
 
+## Step 9.6 recovery (2026-10-03, Claude Code)
+
+The follow-up work (`55873a3`) was recovered onto the new branch `claude/step-9-6-recovery` from `main` (`0a63176`). P029/P031/P033 statuses below are unchanged.
+
+P002 and P013 relevance is **approved: peripheral/contextual, not core**; see `fulltext_version_verification.md` §13.
+
+P013 Tables 4-5 remain unresolved because no PDF is available.
+
+---
+
 ## Step 9.6 follow-up — evidence completion (2026-10-03, Claude Code)
 
 | Paper | Status | Version used | Applied |
