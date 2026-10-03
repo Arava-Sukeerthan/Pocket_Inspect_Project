@@ -6,6 +6,8 @@ _2026-10-03 (Step 8.3): the "Characteristics marked Yes" lines were regenerated 
 
 _2026-10-03 (Step 9.4): the "Characteristics marked Yes" lines for P002, P013, P015, P016, P020 and P034 were regenerated from `papers.csv` after the controlled full-text recoding; see `fulltext_recoding_applied.md`. Other text for these papers (e.g. Dataset / Model / Hardware lines) still reflects the abstract-level extraction._
 
+_2026-10-03 (Step 9.6): the "Characteristics marked Yes" line for P011 was regenerated from `papers.csv` after verification against the Information Fusion version of record; see `fulltext_version_verification.md`. Other text for P011 still reflects the abstract-level extraction. P029, P031 and P033 are unchanged (version of record not reachable)._
+
 **Epistemic status.** Every entry is a real publication. Its metadata was verified against Crossref and/or OpenAlex, and every DOI resolves through the doi.org handle registry. Characteristic fields were extracted from the **abstract only** (Fact = stated in the abstract). Anything the abstract does not state is recorded as `Unknown`, and full-text review is pending. Nothing in this file is a research-gap or novelty claim.
 
 ## Papers by search group
@@ -295,7 +297,7 @@ _2026-10-03 (Step 9.4): the "Characteristics marked Yes" lines for P002, P013, P
 - **DOI / URL:** [10.1016/j.inffus.2024.102782](https://doi.org/10.1016/j.inffus.2024.102782)
 - **Application:** Explainable visual quality inspection with semantic segmentation on low-resource edge devices
 - **Dataset / Model / Hardware:** Unknown / Semantic segmentation model + XAI + Large Vision Language Model explanations / Low-resource edge / mobile devices (models not stated in abstract)
-- **Characteristics marked Yes:** edge_device, on_device
+- **Characteristics marked Yes:** smartphone, edge_device, on_device, cloud
 - **Why relevant:** Industrial inspection framework explicitly targeting low-resource mobile/edge deployment.
 - **Limitations (author-stated):** Not stated in abstract — full-text review pending.
 - **PocketInspect relevance:** Industrial inspection framework explicitly targeting low-resource mobile/edge deployment.

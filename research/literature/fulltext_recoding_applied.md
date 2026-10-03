@@ -201,3 +201,15 @@ No new A–E class was assigned and both papers remain in the database. The find
 - `literature_matrix.csv`: regenerated with `python scripts/manage_literature.py matrix`. The tool writes CRLF line endings while the committed file uses LF. Line endings were normalised back to LF so the diff shows only the 6 recoded rows; content is unchanged by the normalisation.
 - `selected_papers.md`: the "Characteristics marked Yes" lines for the 6 recoded papers were regenerated from `papers.csv`, following the Step 8.3 precedent, with a dated note. Other text in that file is unchanged.
 - Gap-analysis outputs were **not** regenerated (`gap`/`all` not run).
+
+## Step 9.6 addendum (2026-10-03)
+
+**P011.** All deferred P011 values above (11 characteristic and 6 free-text) were checked against the Information Fusion version of record and applied to `papers.csv`. Notes:
+- `hardware` wording was adjusted, and page references now follow the journal pagination.
+- `cloud = Yes` is recorded as an auxiliary explanation component only.
+
+**P029, P031, P033.** These remain **DEFERRED — VERSION CHECK REQUIRED**, because the versions of record could not be reached from this environment.
+
+**P013.** `accuracy_metrics` remains **DEFERRED — TABLE VERIFICATION REQUIRED**.
+
+See [`fulltext_version_verification.md`](fulltext_version_verification.md).
