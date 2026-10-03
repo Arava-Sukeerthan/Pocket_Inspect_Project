@@ -562,3 +562,41 @@ Step 9.2: collect full-text evidence for the verification queue (17 proposed cla
 - Branch: `claude/blissful-gauss-ub29pl` (from `b77072f`).
 - Commit: see `git log -- research/literature/fulltext_evidence_report.md` (hash reported to the researcher and recorded in the next entry).
 - Push status: pushed to `origin/claude/blissful-gauss-ub29pl`; not merged.
+
+---
+
+## 2026-10-04 — Antigravity
+
+### Task
+Step 9.5: Independent verification of Claude Code Step 9.4 controlled full-text recoding (commit `db2da9d` on branch `claude/blissful-gauss-ub29pl`).
+
+### Changes
+- `docs/agent_sync/CHANGELOG.md`: Appended Antigravity Step 9.5 verification entry. No literature data or implementation files modified.
+
+### Verification Results
+- **Commit Audited**: `db2da9d` ("Apply Step 9.4 controlled full-text recoding").
+- **Characteristic Changes Checked**: **63 characteristic field changes** across 6 papers (`P002`, `P013`, `P015`, `P016`, `P020`, `P034`).
+- **Supported Changes**: **63 / 63 (100% SUPPORTED)**. Every change is independently justified by direct full-text evidence or an approved coding definition:
+  - `P002` (8 changes): `cloud=No`, `adaptive_inference=No`, `resource_awareness=No`, `energy_evaluation=No`, `thermal_evaluation=No`, `multi_view=No`, `uncertainty=No`, `anomaly_detection=No`.
+  - `P013` (12 changes): `smartphone=No`, `edge_device=Yes`, `on_device=Yes`, `cloud=No`, `adaptive_inference=No`, `resource_awareness=No`, `energy_evaluation=No`, `thermal_evaluation=No`, `multi_view=No`, `uncertainty=No`, `anomaly_detection=No`, `latency_evaluation=No`.
+  - `P015` (11 changes): All 11 changed characteristic fields set to `No` based on desktop i7/GPU setup and single-view optical camera.
+  - `P016` (13 changes): `smartphone=No`, `edge_device=Yes` (RPi 4), `on_device=Yes` (RPi 4), `cloud=No`, `adaptive_inference=No`, `resource_awareness=No`, `energy_evaluation=No`, `thermal_evaluation=No`, `multi_view=No`, `uncertainty=No`, `confidence_gating=Yes` (stop-print signal), `anomaly_detection=No`, `latency_evaluation=Yes` (14 FPS).
+  - `P020` (10 changes): All 10 changed characteristic fields set to `No` based on RPi camera + PC workstation setup.
+  - `P034` (9 changes): `smartphone=Yes` (Redmi Note 9 Pro / Pixel 6), `cloud=No`, `energy_evaluation=Yes` (20.3-61.2 mJ), `thermal_evaluation=No`, `multi_view=No`, `uncertainty=No`, `confidence_gating=No`, `anomaly_detection=No`, `latency_evaluation=Yes` (38 ± 1 µs adaptation & inference timing).
+- **Unsupported / Ambiguous Changes**: **0**.
+- **Version-Limited Status**: Deferred papers (`P011`, `P029`, `P031`, `P033`) remain strictly deferred; none of their characteristic or free-text changes were applied to canonical `papers.csv`.
+- **P013 Accuracy Status**: `accuracy_metrics` remains blank/deferred pending visual verification of Tables 4–5.
+- **Data Integrity**: 0 papers added/deleted; P001–P054 intact; DOIs, titles, authors, years, venues, URLs, and relevance classes unchanged in `papers.csv`.
+- **Tests & Validation**:
+  - `python -m pytest -q`: **24 passed** in 0.33s.
+  - `python scripts/manage_literature.py validate`: **54 records VALID** (0 schema errors, 0 duplicates).
+  - Generated files (`literature_matrix.csv`, `selected_papers.md`) correspond exactly to recoded `papers.csv`.
+
+### Verification Result & Merge Status
+- **Result**: STEP 9.4 VERIFIED — READY FOR MERGE
+- **Branch**: `claude/blissful-gauss-ub29pl` (commit `db2da9d`).
+
+### Git
+- Verification commit: see `git log -- docs/agent_sync/CHANGELOG.md`
+- Push status: pending push
+
