@@ -1921,3 +1921,47 @@ Step 10B: dataset, smartphone, model-ladder and measurement-hardware specificati
 - Branch: `claude/step-10b-dataset-device-model` (from `origin/main` `544fe17`).
 - Commit: see `git log -- research/datasets/model_ladder.md`.
 - Push status: pushed; PR opened; not merged.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10B final scientific refinement (PR #15). Four boundaries are made explicit. No Step 10C work, no implementation.
+
+### Changes
+- **`research/datasets/device_requirements.md`.**
+  - Added "ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION". A repository search found no documented project device.
+  - D1–D3 are marked as requirement classes only.
+- **`research/datasets/dataset_selection.md`.**
+  - New "Stage boundary" subsection:
+    - Stage 1 is a controlled additional-view simulation from Real-IAD's stored views, not smartphone recapture.
+    - Stage 2 is a custom smartphone capture for actual recapture and additional views.
+  - §6: the custom set is marked "PROVISIONAL — PROTOCOL ONLY", does not exist, and has the 10 listed requirements.
+- **`research/datasets/model_ladder.md`.** Formal 7-step C1–C4 selection rule, and the statement "Final C1–C4 model assignment is deferred to the implementation benchmark stage."
+- **`research/datasets/verification_checklist.md`.** Gates G1–G4, all "OPEN / REQUIRES VERIFICATION".
+- **`configs/dataset_device_model.yaml`.** Device status, Stage 1 interpretation, custom set marked `exists: false`, ladder deferral and preconditions, gates.
+- **`research/datasets/dataset_device_model_matrix.csv`.** Device column, Real-IAD multi-view note, custom-set access, decision and notes, and C1–C4 cells updated. Still 14 rows and 23 columns.
+- **`tests/test_dataset_device_model.py`.**
+  - The device-label assertion now pins the new label.
+  - New `TestStep10BBoundaries` (6 tests): no device falsely available; Real-IAD not smartphone-captured; custom capture not an existing dataset; C1–C4 provisional; no fabricated model performance; gates open.
+
+### Research decisions
+- No actual smartphone is selected; the decision awaits researcher confirmation (G1).
+- Real-IAD supports only simulated additional-view decisions (G2). Actual recapture needs Stage 2 custom capture (G3).
+- Final C1–C4 assignment is deferred to the implementation benchmark stage (G4). No performance values are given.
+
+### Verification
+- `python -m pytest -q`: **219 passed** (213 + 6 new).
+- Step 10A artefacts unchanged (pinned hashes); `papers.csv` unchanged.
+
+### Uncertain items
+- G1–G4 all open.
+
+### Remaining work
+- Researcher closes G1–G4. Step 10C has not been started.
+
+### Git
+- Branch: `claude/step-10b-dataset-device-model` (commit after `6316407`).
+- Commit: see `git log -- research/datasets/verification_checklist.md`.
+- Push status: pushed; PR #15 updated; not merged.

@@ -115,7 +115,7 @@ class TestDatasetDeviceModel(unittest.TestCase):
         self.assertEqual(self.cfg["device"]["available_devices_known"], [])
         self.assertIn("**No smartphone is selected and none is claimed to be available.**", self.device)
         for r in self.rows:
-            self.assertEqual(r["Device"], "Not selected (REQUIRES_VERIFICATION)", r["Dataset"])
+            self.assertEqual(r["Device"], "ACTUAL DEVICE - REQUIRES RESEARCHER CONFIRMATION", r["Dataset"])
         shortlist = _section(self.device, "## 2. Candidate Device Classes (shortlist)")
         self.assertNotRegex(shortlist, r"\|\s*(VERIFIED|SUPPORTED)\s*\|")
 
@@ -261,6 +261,91 @@ class TestDatasetDeviceModel(unittest.TestCase):
     def test_step_10a_unchanged(self):
         for rel, digest in STEP_10A_HASHES.items():
             self.assertEqual(hashlib.sha256((ROOT / rel).read_bytes()).hexdigest(), digest, rel)
+
+
+class TestStep10BBoundaries(unittest.TestCase):
+    """Final Step 10B refinement: device, Stage 1/2, custom capture and C1-C4 boundaries."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.selection = _text(SELECTION)
+        cls.device = _text(DEVICE)
+        cls.ladder = _text(LADDER)
+        cls.checklist = _text(CHECKLIST)
+        cls.rows = {r["Dataset"]: r for r in _matrix()}
+        with open(CFG, encoding="utf-8") as f:
+            cls.cfg = yaml.safe_load(f)
+
+    def test_no_smartphone_falsely_available(self):
+        self.assertIn("**ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION.**", self.device)
+        self.assertEqual(self.cfg["device"]["actual_device_status"], "ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION")
+        self.assertFalse(self.cfg["device"]["repository_evidence_of_available_device"])
+        self.assertIsNone(self.cfg["device"]["selected"])
+        self.assertTrue(self.cfg["device"]["candidate_classes_are_requirement_classes_only"])
+        self.assertIn("**These are requirement classes only, not device selections.**", self.device)
+        lowered = self.device.lower()
+        for claim in ("device is available", "phone is available", "we have a", "selected device:", "has been selected"):
+            self.assertNotIn(claim, lowered)
+
+    def test_real_iad_not_smartphone_captured(self):
+        row = self.rows["Real-IAD"]
+        self.assertTrue(row["Smartphone_Suitable"].startswith("No"))
+        self.assertIn("simulation only, not smartphone recapture", row["Multi_View"])
+        self.assertFalse(self.cfg["multi_view"]["real_iad_smartphone_captured"])
+        self.assertFalse(self.cfg["multi_view"]["real_iad_provides_smartphone_recapture"])
+        self.assertEqual(self.cfg["multi_view"]["stage1_interpretation"], "controlled_additional_view_simulation")
+        stages = self.selection.split("### Stage boundary: simulated vs actual additional views", 1)[1].split("\n### ", 1)[0]
+        self.assertIn("**Stage 1 — controlled additional-view simulation**", stages)
+        self.assertIn("**Stage 2 — actual recapture / additional-view experiment**", stages)
+        self.assertIn("**Not physical smartphone recapture.**", stages)
+        self.assertIn("**Real-IAD does not provide smartphone recapture data**", stages)
+
+    def test_custom_capture_not_existing_dataset(self):
+        self.assertFalse(self.cfg["datasets"]["secondary"]["exists"])
+        row = self.rows["Phone-captured 3D-printed-part set"]
+        self.assertTrue(row["Access_Status"].startswith("Does not exist"))
+        self.assertIn("PROTOCOL ONLY", row["Decision"])
+        self.assertIn("Not an existing dataset", row["Notes"])
+        section = _section(self.selection, "## 6. Secondary Dataset: Minimum Custom-Capture Requirements (protocol only)")
+        self.assertIn("**PROVISIONAL — PROTOCOL ONLY.**", section)
+        self.assertIn("**does not exist** and must not be treated as an existing dataset", section)
+        for req in ("physical parts", "controlled defect / non-defect conditions", "item identifiers", "repeated captures",
+                    "same-view recapture", "additional views", "train/validation/test split by physical item",
+                    "smartphone camera metadata", "lighting/environment metadata", "resource telemetry where appropriate"):
+            self.assertIn(f"- {req}", section)
+        self.assertIn("No data are collected in Step 10B.", section)
+
+    def test_ladder_remains_provisional(self):
+        ladder = self.cfg["model_ladder"]
+        self.assertEqual(ladder["status"], "PROVISIONAL")
+        self.assertEqual(ladder["final_assignment"], "deferred_to_implementation_benchmark_stage")
+        self.assertEqual(len(ladder["selection_rule_preconditions"]), 7)
+        for c in ("C1", "C2", "C3", "C4"):
+            self.assertFalse(ladder[c]["selected"])
+            self.assertIn("PROVISIONAL", self.rows["Real-IAD"][c])
+        rule = self.ladder.split("### Formal C1–C4 selection rule", 1)[1].split("**Ladder-construction rule", 1)[0]
+        self.assertIn("**Final C1–C4 model assignment is deferred to the implementation benchmark stage.**", rule)
+        self.assertEqual(len(re.findall(r"^\d\. ", rule, flags=re.MULTILINE)), 7)
+        for step in ("the smartphone is confirmed", "support the same inspection task", "offline deployment is verified",
+                     "confidence/probability output is available", "ordered by **measured** resource cost",
+                     "minimum functional inspection requirements", "empirical benchmarking confirms a meaningful"):
+            self.assertIn(step, rule)
+
+    def test_no_fabricated_model_performance(self):
+        for name, text in (("ladder", self.ladder), ("matrix", _text(MATRIX)), ("config", _text(CFG)),
+                           ("selection", self.selection), ("device", self.device)):
+            self.assertIsNone(PERFORMANCE_VALUE.search(text), name)
+        for r in self.rows.values():
+            for c in ("C1", "C2", "C3", "C4"):
+                self.assertNotRegex(re.sub(r"\bC[1-4]\b", "", r[c]), r"\d", (r["Dataset"], c))
+
+    def test_four_gates_open(self):
+        for gate, name in (("G1", "actual smartphone confirmed"), ("G2", "Real-IAD multi-view interpretation confirmed"),
+                           ("G3", "custom smartphone capture protocol confirmed"),
+                           ("G4", "C1–C4 empirical selection criteria confirmed")):
+            line = next(ln for ln in self.checklist.splitlines() if ln.startswith(f"| {gate} — {name} |"))
+            self.assertTrue(line.rstrip().endswith("| OPEN / REQUIRES VERIFICATION |"), gate)
+            self.assertEqual(self.cfg["gates"][gate]["status"], "OPEN_REQUIRES_VERIFICATION")
 
 
 if __name__ == "__main__":

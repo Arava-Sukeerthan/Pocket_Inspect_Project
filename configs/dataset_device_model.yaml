@@ -13,7 +13,7 @@ telemetry_classes: [AVAILABLE, CONDITIONALLY_AVAILABLE, UNAVAILABLE, REQUIRES_EX
 
 datasets:
   primary: {name: Real-IAD, status: PROVISIONAL, access: REQUIRES_VERIFICATION, license: REQUIRES_VERIFICATION}
-  secondary: {name: Phone-captured 3D-printed-part set, status: PROVISIONAL, kind: custom_capture_protocol_only}
+  secondary: {name: Phone-captured 3D-printed-part set, status: PROVISIONAL, kind: custom_capture_protocol_only, exists: false}
   fallback_primary: {name: MANTA, status: REQUIRES_VERIFICATION}
   replay_sanity_set: {name: VisA, status: SUPPORTED, basis: "licence stated as CC BY 4.0 in the official repository README; not verified"}
   custom_smartphone_capture_required: true
@@ -22,7 +22,10 @@ datasets:
 
 device:
   selected: null
+  actual_device_status: "ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION"
+  repository_evidence_of_available_device: false
   available_devices_known: []
+  candidate_classes_are_requirement_classes_only: true
   candidate_classes: [D1_pixel_class, D2_midrange_snapdragon_class, D3_low_cost_legacy_class]
   min_api_level_thermal_status: 29
   preferred_api_level_thermal_headroom: 30
@@ -35,6 +38,8 @@ model_ladder:
   C4: {family_candidates: [same_as_C3], precision: INT8, backend: cpu, metrics: requires_empirical_benchmarking, selected: false}
   runtime: REQUIRES_VERIFICATION
   status: PROVISIONAL
+  final_assignment: deferred_to_implementation_benchmark_stage
+  selection_rule_preconditions: [smartphone_confirmed, same_inspection_task, offline_deployment_verified, probability_output_available, ordered_by_measured_resource_cost, minimum_functional_requirements_met, empirical_benchmark_confirms_ladder]
 
 confidence:
   primary_signal: temperature_scaled_probability
@@ -57,5 +62,15 @@ thermal:
 
 multi_view:
   stage1_additional_view_proxy: Real-IAD stored views
+  stage1_interpretation: controlled_additional_view_simulation
+  real_iad_smartphone_captured: false
+  real_iad_provides_smartphone_recapture: false
+  stage2_actual_recapture: custom_smartphone_capture_protocol_only
   same_view_recapture_in_static_benchmarks: false
   status: PROVISIONAL
+
+gates:
+  G1: {name: actual smartphone confirmed, status: OPEN_REQUIRES_VERIFICATION}
+  G2: {name: Real-IAD multi-view interpretation confirmed, status: OPEN_REQUIRES_VERIFICATION}
+  G3: {name: custom smartphone capture protocol confirmed, status: OPEN_REQUIRES_VERIFICATION}
+  G4: {name: C1-C4 empirical selection criteria confirmed, status: OPEN_REQUIRES_VERIFICATION}

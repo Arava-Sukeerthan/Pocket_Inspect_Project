@@ -3,6 +3,8 @@
 _Step 10B, 2026-10-05, Claude Code. Research design only._
 
 **No smartphone is selected and none is claimed to be available.**
+
+**ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION.** A repository search (2026-10-05) of all non-literature files (configs, docs, `PROJECT_SPEC.md`, `mobile/`, `research/` outside the literature and gap-analysis records) found no documented device owned by or available to the project. Until the researcher records an actual device (exact model and source), no phone is selected (gate G1 in [`verification_checklist.md`](verification_checklist.md)).
 - The repository does not specify an available device. The phones named in `docs/agent_sync/CHANGELOG.md` and `research/gap_analysis/` belong to papers in the literature corpus, not to this project.
 - This document therefore gives **DEVICE REQUIREMENTS** and a shortlist of candidate device *classes*.
 - Choosing a specific device needs the researcher to confirm which hardware is available ([`verification_checklist.md`](verification_checklist.md) §3).
@@ -50,7 +52,7 @@ _Step 10B, 2026-10-05, Claude Code. Research design only._
 
 ## 2. Candidate Device Classes (shortlist)
 
-No specific model is named as available. Per the project vision (`PROJECT_SPEC.md` §1), the classes cover a "resource-constrained" and possibly legacy phone.
+**These are requirement classes only, not device selections.** No specific model is named as available. Per the project vision (`PROJECT_SPEC.md` §1), the classes cover a "resource-constrained" and possibly legacy phone.
 
 | Class | Rationale | Expected telemetry advantage | Risk | Status |
 | :-- | :-- | :-- | :-- | :-- |
@@ -97,7 +99,8 @@ Classes: **AVAILABLE**, **CONDITIONALLY_AVAILABLE**, **UNAVAILABLE**, **REQUIRES
 
 | Item | Status |
 | :-- | :-- |
-| Specific device | Not selected (REQUIRES_VERIFICATION) |
-| Device availability | Not claimed |
+| Specific device | ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION (gate G1) |
+| Device availability | Not claimed; no repository evidence of an available device |
+| D1–D3 | Requirement classes only |
 | Requirements table | PROVISIONAL |
 | Telemetry classification | SUPPORTED (three reference pages) / PROVISIONAL (other sources); device verification required |

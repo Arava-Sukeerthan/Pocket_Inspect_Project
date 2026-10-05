@@ -28,6 +28,22 @@ Every configuration in the final ladder must satisfy all of the following. Each 
 | S6 | Distinct accuracy–efficiency trade-offs | Validation accuracy is ordered C1 ≥ C2 ≥ C3 ≥ C4, and adjacent configurations differ by more than the pre-registered SESOI in accuracy or cost. | REQUIRES EMPIRICAL BENCHMARKING |
 | S7 | Not chosen for popularity | Each candidate must pass S1–S6. A candidate that fails is replaced, however widely used. | Design rule |
 
+### Formal C1–C4 selection rule
+
+C1–C4 may be selected only after **all** of the following hold, in this order:
+
+1. the smartphone is confirmed (gate G1);
+2. the candidate models support the same inspection task (S1, S2);
+3. offline deployment is verified on that smartphone (S4);
+4. a confidence/probability output is available (S5);
+5. the models can be ordered by **measured** resource cost (S3);
+6. every configuration satisfies the minimum functional inspection requirements (pre-registered; TO BE PRE-REGISTERED);
+7. empirical benchmarking confirms a meaningful resource ladder (S3, S6).
+
+**Final C1–C4 model assignment is deferred to the implementation benchmark stage.**
+
+Until then, the families in §3 are candidates only, every configuration remains PROVISIONAL, and no accuracy, latency, memory or energy value is stated (gate G4).
+
 **Ladder-construction rule (PROVISIONAL).** Build the ladder along a small number of documented axes:
 - backbone size;
 - input resolution;
@@ -105,6 +121,7 @@ One runtime is used for all of C1–C4, so that runtime differences do not confo
 | :-- | :-- |
 | Ladder structure (axes, rules) | PROVISIONAL |
 | Model families | PROVISIONAL candidates; not selected |
+| Final C1–C4 assignment | Deferred to the implementation benchmark stage (gate G4) |
 | Any performance value | None given; REQUIRES EMPIRICAL BENCHMARKING |
 | Confidence signal | PROVISIONAL: temperature-scaled probability, configuration-specific thresholds |
 | Runtime | REQUIRES_VERIFICATION |

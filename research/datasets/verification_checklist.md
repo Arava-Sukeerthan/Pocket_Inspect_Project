@@ -4,6 +4,19 @@ _Step 10B, 2026-10-05, Claude Code._
 
 Every item must be completed, with evidence recorded, before implementation or data collection begins. **No item is complete.** Acceptance criteria that need numbers are **TO BE PRE-REGISTERED**. An item becomes VERIFIED only when the stated evidence is stored in the repository (or referenced) and reviewed by the researcher.
 
+## Gates
+
+These four gates must close before implementation starts. None is supported by repository evidence yet.
+
+| Gate | Check | Evidence required | Status |
+| :-- | :-- | :-- | :-- |
+| G1 — actual smartphone confirmed | The researcher records the actual device: exact model and source (owned, loaned, purchased). D1–D3 are requirement classes only. | Device entry in the repository; V-06, V-07. | OPEN / REQUIRES VERIFICATION |
+| G2 — Real-IAD multi-view interpretation confirmed | Real-IAD stored views are used only as Stage 1 controlled additional-view simulation, never as smartphone recapture; per-sample view linkage confirmed. | Researcher sign-off; V-05, V-17. | OPEN / REQUIRES VERIFICATION |
+| G3 — custom smartphone capture protocol confirmed | The Stage 2 protocol (physical parts, defect conditions, item IDs, repeated captures, same-view recapture, additional views, split by item, camera, lighting and telemetry metadata) is approved before any capture. | Approved protocol; V-18. | OPEN / REQUIRES VERIFICATION |
+| G4 — C1–C4 empirical selection criteria confirmed | The formal selection rule in [`model_ladder.md`](model_ladder.md) §2 is accepted. The final assignment follows only after on-device benchmarking. | Researcher sign-off; V-13 to V-16. | OPEN / REQUIRES VERIFICATION |
+
+## Detailed checks
+
 | ID | Area | Check | Evidence required | Blocks | Status |
 | :-- | :-- | :-- | :-- | :-- | :-- |
 | V-01 | Dataset access verification | Real-IAD can be obtained by the project (host, request or agreement process completed). | Record of the access route and date; no data committed to git. | Stage 1 | REQUIRES_VERIFICATION |

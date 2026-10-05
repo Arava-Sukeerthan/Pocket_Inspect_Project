@@ -68,7 +68,7 @@ All candidates were already documented in the repository (Step 9.9 Phase A, `con
 | Role | Dataset | Decision status |
 | :-- | :-- | :-- |
 | **Primary dataset** | **Real-IAD** | **PROVISIONAL**: access, dataset licence, per-sample view linkage and annotation format REQUIRES_VERIFICATION |
-| **Secondary dataset** | **Phone-captured 3D-printed-part set** | **PROVISIONAL**: protocol only (§6) |
+| **Secondary dataset** | **Phone-captured 3D-printed-part set** | **PROVISIONAL — PROTOCOL ONLY**: it does not exist yet and is not an existing dataset (§6) |
 | Fallback primary (if Real-IAD terms are unacceptable) | MANTA (multi-view) | REQUIRES_VERIFICATION |
 | Optional replay-only sanity set | VisA (licence stated as CC BY 4.0 by its official repository) | SUPPORTED (licence statement only) |
 
@@ -84,6 +84,15 @@ All candidates were already documented in the repository (Step 9.9 Phase A, `con
 | Resource adaptation | Dataset-independent: replay on the phone under induced R0–R3. | Replay uses stored images, so it measures inference cost, not capture cost. |
 | Quantitative evaluation | Image- and sample-level labels support recall, precision, F1 and calibration metrics. | The supervised-classification protocol differs from the benchmark's unsupervised AD protocol (see [`model_ladder.md`](model_ladder.md) §1). |
 | Additional view (A2) | Five views per sample can stand in for "acquire another view". | Fixed pre-recorded views, not chosen or captured by the phone; a stated limitation. |
+
+### Stage boundary: simulated vs actual additional views
+
+| Stage | Data | What it supports | What it does not support |
+| :-- | :-- | :-- | :-- |
+| **Stage 1 — controlled additional-view simulation** | Existing multi-view benchmark (Real-IAD) replayed on the phone | **Simulated additional-view decision:** when verification triggers A2, the next stored view of the same sample is loaded and re-inferred. Resource adaptation, A3 escalation, A4 referral, calibration (H4) and cost (H3, H5). | **Not physical smartphone recapture.** The views were captured beforehand by a professional camera at fixed angles. The phone neither chooses nor captures them, and the acquisition cost and variability of real capture are absent. Same-view recapture (A1) is not available. |
+| **Stage 2 — actual recapture / additional-view experiment** | Custom smartphone capture (§6) | Actual same-view recapture (A1) and actual additional-view capture (A2) on the phone, with real acquisition cost, camera metadata and smartphone imaging. | Depends on the protocol being confirmed and the data being collected (gate G3); nothing is collected in Step 10B. |
+
+**Real-IAD does not provide smartphone recapture data**, and it is not smartphone-captured. Stage 1 results on A2 are reported as *simulated* additional-view results and are never presented as smartphone recapture results (gate G2).
 
 ### Statement on recapture
 
@@ -106,7 +115,21 @@ Both therefore require the secondary custom set. Stage 1 (Real-IAD replay) can t
 
 ## 6. Secondary Dataset: Minimum Custom-Capture Requirements (protocol only)
 
-No data are collected in Step 10B. Every count below is **TO BE DETERMINED BY POWER ANALYSIS / PILOT** and is not fixed here.
+**PROVISIONAL — PROTOCOL ONLY.** The phone-captured 3D-printed-part set **does not exist** and must not be treated as an existing dataset. It is a capture protocol to be confirmed (gate G3) before any data are collected.
+
+It requires all of the following:
+- physical parts;
+- controlled defect / non-defect conditions;
+- item identifiers;
+- repeated captures;
+- same-view recapture;
+- additional views;
+- train/validation/test split by physical item;
+- smartphone camera metadata;
+- lighting/environment metadata;
+- resource telemetry where appropriate (Stage 2 runs on the phone under R0–R3).
+
+The numbered list below details them. No data are collected in Step 10B. Every count below is **TO BE DETERMINED BY POWER ANALYSIS / PILOT** and is not fixed here.
 
 1. **Items.** 3D-printed parts of a pre-registered set of geometries, normal and with seeded defects from the project taxonomy (`PROJECT_SPEC.md` §1).
    - Each item carries a unique identifier: a fiducial or label outside the inspected region.
@@ -125,7 +148,8 @@ No data are collected in Step 10B. Every count below is **TO BE DETERMINED BY PO
 | :-- | :-- |
 | Candidates evaluated (14) | Done (desk evaluation) |
 | Primary: Real-IAD | PROVISIONAL |
-| Secondary: custom phone-captured set | PROVISIONAL (protocol only) |
+| Secondary: custom phone-captured set | PROVISIONAL — PROTOCOL ONLY (does not exist yet; gate G3) |
+| Real-IAD multi-view use | Stage 1 controlled additional-view simulation only (gate G2) |
 | Any dataset licence | REQUIRES_VERIFICATION (none verified) |
 | Any dataset access | REQUIRES_VERIFICATION (none downloaded) |
 | Recapture support in a static benchmark | Not available: CUSTOM SMARTPHONE CAPTURE REQUIRED |
