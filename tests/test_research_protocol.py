@@ -339,8 +339,14 @@ class TestResearchProtocol(unittest.TestCase):
             self.assertEqual(files, ["README.md", "__init__.py"], module)
         for folder in ("mobile", "experiments", "models", "backend"):
             self.assertEqual(sorted(p.name for p in (ROOT / folder).iterdir()), ["README.md"], folder)
-        for folder in ("datasets", "results", "figures", "tables", "manuscript_data", "experiments"):
+        for folder in ("results", "figures", "tables", "manuscript_data", "experiments"):
             self.assertEqual(sorted(p.name for p in (ROOT / "research" / folder).iterdir()), ["README.md"], folder)
+        # research/datasets holds only the README and the Step 10B design documents (no data)
+        step_10b_docs = {"dataset_selection.md", "device_requirements.md", "model_ladder.md",
+                         "measurement_hardware.md", "verification_checklist.md", "dataset_device_model_matrix.csv"}
+        dataset_files = {p.name for p in (ROOT / "research" / "datasets").iterdir()}
+        self.assertIn("README.md", dataset_files)
+        self.assertLessEqual(dataset_files - {"README.md"}, step_10b_docs)
         data_ext = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".zip", ".tar", ".gz", ".npy", ".npz", ".h5",
                     ".pt", ".pth", ".onnx", ".tflite", ".ckpt", ".parquet"}
         tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True).stdout.split()

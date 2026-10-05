@@ -1832,3 +1832,136 @@ Step 10A repository-state reconciliation. The GC-03 approval state is made inter
 - Branch: `claude/step-10a-research-protocol` (second Step 10A commit, after `6b48469`).
 - Commit: see `git log -- src/literature/gap_evaluation.py`.
 - Push status: pushed; PR #14 updated; not merged.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10B: dataset, smartphone, model-ladder and measurement-hardware specification for GC-03. **Research design only.**
+
+### Changes
+- **`research/datasets/dataset_selection.md`.** 14 candidates evaluated against the 19 required fields, with suitability classes, the selection rationale, the recapture statement, the custom-capture protocol, and the sources read (§8).
+- **`research/datasets/device_requirements.md`.** Device requirements, the candidate device classes D1–D3, and telemetry access classes.
+- **`research/datasets/model_ladder.md`.**
+  - Selection criteria S1–S7 and the C1–C4 candidate ladder, with no performance values.
+  - Confidence-signal evaluation.
+  - Runtime options.
+- **`research/datasets/measurement_hardware.md`.** The three resource-variable layers, energy options and strategy, thermal measurement, the conceptual setup, and timestamp synchronisation.
+- **`research/datasets/verification_checklist.md`.** V-01 to V-20; all open.
+- **`research/datasets/dataset_device_model_matrix.csv`.** 14 rows × 23 required columns.
+- **`configs/dataset_device_model.yaml`.** Declarative decision record.
+- **`research/datasets/README.md`.** Pointers.
+- **`tests/test_dataset_device_model.py` (new).** 14 tests covering the 15 required checks.
+- **`tests/test_research_protocol.py`.**
+  - `research/datasets/` may now contain the named Step 10B design documents (an explicit allow-list).
+  - The data-file-extension check is unchanged.
+- **Provenance.** Drafts of `dataset_selection.md`, `device_requirements.md` and `measurement_hardware.md` were already present, untracked, on this branch. They were re-checked against sources read in this step and corrected:
+  - Eyecandies has 10 categories (not 8).
+  - MVTec 3D-AD has 10 categories.
+  - An unconfirmed claim that Real-IAD is hosted behind a Hugging Face contact-sharing agreement was removed.
+  - DeepPCB's hand-added artificial defects are now recorded.
+  - An unconfirmed MVTec AD train/test count was removed.
+  - The NEU-DET "research use" licence was changed to not found.
+  - Evidence labels for Android facts were split: three reference pages were read; all other statements are PROVISIONAL.
+
+### Research decisions
+- **Datasets evaluated.** Real-IAD, MANTA, MVTec AD, VisA, MVTec 3D-AD, Eyecandies, DeepPCB, NEU-DET, KolektorSDD2, MMS, CAXTON, the P016 and P020 sets, and the proposed phone-captured set.
+  - None is SUITABLE or VERIFIED.
+  - No licence is verified. Licences stated by sources are recorded as stated: VisA CC BY 4.0 per its README; MVTec AD, MVTec 3D-AD and KolektorSDD2 CC BY-NC-SA 4.0 per search summaries.
+- **Primary: Real-IAD (PROVISIONAL).**
+  - It is multi-view, with about 150K images (99,721 normal / 51,329 anomalous per the CVPR paper summary) across 30 objects.
+  - Access and the data licence REQUIRE_VERIFICATION. The code-repository `LICENSE` does not establish the data terms.
+- **Secondary: phone-captured 3D-printed-part set (PROVISIONAL; protocol only).**
+  - **CUSTOM SMARTPHONE CAPTURE REQUIRED** for same-view recapture (A1) and smartphone realism.
+  - Fallback primary: MANTA. Optional replay sanity set: VisA.
+- **Smartphone.** None selected and none claimed available; requirements and the candidate classes D1–D3 only.
+  - Mandatory: API ≥ 29 for thermal status (≥ 30 preferred for headroom); Camera2 manual sensor control; all of C1–C4 deployable offline; battery telemetry; compatibility with an external energy reference.
+- **Telemetry.**
+  - Battery level, voltage and temperature; RAM; process CPU time; thermal status: AVAILABLE as platform APIs.
+  - Battery current, energy counters, device-wide CPU, CPU frequency, GPU, SoC and skin temperature: CONDITIONALLY_AVAILABLE.
+  - Absolute energy and ambient temperature: REQUIRES_EXTERNAL_INSTRUMENTATION.
+- **Energy.** EXTERNAL-METER VALIDATION REQUIRED.
+  - The reference is a battery-bypass power analyzer or a validated pass-through. Software counters are validated against it.
+  - Battery-condition runs and reference runs are separated; this is a stated limitation.
+  - Sampling rates are not chosen.
+- **Thermal.** Temperatures and throttling state are logged separately. `HardwarePropertiesManager` is restricted to the device owner or VR service, so an external surface probe and an ambient thermometer serve as references.
+- **Model ladder (PROVISIONAL).**
+  - Candidate CNN families per rung, built along the axes backbone size, input resolution, precision and backend.
+  - One runtime is used for all rungs.
+  - No parameter, accuracy, latency or memory values: REQUIRES EMPIRICAL BENCHMARKING.
+- **Confidence (PROVISIONAL).**
+  - Per-configuration temperature-scaled probability, with configuration-specific thresholds set by a pre-registered rule. Split conformal is the secondary option.
+  - Gating (triggers A1–A4) is kept distinct from reporting; raw softmax is not treated as formal uncertainty.
+  - No thresholds are chosen.
+- **Multi-view / recapture.** Real-IAD's stored views stand in for A2 in Stage 1. A1 needs Stage 2 custom capture: a jig or turntable, item IDs, and splits by item.
+
+### Verification
+- `python -m pytest -q`: **213 passed** (199 existing + 14 new).
+- The Step 10A artefacts are byte-identical to main `544fe17`; their SHA-256 hashes are pinned in the tests.
+- `papers.csv` is unchanged.
+- No dataset was downloaded, no model trained or benchmarked, no experiment run, no measurement taken and no implementation written.
+- Network sources read this step:
+  - the official GitHub READMEs and LICENSE files of Real-IAD, VisA (spot-diff) and DeepPCB;
+  - the developer.android.com references for `PowerManager`, `BatteryManager` and `HardwarePropertiesManager`;
+  - web-search summaries.
+  - Blocked: `mvtec.com`, `realiad4ad.github.io`, `arxiv.org`, `huggingface.co`.
+
+### Uncertain items
+- Real-IAD data terms and access route; per-sample view linkage.
+- Which physical smartphone(s) and external instruments the researcher has.
+- Whether a battery bypass is feasible on the chosen device.
+- The final runtime and the actual C1–C4 models (on-device S3/S6 checks).
+- Whether a supervised split of Real-IAD is feasible (otherwise use the anomaly-detection alternative).
+
+### Remaining work
+- Complete `verification_checklist.md` V-01 to V-20. Step 10C has not been started.
+
+### Git
+- Branch: `claude/step-10b-dataset-device-model` (from `origin/main` `544fe17`).
+- Commit: see `git log -- research/datasets/model_ladder.md`.
+- Push status: pushed; PR opened; not merged.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10B final scientific refinement (PR #15). Four boundaries are made explicit. No Step 10C work, no implementation.
+
+### Changes
+- **`research/datasets/device_requirements.md`.**
+  - Added "ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION". A repository search found no documented project device.
+  - D1–D3 are marked as requirement classes only.
+- **`research/datasets/dataset_selection.md`.**
+  - New "Stage boundary" subsection:
+    - Stage 1 is a controlled additional-view simulation from Real-IAD's stored views, not smartphone recapture.
+    - Stage 2 is a custom smartphone capture for actual recapture and additional views.
+  - §6: the custom set is marked "PROVISIONAL — PROTOCOL ONLY", does not exist, and has the 10 listed requirements.
+- **`research/datasets/model_ladder.md`.** Formal 7-step C1–C4 selection rule, and the statement "Final C1–C4 model assignment is deferred to the implementation benchmark stage."
+- **`research/datasets/verification_checklist.md`.** Gates G1–G4, all "OPEN / REQUIRES VERIFICATION".
+- **`configs/dataset_device_model.yaml`.** Device status, Stage 1 interpretation, custom set marked `exists: false`, ladder deferral and preconditions, gates.
+- **`research/datasets/dataset_device_model_matrix.csv`.** Device column, Real-IAD multi-view note, custom-set access, decision and notes, and C1–C4 cells updated. Still 14 rows and 23 columns.
+- **`tests/test_dataset_device_model.py`.**
+  - The device-label assertion now pins the new label.
+  - New `TestStep10BBoundaries` (6 tests): no device falsely available; Real-IAD not smartphone-captured; custom capture not an existing dataset; C1–C4 provisional; no fabricated model performance; gates open.
+
+### Research decisions
+- No actual smartphone is selected; the decision awaits researcher confirmation (G1).
+- Real-IAD supports only simulated additional-view decisions (G2). Actual recapture needs Stage 2 custom capture (G3).
+- Final C1–C4 assignment is deferred to the implementation benchmark stage (G4). No performance values are given.
+
+### Verification
+- `python -m pytest -q`: **219 passed** (213 + 6 new).
+- Step 10A artefacts unchanged (pinned hashes); `papers.csv` unchanged.
+
+### Uncertain items
+- G1–G4 all open.
+
+### Remaining work
+- Researcher closes G1–G4. Step 10C has not been started.
+
+### Git
+- Branch: `claude/step-10b-dataset-device-model` (commit after `6316407`).
+- Commit: see `git log -- research/datasets/verification_checklist.md`.
+- Push status: pushed; PR #15 updated; not merged.
