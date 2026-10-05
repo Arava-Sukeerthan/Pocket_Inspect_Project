@@ -2660,6 +2660,54 @@ Branch: `antigravity/step-10d-final-correction` branched from main commit `bb03d
 
 ---
 
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10D: independent review of Antigravity's Post-Merge Correction Round 2 (`3f4b7aa`). It had already been merged as `8448967` (PR #26), so this is a post-merge review.
+
+### Decision
+**CONDITIONAL APPROVAL — CORRECTIONS REQUIRED.** Full report: [`docs/architecture/step10d_round2_review.md`](../architecture/step10d_round2_review.md).
+
+### Status
+- Previous findings:
+  - FIXED: P-01 (matrix isolation), P-02 (test isolation).
+  - PARTIALLY_FIXED: P-03, P-05, P-06.
+  - NOT_FIXED: P-04, P-07.
+- R-03 to R-14:
+  - FIXED: R-06, R-10, R-14.
+  - PARTIALLY_FIXED: R-03, R-04, R-07, R-08, R-09, R-11, R-12.
+  - NOT_FIXED: R-05 (wrapper jar still missing), R-13.
+
+### Blocking corrections (for Antigravity; not implemented by Claude)
+1. P-03: the collectors still read `cur_freq_khz` and `gpu_freq_hz`, but the parser writes `cpu_scaling_cur_freq` and `gpu_clock_hz`. Both stay NOT_TESTED despite evidence, so the claim in the round-2 entry is inaccurate. App JSON sections are not mapped to any collector, and `app_output_status` is not in the report.
+2. P-04: the SoC `evidence_ref` is still hard-coded to `getprop_evidence.txt#ro.soc.model` whatever `source_soc_prop` says.
+3. P-07: an attempted probe that fails still gives NOT_TESTED instead of ERROR.
+4. R-09: a battery current of 0 is reported as VERIFIED 0.0 mA, and there is no unit check.
+5. P-05: deleting `manifest.json` bypasses the SHA-256 check.
+6. R-05: commit the standard Gradle wrapper, including `gradle-wrapper.jar`. This needs the user's approval because the jar is a binary.
+
+### Verification
+- `pytest` run twice: 282 passed both times; `git status` clean after each run.
+- Connected path exercised with a fake `adb` script kept outside the repo. It is not device evidence and nothing from it was committed. `device_capability_matrix.md` was not modified.
+- Android build: **BUILD NOT EXECUTED**. `./gradlew --version` fails because `gradle-wrapper.jar` is missing.
+- Research boundary unchanged: no change to GC-03, RQs, hypotheses, C1–C4, R0–R3, r* or D-01 to D-16.
+
+### Real Device Status
+- REAL OPPO A5 2020 CONNECTED: NO. CHARACTERIZATION PERFORMED: NO. DEVICE EVIDENCE COLLECTED: NO.
+
+### Next action
+1. Antigravity: fix the six blocking corrections; the wrapper jar needs the user's approval first. Append a CHANGELOG entry.
+2. Claude Code: re-review.
+3. Then physical OPPO characterization: two runs on separate days with a reboot in between.
+
+Step 10E not started.
+
+### Git
+- Branch: `claude/step-10d-round2-review`, from `main` `8448967`.
+- Review documentation only.
+
+---
+
 ## 2026-10-05 — Antigravity
 
 ### Task
@@ -2829,6 +2877,3 @@ Base commit: `ff1a68f`
 - Branch: `antigravity/step-10d-final-correction-round5`
 - Base commit: `ff1a68f`
 - Push status: pending commit & push
-
-
-
