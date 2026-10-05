@@ -59,3 +59,23 @@ The full 54-record corpus stays in `papers.csv`. Gap counts use an **analysis-on
 | `research/gap_analysis/gap_candidates.md` | same | Regenerated: evidence tables plus 9 candidate gaps, all *Pending researcher review*. |
 
 `research/gap_analysis/research_gap.md` does not exist and was not created. No final gap was selected.
+
+## Step 9.7 revision (methodology correction)
+
+The frozen state above is unchanged:
+- `papers.csv` SHA-256 `c8fac51d…da521`;
+- 54 records, 31 columns;
+- 0 duplicate IDs.
+
+The revision changed only the analysis layer, which supersedes the description above:
+
+- **Visual-inspection attribute.** The analysis-only attribute is now `visual_inspection_scope` (Yes/No/Unknown). It is read from [`visual_inspection_scope.csv`](visual_inspection_scope.csv), which gives a written basis for every one of the 54 records. Core-analysis subset: Yes 20, No 19, Unknown 7. It replaces the earlier `visual_inspection` ID lists.
+- **3D-print attribute.** `three_d_print_inspection` now means the 3D-print task domain in any modality. It is combined with `visual_inspection_scope` where visual input matters.
+- **Core rule unchanged in substance, now documented explicitly.**
+  - The 54 records minus P002 and P013 (researcher-approved peripheral) minus P010, P024, P026, P035, P036 and P052 (survey/review) gives 46.
+  - The lists do not overlap, so 54 − 2 − 6 = 46, matching the computed subset.
+- **Outputs.**
+  - `gap_matrix.csv` now has one row per candidate (3 evidence-supported candidate gaps + 6 evidence limitations).
+  - Combination-level counts moved to [`combination_matrix.csv`](combination_matrix.csv) (20 combinations).
+
+`research_gap.md` still does not exist. No final gap was selected.

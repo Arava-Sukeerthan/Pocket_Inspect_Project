@@ -86,6 +86,9 @@ def cmd_gap(args):
         analyzer = LiteratureAnalyzer.from_csv(papers_path)
     written_csv = analyzer.write_gap_matrix_csv(out_csv)
     written_md = analyzer.write_gap_candidates_markdown(out_md)
+    if hasattr(analyzer, "write_combination_matrix_csv"):
+        written_combo = analyzer.write_combination_matrix_csv(Path(written_csv).with_name("combination_matrix.csv"))
+        print(f"[Literature Manager] Combination matrix CSV generated at: {written_combo}")
 
     print(f"[Literature Manager] Gap matrix CSV generated at: {written_csv}")
     print(f"[Literature Manager] Gap candidates report generated at: {written_md}")

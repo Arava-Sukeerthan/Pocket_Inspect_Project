@@ -1,18 +1,29 @@
 """
-Tests for the configuration-driven combination gap analysis (src/literature/gap_analysis.py)
-and for the committed gap-analysis configuration (configs/gap_analysis.yaml).
+Tests for the configuration-driven combination gap analysis (src/literature/gap_analysis.py),
+the committed gap-analysis configuration (configs/gap_analysis.yaml) and the analysis-only
+visual-inspection classification (research/gap_analysis/visual_inspection_scope.csv).
 """
 import csv
+import tempfile
 import unittest
 from pathlib import Path
 
 import yaml
 
 from src.literature import BOOLEAN_FIELDS, CombinationGapAnalyzer
+from src.literature.gap_analysis import (
+    CATEGORY_LABELS,
+    COMBINATION_MATRIX_FIELDS,
+    GAP_MATRIX_FIELDS,
+    load_classification_file,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 PAPERS_CSV = ROOT / "research" / "literature" / "papers.csv"
 GAP_CONFIG = ROOT / "configs" / "gap_analysis.yaml"
+GAP_DIR = ROOT / "research" / "gap_analysis"
+VIS_CSV = GAP_DIR / "visual_inspection_scope.csv"
+RANKING_WORDS = ("score", "rank", "ranking", "priority", "weight")
 
 
 def _record(pid, **values):
@@ -22,7 +33,12 @@ def _record(pid, **values):
     return rec
 
 
+def _committed():
+    return CombinationGapAnalyzer.from_files(PAPERS_CSV, GAP_CONFIG, project_root=ROOT)
+
+
 class TestCombinationGapAnalyzer(unittest.TestCase):
+    """Synthetic records: three-valued logic, populations and scope."""
 
     def setUp(self):
         self.records = [
@@ -39,21 +55,27 @@ class TestCombinationGapAnalyzer(unittest.TestCase):
                 "review_records": {"paper_ids": ["P5"]},
             },
             "derived_attributes": {
-                "visual_inspection": {"yes_ids": ["P1", "P2"], "no_ids": ["P3"]},
+                "visual_inspection_scope": {"values": {"P1": "Yes", "P2": "Unknown", "P3": "No",
+                                                       "P4": "Yes", "P5": "No", "P6": "Yes"}},
             },
             "combinations": [
                 {"id": "C-1", "label": "phone + on-device", "criteria": [["smartphone"], ["on_device"]]},
-                {"id": "C-2", "label": "phone + VI", "criteria": [["smartphone"], ["visual_inspection"]]},
+                {"id": "C-2", "label": "phone + VI", "criteria": [["smartphone"], ["visual_inspection_scope"]],
+                 "scope_excludes_no": ["visual_inspection_scope"]},
                 {"id": "C-3", "label": "phone + (edge or on-device)",
                  "criteria": [["smartphone"], ["edge_device", "on_device"]]},
+            ],
+            "candidates": [
+                {"id": "GC-X", "category": "candidate_gap", "title": "t", "primary_combination": "C-1"},
+                {"id": "EL-X", "category": "evidence_limitation", "title": "u"},
             ],
         }
         self.analyzer = CombinationGapAnalyzer(self.records, self.config, "abc")
 
     def _row(self, cid):
-        return [r for r in self.analyzer.gap_matrix_rows() if r["combination_id"] == cid][0]
+        return [r for r in self.analyzer.combination_matrix_rows() if r["combination_id"] == cid][0]
 
-    def test_populations_exclude_peripheral_and_reviews(self):
+    def test_core_subset_excludes_peripheral_and_reviews(self):
         ids = [r["paper_id"] for r in self.analyzer.primary_core_records()]
         self.assertEqual(ids, ["P1", "P2", "P3", "P6"])
 
@@ -61,17 +83,24 @@ class TestCombinationGapAnalyzer(unittest.TestCase):
         row = self._row("C-1")
         self.assertEqual(row["all_yes_ids"], "P1")
         self.assertEqual(row["unresolved_ids"], "P2; P6")
-        self.assertEqual(row["excluded_by_no_count"], "1")  # P3 only
-        self.assertEqual(row["review_record_ids"], "P5")
+        self.assertEqual(row["excluded_by_no_ids"], "P3[smartphone=No]")
         self.assertEqual(row["peripheral_results"], "P4=Yes")
 
-    def test_derived_attribute_unassigned_is_unknown(self):
-        row = self._row("C-2")
-        self.assertEqual(row["all_yes_ids"], "P1; P2")
-        self.assertEqual(row["unresolved_ids"], "P6")
-        self.assertEqual(self.analyzer.unassigned_derived()["visual_inspection"], ["P4", "P5", "P6"])
+    def test_review_no_values_are_not_evidence_of_absence(self):
+        # P5 is coded No for everything but must not appear among excluded-by-No records.
+        for row in self.analyzer.combination_matrix_rows():
+            self.assertNotIn("P5", row["excluded_by_no_ids"])
+            self.assertNotIn("P5", row["unresolved_ids"])
+            self.assertEqual(row["review_record_ids"], "P5")
 
-    def test_or_group(self):
+    def test_visual_scope_no_is_out_of_scope_unknown_stays(self):
+        row = self._row("C-2")
+        self.assertEqual(row["records_in_scope"], "3")      # P1, P2, P6; P3 coded No is out of scope
+        self.assertEqual(row["all_yes_ids"], "P1; P6")
+        self.assertEqual(row["unresolved_ids"], "P2")       # visual scope Unknown stays in scope
+        self.assertEqual(row["excluded_by_no_count"], "0")
+
+    def test_or_group_unknown_not_no(self):
         # P6: edge_device No, on_device Unknown -> group Unknown (not No)
         row = self._row("C-3")
         self.assertEqual(row["all_yes_ids"], "P1")
@@ -81,16 +110,51 @@ class TestCombinationGapAnalyzer(unittest.TestCase):
         self.assertIn("P2[on_device=Unknown]", self._row("C-1")["near_miss"])
         self.assertIn("P3[smartphone=No]", self._row("C-1")["near_miss"])
 
-    def test_observation_and_status_are_descriptive(self):
-        for row in self.analyzer.gap_matrix_rows():
-            self.assertEqual(row["review_status"], "Pending researcher review")
-            self.assertNotIn("score", row["coverage_observation"].lower())
-            self.assertNotIn("rank", row["coverage_observation"].lower())
+    def test_candidate_rows_are_pending_and_categorised(self):
+        rows = self.analyzer.candidate_rows()
+        self.assertEqual([r["category"] for r in rows], [CATEGORY_LABELS["candidate_gap"],
+                                                          CATEGORY_LABELS["evidence_limitation"]])
+        self.assertEqual(rows[0]["yes_count"], "1")
+        self.assertEqual(rows[0]["unknown_count"], "2")
+        self.assertEqual(rows[1]["yes_count"], "n/a")
+        for r in rows:
+            self.assertEqual(r["researcher_review_status"], "Pending researcher review")
 
-    def test_unknown_criterion_field_rejected(self):
-        bad = dict(self.config, combinations=[{"id": "X", "label": "x", "criteria": [["no_such_field"]]}])
+    def test_ranking_key_rejected(self):
+        bad = dict(self.config, candidates=[{"id": "GC-X", "category": "candidate_gap", "title": "t",
+                                             "primary_combination": "C-1", "rank": 1}])
         with self.assertRaises(ValueError):
             CombinationGapAnalyzer(self.records, bad)
+
+    def test_invalid_category_rejected(self):
+        bad = dict(self.config, candidates=[{"id": "GC-X", "category": "final_gap", "title": "t"}])
+        with self.assertRaises(ValueError):
+            CombinationGapAnalyzer(self.records, bad)
+
+    def test_unknown_criterion_field_rejected(self):
+        bad = dict(self.config, combinations=[{"id": "X", "label": "x", "criteria": [["accuracy_metrics"]]}],
+                   candidates=[])
+        with self.assertRaises(ValueError):
+            CombinationGapAnalyzer(self.records, bad)
+
+    def test_invalid_visual_scope_value_rejected(self):
+        cfg = dict(self.config)
+        cfg["derived_attributes"] = {"visual_inspection_scope": {"values": {
+            "P1": "Maybe", "P2": "Yes", "P3": "No", "P4": "No", "P5": "No", "P6": "No"}}}
+        with self.assertRaises(ValueError):
+            CombinationGapAnalyzer(self.records, cfg)
+
+    def test_missing_visual_scope_record_rejected(self):
+        cfg = dict(self.config)
+        cfg["derived_attributes"] = {"visual_inspection_scope": {"values": {"P1": "Yes"}}}
+        with self.assertRaises(ValueError):
+            CombinationGapAnalyzer(self.records, cfg)
+
+    def test_overlapping_populations_rejected(self):
+        cfg = dict(self.config, populations={"peripheral_contextual": {"paper_ids": ["P4"]},
+                                             "review_records": {"paper_ids": ["P4"]}})
+        with self.assertRaises(ValueError):
+            CombinationGapAnalyzer(self.records, cfg)
 
     def test_freeze_mismatch_warning(self):
         cfg = dict(self.config, corpus_freeze={"papers_sha256": "different"})
@@ -99,36 +163,152 @@ class TestCombinationGapAnalyzer(unittest.TestCase):
         md_ok = CombinationGapAnalyzer(self.records, dict(self.config, corpus_freeze={"papers_sha256": "abc"}),
                                        "abc").generate_gap_candidates_markdown()
         self.assertNotIn("WARNING", md_ok)
-        self.assertIn("No final research gap was selected or approved.", md_ok)
+        self.assertIn("No final research gap was selected, ranked, or approved.", md_ok)
 
 
-class TestCommittedGapConfig(unittest.TestCase):
+class TestVisualInspectionScope(unittest.TestCase):
+    """The committed analysis-only classification file."""
 
     @classmethod
     def setUpClass(cls):
+        cls.rows = load_classification_file(VIS_CSV, "visual_inspection_scope")
+        with open(PAPERS_CSV, encoding="utf-8-sig", newline="") as f:
+            cls.ids = [r["paper_id"] for r in csv.DictReader(f)]
         with open(GAP_CONFIG, encoding="utf-8") as f:
             cls.config = yaml.safe_load(f)
-        with open(PAPERS_CSV, encoding="utf-8-sig", newline="") as f:
-            cls.ids = {r["paper_id"] for r in csv.DictReader(f)}
 
-    def test_config_loads_against_committed_corpus(self):
-        analyzer = CombinationGapAnalyzer.from_files(PAPERS_CSV, GAP_CONFIG)
-        self.assertEqual(len(analyzer.gap_matrix_rows()), len(self.config["combinations"]))
+    def test_covers_every_record_exactly_once(self):
+        self.assertEqual(sorted(self.rows), sorted(self.ids))
 
-    def test_config_paper_ids_exist(self):
+    def test_values_and_basis(self):
+        for pid, row in self.rows.items():
+            self.assertIn(row["visual_inspection_scope"], ("Yes", "No", "Unknown"), pid)
+            self.assertTrue(row["basis"].strip(), pid)
+            self.assertTrue(row["basis_category"].strip(), pid)
+            self.assertIn(row["evidence_level"], ("full text", "abstract"), pid)
+
+    def test_population_column_matches_config(self):
         pops = self.config["populations"]
-        referenced = set(pops["peripheral_contextual"]["paper_ids"]) | set(pops["review_records"]["paper_ids"])
-        for attr in self.config["derived_attributes"].values():
-            referenced |= set(attr["yes_ids"]) | set(attr["no_ids"])
-        self.assertEqual(referenced - self.ids, set())
+        for pid, row in self.rows.items():
+            if pid in pops["peripheral_contextual"]["paper_ids"]:
+                expected = "peripheral/contextual"
+            elif pid in pops["review_records"]["paper_ids"]:
+                expected = "review/survey"
+            else:
+                expected = "core"
+            self.assertEqual(row["analysis_population"], expected, pid)
 
-    def test_approved_peripheral_records(self):
+    def test_core_distribution(self):
+        core = [r["visual_inspection_scope"] for r in self.rows.values() if r["analysis_population"] == "core"]
+        self.assertEqual(len(core), 46)
+        self.assertEqual((core.count("Yes"), core.count("No"), core.count("Unknown")), (20, 19, 7))
+
+    def test_non_visual_peripheral_records(self):
+        self.assertEqual(self.rows["P002"]["visual_inspection_scope"], "No")
+        self.assertEqual(self.rows["P013"]["visual_inspection_scope"], "No")
+
+    def test_yes_requires_explicit_visual_basis(self):
+        for pid, row in self.rows.items():
+            if row["visual_inspection_scope"] == "Yes" and row["analysis_population"] == "core":
+                self.assertEqual(row["basis_category"], "explicit optical image/video/camera input", pid)
+
+
+class TestCommittedGapAnalysis(unittest.TestCase):
+    """The committed configuration evaluated against the frozen corpus."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.analyzer = _committed()
+        with open(GAP_CONFIG, encoding="utf-8") as f:
+            cls.config = yaml.safe_load(f)
+        cls.candidates = cls.analyzer.candidate_rows()
+        cls.combos = {r["combination_id"]: r for r in cls.analyzer.combination_matrix_rows()}
+
+    def test_core_subset_rule(self):
+        core = [r["paper_id"] for r in self.analyzer.primary_core_records()]
+        excluded = set(self.config["populations"]["peripheral_contextual"]["paper_ids"]) | \
+            set(self.config["populations"]["review_records"]["paper_ids"])
+        self.assertEqual(len(self.analyzer.records), 54)
+        self.assertEqual(len(core), 54 - len(excluded))
+        self.assertEqual(len(core), 46)
+        self.assertFalse(set(core) & excluded)
+
+    def test_peripheral_records_excluded_from_core_evidence(self):
         self.assertEqual(self.config["populations"]["peripheral_contextual"]["paper_ids"], ["P002", "P013"])
+        for row in self.candidates:
+            for field in ("supporting_papers", "counterexamples"):
+                self.assertNotIn("P002", row[field])
+                self.assertNotIn("P013", row[field])
 
-    def test_candidates_are_pending_and_unranked(self):
-        for cand in self.config["candidate_gaps"]:
-            for key in ("score", "rank", "priority", "final"):
-                self.assertNotIn(key, cand)
+    def test_review_records_not_evidence_of_absence(self):
+        reviews = self.config["populations"]["review_records"]["paper_ids"]
+        for row in self.combos.values():
+            for pid in reviews:
+                self.assertNotIn(pid, row["excluded_by_no_ids"])
+                self.assertNotIn(pid, row["unresolved_ids"])
+
+    def test_unknown_is_not_counted_as_no(self):
+        # 38 of 46 core records are Unknown for confidence gating: they must be unresolved, not No.
+        cov = {c["field"]: c for c in self.analyzer.characteristic_coverage()}
+        self.assertEqual(len(cov["confidence_gating"]["unknown"]), 38)
+        row = self.combos["C-H"]
+        self.assertEqual(row["unresolved_count"], "38")
+        # A record may be excluded by a *different* criterion coded No (e.g. P015: multi_view = No),
+        # but an Unknown confidence_gating value must never be the reason for exclusion.
+        reasons = {e.split("[", 1)[0]: e for e in row["excluded_by_no_ids"].split("; ")}
+        for pid in cov["confidence_gating"]["unknown"]:
+            if pid in reasons:
+                self.assertNotIn("confidence_gating", reasons[pid], pid)
+
+    def test_p013_unresolved_metrics_not_a_gap_signal(self):
+        free_text = {"accuracy_metrics", "efficiency_metrics", "limitations", "future_work"}
+        for combo in self.config["combinations"]:
+            fields = {f for g in combo["criteria"] for f in g}
+            self.assertFalse(fields & free_text, combo["id"])
+        p013 = [r for r in self.analyzer.records if r["paper_id"] == "P013"][0]
+        self.assertEqual(p013["accuracy_metrics"].strip(), "")
+        for row in self.combos.values():
+            self.assertNotIn("P013", row["excluded_by_no_ids"])
+            self.assertNotIn("P013", row["unresolved_ids"])
+
+    def test_candidates_separated_and_pending(self):
+        cats = {r["category"] for r in self.candidates}
+        self.assertEqual(cats, set(CATEGORY_LABELS.values()))
+        gaps = [c["id"] for c in self.config["candidates"] if c["category"] == "candidate_gap"]
+        self.assertEqual(gaps, ["GC-01", "GC-02", "GC-03"])
+        for r in self.candidates:
+            self.assertEqual(r["researcher_review_status"], "Pending researcher review")
+
+    def test_candidates_not_promoted_to_final_gap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.analyzer.write_gap_matrix_csv(Path(tmp) / "gap_matrix.csv")
+            self.analyzer.write_combination_matrix_csv(Path(tmp) / "combination_matrix.csv")
+            self.analyzer.write_gap_candidates_markdown(Path(tmp) / "gap_candidates.md")
+            self.assertFalse((Path(tmp) / "research_gap.md").exists())
+            md = (Path(tmp) / "gap_candidates.md").read_text(encoding="utf-8").lower()
+        self.assertFalse((GAP_DIR / "research_gap.md").exists())
+        for phrase in ("the research gap is", "selected gap", "final gap:", "recommended gap"):
+            self.assertNotIn(phrase, md)
+
+    def test_no_numerical_ranking(self):
+        for name in GAP_MATRIX_FIELDS + COMBINATION_MATRIX_FIELDS:
+            for word in RANKING_WORDS:
+                self.assertNotIn(word, name.lower())
+        for cand in self.config["candidates"]:
+            for key in cand:
+                self.assertNotIn(key.lower(), RANKING_WORDS + ("final", "selected"))
+
+    def test_committed_outputs_match_generator(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, writer in (("gap_matrix.csv", self.analyzer.write_gap_matrix_csv),
+                                 ("combination_matrix.csv", self.analyzer.write_combination_matrix_csv),
+                                 ("gap_candidates.md", self.analyzer.write_gap_candidates_markdown)):
+                writer(Path(tmp) / name)
+                self.assertEqual((Path(tmp) / name).read_text(encoding="utf-8"),
+                                 (GAP_DIR / name).read_text(encoding="utf-8"), name)
+
+    def test_freeze_hash_matches_corpus(self):
+        self.assertEqual(self.config["corpus_freeze"]["papers_sha256"], self.analyzer.corpus_sha256)
 
 
 if __name__ == "__main__":
