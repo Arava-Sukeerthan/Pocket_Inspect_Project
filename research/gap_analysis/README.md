@@ -14,20 +14,25 @@ This directory maintains systematic research gap matrices, candidate lists, and 
 
 ## 2. Key Research Dimensions Evaluated
 
-| Gap ID | Key Dimension Combination | Focus Area |
-| :--- | :--- | :--- |
-| **GAP-001** | Smartphone + Adaptive Inference + Thermal Awareness | Thermal-sustainability in mobile inspection |
-| **GAP-002** | 3D-Print Defect Inspection + Resource-Aware Edge AI | Resource-aware vision for additive manufacturing |
-| **GAP-003** | Smartphone + On-Device Inference + Uncertainty Estimation | Out-of-distribution detection on mobile edge |
-| **GAP-004** | Smartphone + Multi-View Inspection + On-Device | Multi-angle defect aggregation on mobile |
-| **GAP-005** | Adaptive Inference + Thermal & Energy Evaluation | Dynamic resource balancing across thermal/power |
-| **GAP-006** | 3D-Print Inspection + Anomaly Detection + On-Device | Semi-supervised anomaly scoring on edge |
+The evaluated combinations, analysis populations, derived attributes and candidate definitions are declared in [`configs/gap_analysis.yaml`](../../configs/gap_analysis.yaml) (Step 9.7, revised).
+
+- **Core-analysis subset (46 records).** The 54-record corpus minus the researcher-approved peripheral/contextual records (P002, P013) and the six survey/review records. All excluded records stay in `papers.csv`; review `No` values are never evidence of absence.
+- **Visual-inspection scope.** `visual_inspection_scope` (Yes/No/Unknown) is an analysis-only classification with a written basis per paper in [`visual_inspection_scope.csv`](visual_inspection_scope.csv). It is not a column of `papers.csv`.
+- **Combinations.** For each combination, a core record inside its scope is all-Yes (a counterexample), unresolved (Unknown) or excluded by an explicit No. `Unknown` is never treated as `No`.
+- **Outputs.**
+  - [`gap_matrix.csv`](gap_matrix.csv): one row per candidate, separated into evidence-supported candidate gaps and evidence limitations / unresolved questions;
+  - [`combination_matrix.csv`](combination_matrix.csv): one row per combination;
+  - [`gap_candidates.md`](gap_candidates.md): the report.
+- **No ranking or selection.** No candidate is scored, ranked or selected. `research_gap.md` is never written by the tool.
+- The frozen evidence base is recorded in [`corpus_freeze.md`](corpus_freeze.md).
+
+The earlier hard-coded prototype combinations (GAP-001 to GAP-006) are retired. They remain only as the fallback used when no configuration file is present.
 
 ---
 
 ## 3. Workflow for Researcher Gap Verification
 
 1. Ingest candidate literature into `research/literature/papers.csv`.
-2. Run `python scripts/manage_literature.py gap` to regenerate `gap_matrix.csv` and `gap_candidates.md`.
+2. Run `python scripts/manage_literature.py gap` (reads `configs/gap_analysis.yaml`) to regenerate `gap_matrix.csv`, `combination_matrix.csv` and `gap_candidates.md`. If `papers.csv` no longer matches the freeze hash in the config, the report warns that the candidate narratives need re-review.
 3. Review `gap_candidates.md` to verify whether candidate gaps are genuine research opportunities or missing literature.
 4. Record final decision in `docs/decisions/` before freezing the paper contribution.

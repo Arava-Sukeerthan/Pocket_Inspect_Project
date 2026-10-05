@@ -13,6 +13,7 @@ from src.literature.schema import (
 from src.literature.validator import LiteratureValidator
 from src.literature.analyzer import LiteratureAnalyzer
 from src.literature.exporter import MatrixExporter
+from src.literature.gap_analysis import CombinationGapAnalyzer
 
 __all__ = [
     "PAPERS_SCHEMA_HEADERS",
@@ -23,5 +24,6 @@ __all__ = [
     "normalize_doi",
     "LiteratureValidator",
     "LiteratureAnalyzer",
-    "MatrixExporter"
+    "MatrixExporter",
+    "CombinationGapAnalyzer"
 ]

@@ -959,3 +959,258 @@ Step 9.6 recovery after the PR #7 merge:
 - Branch: `claude/step-9-6-recovery` (from `origin/main` `0a63176`). Recovered commit: `f97235d` (cherry-pick of `55873a3`).
 - Commit: see `git log -- docs/agent_sync/CHANGELOG.md` on this branch.
 - Push status: branch pushed to `origin/claude/step-9-6-recovery`; no PR opened; not merged; `main` untouched; no force push.
+
+---
+
+## 2026-10-03 — Claude Code
+
+### Task
+Step 9.7 had three parts:
+- freeze the verified corpus;
+- regenerate the literature-analysis artifacts from it;
+- identify evidence-backed **candidate** research gaps.
+
+No final gap was selected, scored, ranked or approved.
+
+### Changes
+- **`research/gap_analysis/corpus_freeze.md`** (new): the freeze record.
+  - Commit `c6ba9d5`; `papers.csv` SHA-256 `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521`.
+  - 54 records, 31 columns, 0 duplicate IDs/DOIs/titles; VALID.
+  - Also records the analysis populations and the known unresolved evidence.
+- **`configs/gap_analysis.yaml`** (new): declarative, analysis-only gap configuration. It holds:
+  - the freeze hash;
+  - populations;
+  - derived attributes `visual_inspection` and `three_d_print_inspection`;
+  - 17 combinations: C-A to C-L from the task, plus C-S1 to C-S5;
+  - 9 candidate-gap narratives;
+  - limitations and research-question alignment notes.
+- **`src/literature/gap_analysis.py`** (new): `CombinationGapAnalyzer`.
+  - For each combination, sorts the core primary studies into all-Yes (counterexamples), unresolved (Unknown) and excluded by No. It also lists near misses and reports peripheral records separately.
+  - `Unknown` is never treated as `No`. OR-groups are supported.
+  - Warns in the report when `papers.csv` no longer matches the freeze hash.
+- **`scripts/manage_literature.py`:** `gap` (and `all`) now reads `configs/gap_analysis.yaml` (`--config` to override). The legacy hard-coded GAP-001 to GAP-006 logic in `LiteratureAnalyzer` is unchanged and used only when no config exists. `src/literature/__init__.py` exports the new class.
+- **`tests/test_gap_analysis.py`** (new): 12 tests, covering:
+  - population exclusion;
+  - Unknown ≠ No;
+  - derived attributes and OR-groups;
+  - near misses;
+  - freeze-mismatch warning;
+  - committed-config integrity.
+- **`research/gap_analysis/gap_matrix.csv`, `gap_candidates.md`:** regenerated with `manage_literature.py gap` from the frozen corpus. They replace the stale empty-corpus prototype output.
+- **`research/gap_analysis/README.md`:** §2-3 describe the config-driven combinations; the old GAP-001 to GAP-006 table is retired.
+- **`research/literature/literature_matrix.csv`:** regenerated with `manage_literature.py matrix`. It is byte-identical to the committed file (already current after Step 9.6), so there is no diff.
+
+### Research decisions
+- **Core evidence subset (analysis-only, `papers.csv` unchanged).**
+  - Full corpus: 54.
+  - Minus P002 and P013: peripheral/contextual, researcher-approved; reported separately, never counted.
+  - Minus review/survey records P010, P024, P026, P035, P036, P052: auditor proposal; their coded No describes the review, not the field.
+  - Result: **46 core primary studies**.
+  - The unapproved audit A–E classes were not used. No relevance column was added; `audit_report.csv` was not changed.
+- **`visual_inspection` and `three_d_print_inspection`** are derived per record from `domain`/`application`/`dataset`. They are auditor proposals pending researcher review.
+- **Combination results** (core all-Yes records):
+  - C-A: P011;
+  - C-B, C-C, C-D, C-E: none;
+  - C-F: P029, P033, P034;
+  - C-G: P028, P029, P034;
+  - C-H, C-I, C-J: none;
+  - C-K: P029, P034;
+  - C-L: none, and no near miss;
+  - C-S1, C-S2, C-S3: none;
+  - C-S4: P016;
+  - C-S5: P007, P016.
+- **Not proposed as candidates (counterexamples present):** C-A, C-F, C-G, C-K, C-S4, C-S5.
+- **9 candidate gaps.** All unordered, unscored, *Pending researcher review*:
+  - GC-01: runtime resource awareness / adaptive inference for smartphone visual inspection — integration;
+  - GC-02: energy/thermal evaluation of smartphone or edge visual inspection — evaluation;
+  - GC-03: integrated smartphone inspection + runtime adaptation + confidence-aware verification — integration;
+  - GC-04: confidence-triggered recapture/additional view — capability with evidence limitation;
+  - GC-05: multi-view + resource-aware/on-device — evidence limitation;
+  - GC-06: anomaly detection + resource-aware/edge — evidence limitation;
+  - GC-07: uncertainty in edge/on-device deployment — deployment with evidence limitation;
+  - GC-08: joint thermal + energy evaluation of adaptive inference — evaluation; hinges on P032;
+  - GC-09: image quality / PASS-REVIEW — not coded; evidence limitation.
+- **P013:** blank `accuracy_metrics` (Tables 4-5 unverified) is treated as an unresolved evidence field only. It is not used as evidence of anything, and P013 is not core.
+
+### Verification
+- `python -m pytest -q`: 36 passed (24 existing + 12 new).
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 0 duplicate IDs.
+- `papers.csv` SHA-256 is unchanged before and after. `git diff -- research/literature/` is empty, so no bibliographic or coding change.
+- Regenerated `literature_matrix.csv`: 54 rows; every coded value matches `papers.csv`; P029/P031/P033 Step 9.6 values present.
+- Re-running `gap` reproduces identical output, with no freeze warning.
+- Generated report checked: no "the research gap is", ranking, scoring or novelty language.
+- `research/gap_analysis/research_gap.md` does not exist and was not created. `PROJECT_SPEC.md` and the research questions were not changed.
+
+### Uncertain items (researcher review)
+- All 9 candidate gaps (confirm, reword or reject).
+- The `visual_inspection`, `three_d_print_inspection` and review-record assignments.
+- Research-question alignment notes (`gap_candidates.md` §9), including:
+  - 3D-print framing versus general small-component framing (no 3D-print record is coded smartphone = Yes);
+  - scope breadth.
+- **Evidence limitations:**
+  - one search batch, top 12-15 results screened per query;
+  - 10/54 records full-text verified; 8 blocked; 36 abstract-only;
+  - 29-38 of 46 records Unknown per field;
+  - P032 full text needed to resolve GC-08;
+  - P013 Tables 4-5 still unverified.
+
+### Remaining work
+- Researcher review of the Step 9.7 candidates. Do not select or write the final gap until the researcher decides.
+
+### Git
+- Branch: `claude/affectionate-ride-9uem3p`, fast-forwarded to `origin/main` `c6ba9d5` before work. `main` was not modified.
+- Commit: see `git log -- research/gap_analysis/corpus_freeze.md`.
+- Push status: branch pushed; not merged; no PR opened.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.7 revision: methodology correction of the candidate-gap analysis before merge. Builds on Step 9.7 commit `2a4f2e8`. No merge, no Step 9.8, no final gap.
+
+### Changes
+- **`research/gap_analysis/visual_inspection_scope.csv`** (new, analysis-only). One row per record (54) with:
+  - `visual_inspection_scope` (Yes/No/Unknown);
+  - `analysis_population`, `basis_category`, `evidence_level` and a written `basis` quoting the coded fields.
+- **`configs/gap_analysis.yaml`:**
+  - `visual_inspection_scope` replaces the `visual_inspection` ID lists, with Yes/No/Unknown definitions and rules: no inference from a camera mention, training images, YOLO, "segmentation" or the manufacturing domain;
+  - the core-subset rationale is now explicit;
+  - `three_d_print_inspection` is redefined as the 3D-print task domain (any modality);
+  - candidate definitions are split into two categories, each with a primary combination;
+  - per-candidate counterexample assessment and a "not claimed" statement were added.
+- **`src/literature/gap_analysis.py`:**
+  - the classification file is loaded and validated (all records exactly once, valid values, non-empty basis, population consistent with config);
+  - combination scope (`scope_excludes_no`): records coded No are out of scope; Unknown stays in scope as unresolved;
+  - per-record exclusion reasons, out-of-scope partial matches and per-criterion component coverage are reported;
+  - ranking/selection keys and invalid categories are rejected;
+  - the report is restructured into the nine sections of Part K.
+- **`scripts/manage_literature.py`:** `gap` also writes `combination_matrix.csv`.
+- **`research/gap_analysis/gap_matrix.csv`:** regenerated, one row per candidate, with the requested fields (candidate_gap, category, description, supporting_papers, counterexamples, relevant_core_papers, yes/no/unknown counts, evidence_basis, evidence_limitations, visual_inspection_basis, researcher_review_status).
+- **`research/gap_analysis/combination_matrix.csv`** (new): the combination-level counts, 20 combinations.
+- **`research/gap_analysis/gap_candidates.md`:** regenerated.
+- **`research/gap_analysis/corpus_freeze.md`:** revision note appended; frozen table unchanged.
+- **`research/gap_analysis/README.md`:** updated.
+- **`tests/test_gap_analysis.py`:** rewritten.
+
+### Research decisions (all pending researcher review)
+- **Core-analysis subset = 46.**
+  - Rule: 54 records − P002, P013 (researcher-approved peripheral/contextual) − P010, P024, P026, P035, P036, P052 (notes state "Paper type: survey/review").
+  - The lists do not overlap, so 54 − 2 − 6 = 46, matching the computed subset. No discrepancy was found.
+  - All 8 records remain in `papers.csv`. Review No values are not treated as evidence of absence.
+- **`visual_inspection_scope` in the core subset: Yes 20, No 19, Unknown 7.**
+  - No: 15 not-inspection papers and 4 non-optical inputs (P021, P040 point clouds; P048 magnetic flux leakage; P051 ultrasonic).
+  - Unknown: P001, P008, P012, P018, P023, P042, P049 (inspection task, image input not stated in coded fields).
+- **Evidence-supported candidate gaps (unordered)** — corpus observations only:
+  - **GC-01:** limited representation of runtime resource-aware/adaptive inference in smartphone visual inspection within the reviewed corpus. No full counterexample. Partial: P011. Outside scope: P029, P031, P033, P034. 22/27 unresolved.
+  - **GC-02:** limited direct evaluation of energy/thermal behaviour in smartphone or edge visual inspection within the reviewed corpus. No full counterexample. P007 is an unresolved potential counterexample. Verified No: P011, P015, P016, P020. 23/27 unresolved.
+  - **GC-03:** limited evidence of integrated smartphone visual inspection combining runtime adaptation with confidence-aware downstream decisions. Each component was checked separately; no full or partial counterexample.
+- **Evidence limitations / unresolved questions:** former GC-04 to GC-09 became EL-01 to EL-06.
+  - EL-01: recapture/additional view; confidence gating is Unknown for 38/46.
+  - EL-02: multi-view + resource awareness.
+  - EL-03: anomaly detection + resource awareness.
+  - EL-04: uncertainty + edge.
+  - EL-05: joint thermal + energy for adaptive inference; depends on P032, which is inaccessible.
+  - EL-06: image quality and PASS/REVIEW, which are not coded; a single zero-hit query is a search limitation, not evidence of a gap.
+- **Unknown handling.** Unknown is never counted as No or as absence. Wording: "the available coding is insufficient to determine …".
+- **P002 and P013.** Excluded from core counting (approved peripheral). P013's blank `accuracy_metrics` is not used as a criterion or gap signal.
+
+### Verification
+- `python -m pytest -q`: 54 passed. Earlier: 36. The gap-analysis tests now cover:
+  - `visual_inspection_scope` validation;
+  - Unknown ≠ No;
+  - peripheral records excluded from core counting;
+  - review records not treated as evidence of absence;
+  - P013 metrics not used as a gap signal;
+  - no promotion of a candidate to a final gap;
+  - no ranking fields;
+  - committed outputs matching the generator.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 0 duplicate IDs.
+- `papers.csv` SHA-256 unchanged (`c8fac51d…da521`); `git diff -- research/literature/` is empty.
+- Re-running `gap` reproduces the committed outputs.
+
+### Uncertain items
+- Confirm, reword or reject GC-01 to GC-03, and the reclassification to EL-01 to EL-06.
+- Approve or amend `visual_inspection_scope`, in particular:
+  - the 7 Unknown records;
+  - the non-optical boundary (P021, P040, P051).
+- Approve or amend the core-analysis rule.
+- Decide on 3D-print versus general small-component framing.
+- Decide whether more full-text review or a further search batch is needed before any gap statement.
+
+### Remaining work
+- Researcher review of PR #9. No final gap; `research_gap.md` not created.
+
+### Git
+- Branch: `claude/affectionate-ride-9uem3p` (PR #9). Previous commit: `2a4f2e8`.
+- Commit: see `git log -- research/gap_analysis/visual_inspection_scope.csv`.
+- Push status: pushed to the branch; not merged; `main` not modified.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.7 final methodology correction before PR #9 review. Builds on `8622c90`. No merge, no Step 9.8, no final gap.
+
+### Changes
+- **`configs/gap_analysis.yaml`:**
+  - `visual_inspection_scope` carries the researcher-approved operational definition: inspection of a physical object, component, surface, structure or manufactured/industrial item using optical image/video/camera observations as the actual inspection input;
+  - rules updated: no Yes from camera mentions, training-only images, YOLO, segmentation, manufacturing or visualizations; non-optical modalities are No; Unknown is reserved for unstated input;
+  - candidates rewritten with explicit in-scope Yes/No/Unknown counts, a conclusion line, per-field evidence fields and named-paper status lists;
+  - each EL entry now names its `limitation_causes`.
+- **`src/literature/gap_analysis.py`:**
+  - every candidate carries a fixed corpus-bounded scope statement (report and `gap_matrix.csv`);
+  - per-field coverage and named-paper status tables are generated from the data;
+  - limitation causes use a validated vocabulary (Unknown coding, insufficient full text, missing schema field, limited search, unresolved paper evidence), and an EL without a cause is rejected;
+  - the approved definition is shown in the report.
+- **`research/gap_analysis/visual_inspection_scope.csv`:** P021, P040, P048 and P051 bases restated as "non-optical inspection input"; values unchanged (No).
+- **`gap_matrix.csv` and `gap_candidates.md`:** regenerated. `combination_matrix.csv` is unchanged.
+- **`tests/test_gap_analysis.py`:** new tests:
+  - non-optical modalities = No;
+  - camera/image/video input = Yes;
+  - training-only images ≠ Yes (P002);
+  - approved-definition status;
+  - corpus-bounded scope statement on every candidate;
+  - no novelty phrasing;
+  - EL causes required and validated.
+
+### Research decisions
+- **Approved visual-inspection definition** applied. P021 and P040 (point clouds), P048 (magnetic flux leakage) and P051 (ultrasonic) are No, not Unknown. The 7 core Unknown records (P001, P008, P012, P018, P023, P042, P049) stay Unknown because their actual input is not stated.
+- **Core subset preserved at 46.** The 54 records minus P002, P013 (peripheral) minus P010, P024, P026, P035, P036, P052 (survey/review). All remain in `papers.csv`, and their values are not evidence of absence.
+- **Candidate gaps** (unordered; corpus-bounded wording; each states "No complete match found in the analyzed core corpus"):
+  - **GC-01:** 27 in scope (visual Yes 20, Unknown 7).
+    - resource_awareness: Yes 0 / No 4 / Unknown 23; adaptive_inference: Yes 0 / No 4 / Unknown 23.
+    - P011 is No on both; 22/27 unresolved.
+    - Outside-scope counterexamples: P029, P031, P033, P034.
+  - **GC-02:** 27 in scope. energy_evaluation: Yes 0 / No 4 / Unknown 23; thermal_evaluation: Yes 0 / No 4 / Unknown 23.
+    - Verified No: P011, P015, P016, P020.
+    - P007 is an unresolved potential counterexample.
+  - **GC-03:** all four components verified separately (smartphone, visual inspection, runtime adaptation, confidence-aware downstream decision). confidence_gating in scope: Yes 1 (P016) / No 2 / Unknown 24. No paper meets three of the four components.
+- **Evidence limitations EL-01 to EL-06** are kept separate and are not competing gaps:
+  - EL-01: Unknown coding, missing schema field, limited search;
+  - EL-02, EL-03, EL-04: Unknown coding, insufficient full text;
+  - EL-05: unresolved paper evidence (P032), insufficient full text, Unknown coding;
+  - EL-06: missing schema field, limited search.
+- **Unknown** is never treated as No or absence; the high Unknown rate is stated as a limit on candidate strength.
+- **P013** stays excluded from core counting. `accuracy_metrics` stays blank and is never used as a criterion. The approved characteristic values are unchanged.
+
+### Verification
+- `python -m pytest -q`: 63 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 31 columns; 0 duplicate IDs.
+- `papers.csv` SHA-256 `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521` (unchanged); `git diff -- research/literature/` is empty.
+- The generator reproduces the committed outputs. No novelty phrasing appears in the report.
+
+### Uncertain items
+- Researcher review of GC-01 to GC-03 and EL-01 to EL-06.
+- Review of the 7 Unknown visual-inspection records.
+- 3D-print versus general small-component framing.
+- Whether more full-text review or a further search batch is needed.
+
+### Remaining work
+- Researcher review of PR #9. No final gap; `research_gap.md` not created.
+
+### Git
+- Branch: `claude/affectionate-ride-9uem3p` (PR #9). Previous commit: `8622c90`.
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
+- Push status: pushed to the branch; not merged; `main` not modified.

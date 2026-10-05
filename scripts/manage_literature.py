@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.literature import LiteratureValidator, LiteratureAnalyzer, MatrixExporter
+from src.literature import LiteratureValidator, LiteratureAnalyzer, MatrixExporter, CombinationGapAnalyzer
 
 
 def cmd_validate(args):
@@ -76,9 +76,19 @@ def cmd_gap(args):
     out_csv = Path(args.out_csv) if args.out_csv else PROJECT_ROOT / "research" / "gap_analysis" / "gap_matrix.csv"
     out_md = Path(args.out_md) if args.out_md else PROJECT_ROOT / "research" / "gap_analysis" / "gap_candidates.md"
 
-    analyzer = LiteratureAnalyzer.from_csv(papers_path)
+    config_path = Path(args.config) if getattr(args, "config", None) else PROJECT_ROOT / "configs" / "gap_analysis.yaml"
+
+    if config_path.exists():
+        print(f"[Literature Manager] Gap configuration: {config_path}")
+        analyzer = CombinationGapAnalyzer.from_files(papers_path, config_path)
+    else:
+        print(f"[Literature Manager] No gap configuration at {config_path}; using legacy combinations")
+        analyzer = LiteratureAnalyzer.from_csv(papers_path)
     written_csv = analyzer.write_gap_matrix_csv(out_csv)
     written_md = analyzer.write_gap_candidates_markdown(out_md)
+    if hasattr(analyzer, "write_combination_matrix_csv"):
+        written_combo = analyzer.write_combination_matrix_csv(Path(written_csv).with_name("combination_matrix.csv"))
+        print(f"[Literature Manager] Combination matrix CSV generated at: {written_combo}")
 
     print(f"[Literature Manager] Gap matrix CSV generated at: {written_csv}")
     print(f"[Literature Manager] Gap candidates report generated at: {written_md}")
@@ -141,6 +151,7 @@ def main():
     p_gap.add_argument("--papers", default=str(default_papers), help="Path to papers.csv")
     p_gap.add_argument("--out-csv", default=None, help="Output gap matrix CSV path")
     p_gap.add_argument("--out-md", default=None, help="Output gap candidates Markdown path")
+    p_gap.add_argument("--config", default=None, help="Gap-analysis YAML config (default: configs/gap_analysis.yaml)")
 
     # Export
     p_exp = subparsers.add_parser("export", help="Export literature matrix to Markdown or LaTeX format")
@@ -154,6 +165,7 @@ def main():
     p_all.add_argument("--out", default=None, help="Output path")
     p_all.add_argument("--out-csv", default=None, help="Output gap CSV path")
     p_all.add_argument("--out-md", default=None, help="Output gap MD path")
+    p_all.add_argument("--config", default=None, help="Gap-analysis YAML config")
 
     args = parser.parse_args()
 
