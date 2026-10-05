@@ -18,3 +18,7 @@ Protocol design only; no experiment has been run and no result exists.
 - [`confidence_verification_protocol.md`](confidence_verification_protocol.md): splits, calibration, thresholds, A0–A4 policy
 - [`measurement_protocol.md`](measurement_protocol.md): device characterisation (E0), outcomes, energy, thermal
 - [`experimental_matrix.csv`](experimental_matrix.csv), [`log_schema.json`](log_schema.json)
+
+## Step 10D specification (device characterization)
+- [`device_characterization_protocol.md`](device_characterization_protocol.md), [`device_capability_matrix.md`](device_capability_matrix.md) (report skeleton; all NOT YET VERIFIED), [`device_characterization_schema.json`](device_characterization_schema.json)
+- Implementation handoff: [`../../docs/architecture/step10d_device_characterization_handoff.md`](../../docs/architecture/step10d_device_characterization_handoff.md)

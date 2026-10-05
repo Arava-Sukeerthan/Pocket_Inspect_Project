@@ -2211,3 +2211,93 @@ Step 10C-DR review correction: the final pre-data-collection freeze. These are m
 - Branch: `claude/step-10c-final-decision-freeze`, from the PR #17 branch head `f81bc69`.
 - Commit: see `git log -- configs/pre_data_collection.yaml`.
 - Push status: pushed; PR opened against `main`; not merged.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10D: device-characterization **specification and implementation handoff**.
+- Claude Code acted as the research/repository review and specification agent.
+- **Antigravity is the implementation agent** for Step 10D.
+- No code was run on the device, and no device capability is reported as verified.
+
+### Repository state
+- `main` is at `55b8e94`. Step 10B (`6316407`, `ac7fda6`), Step 10C (`6bc6ba5`), Step 10C-DR (`f81bc69`) and the final freeze (`6d87676`) are all merged.
+- Implementation state: `mobile/`, `experiments/`, `backend/`, `models/` and the `src/` subsystem modules contain only README/init files. No implementation exists.
+
+### Changes
+- **`research/experiments/device_characterization_protocol.md` (new).** It defines:
+  - scope (questions 1–13; C1–C4, R0–R3 thresholds and all experiments are out of scope);
+  - known specification vs actual observation, including the 3 GB variant check;
+  - report statuses and runtime capability states, with the mapping between them;
+  - the no-fake-zero rule;
+  - phases P0–P8, with two repeat runs;
+  - capability items: the Android version is not assumed, and the thermal-status API (API ≥ 29) is not assumed;
+  - energy feasibility for E-1/E-2/E-3, with the D-16 hierarchy unchanged;
+  - external instruments, safety and sign-off criteria.
+- **`research/experiments/device_capability_matrix.md` (new).** The report skeleton: identity, Android/API, telemetry, camera, backends, profiling, thermal, energy, resource-state inputs. Every observation is NOT YET VERIFIED, and the matrix holds no values.
+- **`research/experiments/device_characterization_schema.json` (new).** Schemas for `device_identity`, `capability_result`, `telemetry_capability`, `camera_capability`, `backend_capability`, `thermal_capability`, `energy_capability` and `characterization_run`.
+  - Status and value are separate.
+  - Any non-AVAILABLE state must carry a null value.
+  - `verified` requires evidence.
+  - The backend schema has no performance fields.
+  - `absolute_energy_claimed` is fixed false.
+- **`docs/architecture/step10d_device_characterization_handoff.md` (new).** The handoff to Antigravity:
+  - roles and boundary; code placement under `mobile/characterization/`, `scripts/device_characterization/`, `src/monitoring/characterization/`, `configs/device_characterization.yaml` and `research/results/device_characterization/`;
+  - Android build constraints: minSdk not above 28, targetSdk at least 28 for unsupported-sentinel semantics, SDK_INT gates;
+  - 10 global rules;
+  - the 12 components with sources and required states;
+  - schemas, acceptance criteria, the Claude review checklist, the synchronization policy, and open researcher questions.
+- **Tests.**
+  - `tests/test_device_characterization_protocol.py` (new): 11 tests.
+  - The `research/experiments/` allow-lists in `tests/test_dataset_device_model.py` and `tests/test_research_protocol.py` now include the three new documents.
+- **READMEs.** Pointers added to `docs/architecture/README.md` and `research/experiments/README.md`.
+
+### Architecture components (for Antigravity)
+1. DeviceIdentityCollector
+2. AndroidCapabilityCollector
+3. BatteryTelemetryCollector
+4. MemoryTelemetryCollector
+5. CPUTelemetryCollector
+6. GPUTelemetryCollector
+7. ThermalTelemetryCollector
+8. CameraCapabilityCollector
+9. InferenceBackendCapabilityCollector
+10. ProfilingCapabilityCollector
+11. EnergyMeasurementCapabilityChecker
+12. CharacterizationReportGenerator
+
+Each returns explicit states: AVAILABLE / UNAVAILABLE / PERMISSION_REQUIRED / API_UNSUPPORTED / EXTERNAL_REQUIRED / NOT_TESTED / ERROR.
+
+### Implementation requirements (summary)
+- No fake zeros. No assumed capabilities. Known specification is never overwritten.
+- `verified` only with evidence from the physical device.
+- No performance, accuracy, energy or thermal results; backend checks use in-repo reference graphs only.
+- No model binaries, images or sensitive identifiers in git.
+- The existing "no implementation" guard tests must be **narrowed to an explicit Step 10D allow-list, not deleted**, and each change recorded.
+- Two characterization runs on separate days. The D-10 thermal source and the D-16 energy level are selected from evidence.
+
+### Device-specific findings
+**None verified.** No physical-device access in this step. All device capabilities remain NOT YET VERIFIED.
+
+### Unresolved issues (researcher decisions)
+- Reference-graph tooling: building `.tflite` normally needs TensorFlow, which `AGENTS.md` forbids without instruction. DECISION REQUIRED.
+- Available external instruments (power meter, surface probe, thermometer).
+- Battery-terminal access on safety grounds (E-1).
+- Whether developer options, USB debugging and trace-enabling properties are acceptable on the experimental unit.
+
+### Next action
+- **Antigravity** implements Step 10D per the handoff, runs the characterization on the physical OPPO A5 2020 (3 GB), and appends its entry: implementation changes, files changed, tests, capabilities verified with evidence paths, limitations, unresolved issues, commit hash.
+- **Claude Code** then reviews the code, the CHANGELOG and the protocol, and appends a review entry with corrections handed back to Antigravity.
+- Cycle: IMPLEMENT → CHANGELOG → CLAUDE REVIEW → CHANGELOG → ANTIGRAVITY CORRECTION → CHANGELOG → TEST → NEXT STAGE.
+
+### Verification
+- `python -m pytest -q`: **262 passed** (251 + 11 new).
+- Step 10A artefacts unchanged (pinned hashes); `papers.csv` unchanged.
+- No experiment, measurement, benchmark, dataset download or device run.
+
+### Git
+- Branch: `claude/step-10d-device-characterization-spec`, from `origin/main` `55b8e94`.
+- Commit: see `git log -- docs/architecture/step10d_device_characterization_handoff.md`.
+- Push status: pushed; PR opened against `main`; not merged.
