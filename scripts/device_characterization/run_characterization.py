@@ -2,15 +2,17 @@
 Step 10D: Host-side characterization CLI entry point.
 
 Orchestrates device characterization collectors, collects raw ADB evidence
-if connected, executes mock/observed capability checks, validates run against
-device_characterization_schema.json, saves output to research/results/device_characterization/<run_id>/,
-and updates device_capability_matrix.md.
+from the physical OPPO A5 2020 if connected, parses raw evidence files,
+validates run against device_characterization_schema.json, saves output
+to research/results/device_characterization/<run_id>/, and updates device_capability_matrix.md.
 """
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -41,44 +43,76 @@ from src.monitoring.characterization.report_generator import CharacterizationRep
 from scripts.device_characterization.adb_collector import ADBCollector
 
 
+def _get_git_commit() -> str:
+    try:
+        res = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ROOT)
+        if res.returncode == 0:
+            commit = res.stdout.strip()
+            status_res = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=ROOT)
+            if status_res.stdout.strip():
+                commit += "-dirty"
+            return commit
+    except Exception:
+        pass
+    return "unknown_commit"
+
+
+def _hash_file(path: Path) -> str:
+    if path.exists():
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    return "unknown_hash"
+
+
 def run_characterization(
     config_path: Path,
     run_id: Optional[str] = None,
     repeat_index: int = 1,
-    mock_observed: Optional[dict] = None
+    mock_observed: Optional[dict] = None,
+    dry_run: bool = False,
+    overwrite: bool = False,
 ) -> Tuple[Path, dict]:
     """Runs a characterization pass and writes schema-valid output."""
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
-    now_str = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_utc = datetime.datetime.utcnow()
+    now_str = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    today_str = now_utc.strftime("%Y%m%d")
+
     if not run_id:
-        run_id = f"run_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        run_id = f"run_{now_utc.strftime('%Y%m%d_%H%M%S')}"
+
+    # F-02: Date mismatch check between run_id and actual start time date
+    if "_" in run_id:
+        date_part = run_id.split("_")[1]
+        if len(date_part) == 8 and date_part.isdigit() and date_part != today_str:
+            raise ValueError(
+                f"Run ID date '{date_part}' does not match actual start time date '{today_str}' (F-02 date mismatch error). "
+                "Fake future-dated run folders are strictly forbidden."
+            )
 
     unit_id = cfg.get("device_unit_id", "OPPO_A5_2020_UNIT_01")
-    output_dir = ROOT / cfg.get("output", {}).get("results_directory", "research/results/device_characterization") / run_id
+    results_base = ROOT / cfg.get("output", {}).get("results_directory", "research/results/device_characterization")
+    output_dir = results_base / run_id
 
-    # ADB check
+    # F-14: Silent overwrite guard
+    run_file = output_dir / "characterization.json"
+    if run_file.exists() and not overwrite:
+        raise FileExistsError(f"Run directory '{output_dir}' already contains characterization.json. Silent overwrite refused (F-14).")
+
+    # ADB check & raw evidence collection
     adb = ADBCollector()
-    adb_connected = adb.is_device_connected()
-    adb_props = {}
-    if adb_connected:
-        adb_props = adb.get_properties()
-        adb.collect_raw_evidence(output_dir / "evidence")
+    adb_connected = adb.is_device_connected() and not dry_run
+    props: Dict[str, Any] = {}
 
-    # Combine adb props and mock props
-    props = {}
     if mock_observed:
         props.update(mock_observed)
-    if adb_props:
-        props.update({
-            "manufacturer": adb_props.get("ro.product.manufacturer"),
-            "model": adb_props.get("ro.product.model"),
-            "release_version": adb_props.get("ro.build.version.release"),
-            "api_level": int(adb_props.get("ro.build.version.sdk", 28)) if adb_props.get("ro.build.version.sdk") else None,
-            "proc_stat_readable_via_adb": True,
-            "atrace_adb_available": True,
-        })
+
+    if adb_connected:
+        evidence_files, observed_adb_props = adb.collect_raw_evidence_and_observations(output_dir)
+        props.update(observed_adb_props)
+    else:
+        props["is_real_device_observation"] = False
 
     # Execute all 11 capability collectors
     dev_ident = DeviceIdentityCollector(unit_id).collect(props)
@@ -95,13 +129,21 @@ def run_characterization(
 
     dev_ident.observed.extend(android_cap.results)
 
+    boot_id = props.get("boot_id", "unknown")
+    git_commit = _get_git_commit()
+    config_hash = _hash_file(config_path)
+
     run = CharacterizationRun(
         run_id=run_id,
         started_at=now_str,
         repeat_index=repeat_index,
         app_version="1.0.0-characterization",
-        git_commit="24aa0f0-impl",
-        host_tool_versions={"python": sys.version.split()[0]},
+        git_commit=git_commit,
+        host_tool_versions={
+            "python": sys.version.split()[0],
+            "adb": adb.get_adb_version(),
+            "config_sha256": config_hash,
+        },
         device_identity=dev_ident,
         telemetry=[battery_cap, memory_cap, cpu_cap, gpu_cap],
         camera=camera_caps,
@@ -114,6 +156,8 @@ def run_characterization(
             "network": "OFFLINE",
             "usb_connected": adb_connected,
             "adb_connected": adb_connected,
+            "boot_id": boot_id,
+            "is_dry_run": not adb_connected,
         },
     )
 
@@ -121,7 +165,7 @@ def run_characterization(
 
     # Process and validate using report generator
     generator = CharacterizationReportGenerator()
-    res = generator.process_run(run_dict, output_dir)
+    res = generator.process_run(run_dict, output_dir=output_dir, overwrite=overwrite)
 
     return output_dir, run_dict
 
@@ -131,10 +175,18 @@ def main():
     parser.add_argument("--config", type=str, default="configs/device_characterization.yaml", help="Path to config YAML")
     parser.add_argument("--run-id", type=str, default=None, help="Optional run ID")
     parser.add_argument("--repeat-index", type=int, default=1, help="Repeat index (1 or 2)")
+    parser.add_argument("--dry-run", action="store_true", help="Execute dry run without connected device")
+    parser.add_argument("--overwrite", action="store_true", help="Force overwrite existing run directory")
     args = parser.parse_args()
 
     cfg_path = ROOT / args.config
-    out_dir, run_dict = run_characterization(cfg_path, args.run_id, args.repeat_index)
+    out_dir, run_dict = run_characterization(
+        cfg_path,
+        run_id=args.run_id,
+        repeat_index=args.repeat_index,
+        dry_run=args.dry_run,
+        overwrite=args.overwrite
+    )
     print(f"Characterization run completed successfully.")
     print(f"Output saved to: {out_dir}")
     print(f"Run ID: {run_dict['run_id']}")

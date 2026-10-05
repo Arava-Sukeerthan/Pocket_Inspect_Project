@@ -2405,3 +2405,39 @@ Step 10E not started.
 - Branch: `claude/step-10d-post-merge-audit`, from `main` `e9ffade`.
 - Review documentation only; no implementation or data file was modified.
 - Commit: see `git log -- docs/architecture/step10d_post_merge_audit.md`.
+
+---
+
+## 2026-10-05 — Antigravity
+
+### Task
+Correct Step 10D Device Characterization System following post-merge audit (`docs/architecture/step10d_post_merge_audit.md`, audit commit `3a60717` on PR #21). Addressed all audit findings F-01 through F-15.
+
+### Changes
+- `src/monitoring/characterization/models.py`: Corrected status semantics & mapping per Protocol §3 (F-03, F-06). Probes not run map to `NOT_TESTED` / `NOT YET VERIFIED` (never `UNAVAILABLE`).
+- `src/monitoring/characterization/collectors.py`: Removed default API level 28 in `ThermalTelemetryCollector` (F-04). Returns `NOT_TESTED` when API level is unknown.
+- `src/monitoring/characterization/report_generator.py`: Enforced strict verification validation where `verified = True` requires `is_real_device_observation = True` and disk evidence file existence (F-05). Added run directory collision protection (`FileExistsError`) (F-14).
+- `scripts/device_characterization/adb_collector.py`: Rewrote ADB collector to execute real `adb` commands, capture stdout/stderr, parse `/proc/meminfo` (`total_ram_mb`), compare against 3 GB range (`2700 MB <= total_ram <= 3300 MB`), auto-detect `adb` binary path, and record actual provenance (`git rev-parse HEAD`, ADB version `1.0.41`, boot ID) (F-08, F-09).
+- `scripts/device_characterization/run_characterization.py`: Added run ID date mismatch protection and dry-run output classification (F-02).
+- `research/results/device_characterization/run_20261005_100000/characterization.json` & `run_20261006_100000/characterization.json`: Updated historical runs with `is_dry_run: true` and `is_valid_step10d_device_evidence: false` to preserve auditability without misrepresenting them as valid device evidence (F-02).
+- `mobile/characterization/`: Created `MainActivity.kt`, removed unnecessary storage permissions in `AndroidManifest.xml`, expanded Kotlin telemetry collectors for memory, timestamp, and standard Android characterization UI (F-07).
+- `tests/`: Updated unit test suites `test_device_characterization_collectors.py`, `test_device_characterization_report.py`, and restored guard assertion in `test_device_characterization_protocol.py` (F-13, F-15).
+
+### Research decisions
+- Retained D-16 (`absolute_energy_claimed: false`) without claiming uninstrumented software battery energy.
+- Retained schema rules; explicit status hierarchy enforced.
+- Reclassified historical pre-audit runs as dry-runs (`is_valid_step10d_device_evidence: false`).
+
+### Verification
+- `pytest`: 272 passed in 35.58s.
+- `gradlew assembleDebug`: Android characterization APK built cleanly (`app-debug.apk`).
+- Schema validation: `device_characterization_schema.json` validation succeeded for generated characterization reports.
+
+### Remaining limitations & physical device status
+- Physical device run requires connecting the physical OPPO A5 2020 via USB/ADB with USB debugging enabled. When physical device is attached, `run_characterization.py` collects live device observations twice on separate calendar days with a reboot in between.
+- No C1–C4 model selection, R0–R3 threshold setting, or r* determination was performed.
+
+### Git
+- Branch: `antigravity/step-10d-correction`
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md`
+

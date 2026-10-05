@@ -1,11 +1,12 @@
 """
-Unit tests for Step 10D Device Characterization Report Generator and Schema Validation.
+Unit tests for Step 10D Device Characterization Report Generator and Schema Validation after Post-Merge Audit.
 
-Validates:
-- JsonSchema validation for characterization records.
-- Report generation on host.
-- Multi-run directory structure preservation and non-overwrite checks.
+Validates findings F-02, F-05, F-14:
+- F-02: Date mismatch between run_id and started_at date is rejected.
+- F-05: Verified records without real evidence files on disk fail validation.
+- F-14: Overwriting existing characterization.json raises FileExistsError.
 """
+
 import json
 import pytest
 from pathlib import Path
@@ -24,11 +25,12 @@ from src.monitoring.characterization.report_generator import (
     CharacterizationReportGenerator,
     validate_characterization_record,
 )
+from scripts.device_characterization.run_characterization import run_characterization
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def _build_dummy_run_record(run_id="run_test_001"):
+def _build_dummy_run_record(run_id="run_20261005_100000", is_dry_run=True):
     res_avail = CapabilityResult(
         metric="battery_voltage",
         state=RuntimeState.AVAILABLE.value,
@@ -36,6 +38,7 @@ def _build_dummy_run_record(run_id="run_test_001"):
         value=3850.0,
         unit="mV",
         source="sysfs",
+        verified=False,
     )
     res_unavail = CapabilityResult(
         metric="gpu_utilization",
@@ -45,6 +48,7 @@ def _build_dummy_run_record(run_id="run_test_001"):
         unit="percent",
         source="sysfs",
         error_message="Sysfs node not present",
+        verified=False,
     )
     dummy_spec = KnownSpecification()
     dummy_identity = DeviceIdentity(
@@ -75,9 +79,9 @@ def _build_dummy_run_record(run_id="run_test_001"):
     )
     run = CharacterizationRun(
         run_id=run_id,
-        started_at="2026-10-05T12:00:00Z",
+        started_at="2026-10-05T10:00:00Z",
         app_version="1.0.0-characterization",
-        git_commit="24aa0f0",
+        git_commit="3a60717",
         device_identity=dummy_identity,
         telemetry=dummy_telemetry,
         camera=[],
@@ -85,53 +89,72 @@ def _build_dummy_run_record(run_id="run_test_001"):
         profiling=[],
         thermal=dummy_thermal,
         energy=dummy_energy,
-        conditions={"ambient_temperature_c": 25.0},
+        conditions={
+            "ambient_temperature_c": 25.0,
+            "adb_connected": not is_dry_run,
+            "is_dry_run": is_dry_run,
+        },
     )
     return run.to_dict()
 
 
 def test_validate_characterization_record_schema():
     """Test schema validation against device_characterization_schema.json."""
-    valid_record = _build_dummy_run_record("run_valid_001")
+    valid_record = _build_dummy_run_record("run_20261005_100000")
     errors = validate_characterization_record(valid_record)
     assert errors == []
 
     # Inject fake zero into unavailable metric
-    invalid_record = _build_dummy_run_record("run_invalid_001")
-    invalid_record["telemetry"][0]["results"][1]["value"] = 0.0  # fake zero on UNAVAILABLE metric!
+    invalid_record = _build_dummy_run_record("run_20261005_100001")
+    invalid_record["telemetry"][0]["results"][1]["value"] = 0.0  # fake zero!
     errors = validate_characterization_record(invalid_record)
     assert len(errors) > 0
     assert any("violates no-fake-zeros rule" in err for err in errors)
 
 
-def test_report_generator_run_creation(tmp_path):
-    """Test characterization report generator run directory creation and artifact output."""
+def test_f05_verified_requires_existing_evidence_file(tmp_path):
+    """F-05: verified=True requires that evidence_ref points to an existing file on disk."""
+    record = _build_dummy_run_record("run_20261005_100002", is_dry_run=False)
+    # Mark a metric as verified with a non-existent evidence file
+    record["device_identity"]["observed"][0]["verified"] = True
+    record["device_identity"]["observed"][0]["report_status"] = "VERIFIED"
+    record["device_identity"]["observed"][0]["evidence_ref"] = "evidence/non_existent.txt#key"
+    record["conditions"]["adb_connected"] = True
+    record["conditions"]["is_dry_run"] = False
+
+    output_dir = tmp_path / "run_20261005_100002"
+    output_dir.mkdir(parents=True)
+    errors = validate_characterization_record(record, output_dir=output_dir)
+    assert len(errors) > 0
+    assert any("does not exist on disk" in err for err in errors)
+
+    # Now create the evidence file -> validation passes
+    ev_dir = output_dir / "evidence"
+    ev_dir.mkdir(parents=True)
+    (ev_dir / "non_existent.txt").write_text("sample evidence data", encoding="utf-8")
+    errors_ok = validate_characterization_record(record, output_dir=output_dir)
+    assert errors_ok == []
+
+
+def test_f14_process_run_overwrite_guard(tmp_path):
+    """F-14: process_run into an existing run directory raises FileExistsError."""
     generator = CharacterizationReportGenerator()
-    record = _build_dummy_run_record("test_run_001")
-    output_dir = tmp_path / "run_test_run_001"
-    res = generator.process_run(record, output_dir=output_dir)
+    record = _build_dummy_run_record("run_20261005_100003")
+    output_dir = tmp_path / "run_20261005_100003"
+    
+    # First pass: succeeds
+    res1 = generator.process_run(record, output_dir=output_dir)
+    assert res1["status"] == "VALID"
+    assert (output_dir / "characterization.json").exists()
 
-    assert res["status"] == "VALID"
-    assert output_dir.exists()
-
-    json_path = output_dir / "characterization.json"
-    assert json_path.exists()
-    data = json.loads(json_path.read_text(encoding="utf-8"))
-    assert data["run_id"] == "test_run_001"
+    # Second pass into same directory without overwrite=True: raises FileExistsError
+    with pytest.raises(FileExistsError, match="Silent overwrite is refused"):
+        generator.process_run(record, output_dir=output_dir)
 
 
-def test_multi_run_non_overwrite(tmp_path):
-    """Verify that multiple characterization runs do not overwrite existing run directories."""
-    generator = CharacterizationReportGenerator()
-    rec1 = _build_dummy_run_record("run_1_20261005")
-    rec2 = _build_dummy_run_record("run_2_20261006")
-
-    dir1 = tmp_path / "run_run_1_20261005"
-    dir2 = tmp_path / "run_run_2_20261006"
-
-    res1 = generator.process_run(rec1, output_dir=dir1)
-    res2 = generator.process_run(rec2, output_dir=dir2)
-
-    assert dir1.exists()
-    assert dir2.exists()
-    assert res1["run_file"] != res2["run_file"]
+def test_f02_date_mismatch_rejection(tmp_path):
+    """F-02: run_id with date mismatch against actual start time date raises ValueError."""
+    cfg_path = ROOT / "configs" / "device_characterization.yaml"
+    # Passing run_id with future date (e.g. 20991231) raises ValueError
+    with pytest.raises(ValueError, match="does not match actual start time date"):
+        run_characterization(cfg_path, run_id="run_20991231_100000", dry_run=True)

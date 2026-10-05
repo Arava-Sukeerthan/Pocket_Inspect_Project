@@ -36,7 +36,7 @@ def map_runtime_state_to_report_status(
     verified: bool = False,
     condition: Optional[str] = None
 ) -> ReportStatus:
-    """Maps a collector runtime state to the schema report_status enum."""
+    """Maps a collector runtime state to the schema report_status enum per protocol §3."""
     if verified:
         return ReportStatus.VERIFIED
     if state == RuntimeState.AVAILABLE:
@@ -47,8 +47,12 @@ def map_runtime_state_to_report_status(
         return ReportStatus.UNAVAILABLE
     if state == RuntimeState.EXTERNAL_REQUIRED:
         return ReportStatus.REQUIRES_EXTERNAL_INSTRUMENTATION
-    if state in (RuntimeState.PERMISSION_REQUIRED, RuntimeState.NOT_TESTED, RuntimeState.ERROR):
-        return ReportStatus.REQUIRES_PILOT_VALIDATION
+    if state == RuntimeState.PERMISSION_REQUIRED:
+        if condition:
+            return ReportStatus.CONDITIONALLY_AVAILABLE
+        return ReportStatus.UNAVAILABLE
+    if state in (RuntimeState.NOT_TESTED, RuntimeState.ERROR):
+        return ReportStatus.NOT_YET_VERIFIED
     return ReportStatus.NOT_YET_VERIFIED
 
 

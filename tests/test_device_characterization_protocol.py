@@ -234,6 +234,7 @@ class TestDeviceCharacterizationSpec(unittest.TestCase):
         for item in ("implementation changes", "files changed", "tests run and results", "limitations",
                      "unresolved issues", "commit hash"):
             self.assertIn(item, sync)
+        self.assertIn("narrow each guard to an explicit Step 10D allow-list", self.handoff)
         changelog = _text(ROOT / "docs" / "agent_sync" / "CHANGELOG.md")
         last = changelog.rsplit("\n## ", 1)[1]
         self.assertTrue(last.startswith("2026-10-05 — Antigravity") or last.startswith("2026-10-05 — Claude Code"))
