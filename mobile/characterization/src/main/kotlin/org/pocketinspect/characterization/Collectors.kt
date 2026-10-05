@@ -295,17 +295,29 @@ class CameraTelemetryCollector(private val context: Context) {
                     val id0 = ids[0]
                     val chars = cm.getCameraCharacteristics(id0)
                     val hwLevel = chars.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)
-                    results.add(CapabilityResult(
-                        metric = "camera_0_hardware_level",
-                        state = RuntimeState.AVAILABLE.name,
-                        report_status = ReportStatus.VERIFIED.name,
-                        value = hwLevel,
-                        source = "CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL",
-                        verified = hwLevel != null,
-                        verification_method = "android_api",
-                        observed_at = now,
-                        evidence_ref = "evidence/android_app_evidence.json#camera_0_hardware_level"
-                    ))
+                    if (hwLevel != null) {
+                        results.add(CapabilityResult(
+                            metric = "camera_0_hardware_level",
+                            state = RuntimeState.AVAILABLE.name,
+                            report_status = ReportStatus.VERIFIED.name,
+                            value = hwLevel,
+                            source = "CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL",
+                            verified = true,
+                            verification_method = "android_api",
+                            observed_at = now,
+                            evidence_ref = "evidence/android_app_evidence.json#camera_0_hardware_level"
+                        ))
+                    } else {
+                        // The key returned no value: report it as unavailable instead of AVAILABLE with null.
+                        results.add(CapabilityResult(
+                            metric = "camera_0_hardware_level",
+                            state = RuntimeState.UNAVAILABLE.name,
+                            report_status = ReportStatus.UNAVAILABLE.name,
+                            value = null,
+                            source = "CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL",
+                            notes = "INFO_SUPPORTED_HARDWARE_LEVEL returned null for camera ${id0}"
+                        ))
+                    }
                 }
             } catch (e: Exception) {
                 results.add(CapabilityResult(
@@ -315,6 +327,15 @@ class CameraTelemetryCollector(private val context: Context) {
                     error_message = e.message ?: "CameraManager error"
                 ))
             }
+        } else {
+            // No CameraManager service: report the camera probe as unavailable instead of an empty section.
+            results.add(CapabilityResult(
+                metric = "camera_probe",
+                state = RuntimeState.UNAVAILABLE.name,
+                report_status = ReportStatus.UNAVAILABLE.name,
+                source = "Context.CAMERA_SERVICE",
+                notes = "CameraManager system service not available"
+            ))
         }
         return results
     }

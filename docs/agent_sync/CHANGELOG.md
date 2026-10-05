@@ -2963,3 +2963,95 @@ Step 10D Round 6 final correction: the two minor items from the Round 6 audit of
 - An independent reviewer (not Claude Code) reviews PR #28. Antigravity remains the Step 10D implementation agent for any further correction. Physical OPPO characterization starts only after the implementation PR is merged.
 
 Step 10E not started.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+- **Stage:** Step 10D, Device Characterization Infrastructure.
+- **Scope:** camera evidence observability and evidence-path integrity after the first physical-device launch. The Round 6 fixes (merged in `2f29204`) were not reopened.
+
+### Problem observed (reported by the researcher from a physical-device run)
+- **The run:** package `org.pocketinspect.characterization`, process 13444, run `android_run_1791219741284`, OPPO CPH1931.
+- **The truncation:** the app's report, logged under `I/POCKETINSPECT_APP_JSON(13444)`, stopped inside `camera_telemetry` right after `"metric": "camera...`, and the log continued with unrelated system messages.
+- **The wrong path:** `adb shell run-as org.pocketinspect.characterization cat files/evidence/android_app_evidence.json` returned "No such file or directory".
+
+### Root cause
+1. **Logcat truncation, not an incomplete report.** `MainActivity` logged the whole pretty-printed report in one `Log.i` call. A logcat entry carries at most `LOGGER_ENTRY_MAX_PAYLOAD` = 4068 bytes including the tag, so about 4044 bytes of message for tag `POCKETINSPECT_APP_JSON`.
+   - A reconstruction of the report from the observed values, with Gson pretty printing and fields in alphabetical order as ART returns them, comes to about 4.3 KB, with `camera_telemetry` starting at byte ~3909.
+   - A cut at 4044 bytes falls right after `"metric": "camera_count",`, matching the observation.
+   - The same string is written in full to the report files before logging, so the report itself is complete. This is a size estimate from a reconstruction, not device evidence.
+2. **Path confusion, not a missing file.** The app never writes `files/evidence/android_app_evidence.json`.
+   - The app writes `files/characterization_output.json` and `/sdcard/Android/data/org.pocketinspect.characterization/files/characterization_output.json`.
+   - The host (`adb_collector.retrieve_android_app_output`) reads one of those and stores the bytes as `<run_dir>/evidence/android_app_evidence.json`, hashed in `manifest.json`.
+   - `evidence_ref` values are relative to that host run directory, which was not documented.
+3. **A further gap in the camera collector:** if the CameraManager service was absent, the camera section was silently empty; a null hardware level was emitted as AVAILABLE with a null value.
+
+### Files changed
+- `mobile/characterization/src/main/kotlin/org/pocketinspect/characterization/AppJsonLogFormatter.kt` (new): a pure-JVM formatter. It produces:
+  - `BEGIN` (record count, byte count, SHA-256 of the report);
+  - one `SECTION` line per section (`records=k`, or `status=MISSING`);
+  - one `RECORD` line per record, as compact JSON of at most 3000 bytes, with records over that size split into numbered `part=p/m` lines at UTF-8 boundaries;
+  - one `ARTIFACT` line per written file (device path, bytes, SHA-256, `host_copy=evidence/android_app_evidence.json`);
+  - `END`.
+- `MainActivity.kt`: writes the same UTF-8 bytes to the same two files, then logs through the formatter. The output files and the report JSON are unchanged.
+- `Collectors.kt` (camera only):
+  - no CameraManager service gives `camera_probe` UNAVAILABLE;
+  - a null `INFO_SUPPORTED_HARDWARE_LEVEL` gives `camera_0_hardware_level` UNAVAILABLE with a null value.
+  
+  No camera value is inferred.
+- `src/monitoring/characterization/collectors.py`: the host preserves any non-AVAILABLE app `camera_probe` state, not only ERROR. UNAVAILABLE is no longer reported as NOT_TESTED. ERROR handling is unchanged.
+- `mobile/characterization/build.gradle.kts`: adds `testImplementation("junit:junit:4.13.2")`.
+- `mobile/characterization/src/test/kotlin/.../AppJsonLogFormatterTest.kt` (new): 6 JVM tests.
+- `tests/test_device_characterization_connected_e2e.py`: two new tests.
+  - The camera_probe ERROR/UNAVAILABLE test runs through the real pipeline.
+  - The app/host artifact path-contract test checks that the file the app writes is the one the host reads, that the host's copy name is what the app's `evidence_ref`s cite, and that the whole report is no longer logged as one entry.
+- `mobile/characterization/README.md`: documents the device artifact paths, the host copy, what `evidence_ref` is relative to, the logcat format and size limit, and the camera states. The source file count is now 4.
+
+### Tests executed and results
+- **Python suite, run twice:** 315 passed, 315 passed. That is 312 before this change plus 3 new test cases. `git status` was clean after both runs, `research/results/device_characterization/` holds only the two historical folders, and the capability matrix is unchanged.
+- **Kotlin `AppJsonLogFormatterTest`:** 6 of 6 passed. They ran on the JVM in a scratch Gradle Kotlin project that compiled the repository's formatter and test files; the scratch project is not committed.
+- **Mutation checks:**
+
+  | Mutation | Result |
+  |---|---|
+  | Formatter put back to the old single-entry log | 5 of 6 Kotlin tests fail (the remaining one tests the UTF-8 splitter alone) |
+  | Host camera_probe handling put back to ERROR only | the UNAVAILABLE case fails |
+
+- **Compile check:** all 4 module Kotlin sources compiled against the Robolectric `android-all` API 34 framework jar in a scratch project. It reported no errors and one pre-existing warning (`pluggedInt` unused).
+
+### Build result
+- `./gradlew assembleDebug testDebugUnitTest`: **not executed successfully.** Plugin `com.android.application` 8.2.2 cannot be resolved because `dl.google.com` is blocked in this environment, and there is no Android SDK.
+- No APK was built.
+
+### Physical-device validation status
+- **NOT PERFORMED.** No device was connected to this environment, and the corrected app has not been run on the OPPO.
+- The problem description and values above are as reported by the researcher. No device value was produced or changed by this work.
+- No camera capability is marked VERIFIED by this change.
+
+### Limitations
+- The SHA-256 cross-check between the `ARTIFACT` log line and the host manifest is manual; the host pipeline does not read logcat.
+- `run-as` works only for a debuggable (debug) build. A release build must be read through the external-storage path.
+- On the OPPO, `camera_count` will still be verified only from the app's `CameraManager` result, retrieved through the file. Host `dumpsys media.camera` output is saved but not parsed (unchanged).
+
+### Unresolved issues
+- The APK must be built with the Android SDK and re-run on the OPPO to confirm:
+  - the new log lines appear in full;
+  - `files/characterization_output.json` exists;
+  - the host retrieves it as `evidence/android_app_evidence.json` with `app_output_status = APP_OUTPUT_COLLECTED`.
+- The app's thermal record cites `#thermal_status` while its metric is `thermal_status_api`. This is pre-existing and outside camera scope; the host builds its own citation.
+
+### Research decisions
+- None. No change to GC-03, the RQs, the hypotheses, R0–R3, C1–C4, the verification methodology, the baselines, the recovery metric, telemetry definitions, energy/thermal methodology, the protocol, the schema or the capability matrix.
+
+### Next action
+- Build the APK with the Android SDK and re-run on the OPPO; Antigravity or the researcher can do this.
+- Then capture `adb logcat -d -s POCKETINSPECT_APP_JSON`, read `files/characterization_output.json`, and run the host characterization with `--require-device`.
+- An independent review of this change is required; it was implemented by Claude Code.
+
+### Git
+- Branch: `claude/step-10d-camera-evidence-observability`, from `main` `2f29204`.
+- Implementation commit: `a1ba2ae`. This CHANGELOG entry is a separate follow-up commit.
+
+Step 10E not started.

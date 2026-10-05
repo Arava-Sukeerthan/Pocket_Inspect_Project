@@ -15,19 +15,29 @@ class MainActivity : Activity() {
 
         val runner = CharacterizationRunner(this)
         val jsonOutput = runner.runAll()
+        val outputBytes = jsonOutput.toByteArray(Charsets.UTF_8)
+        val writtenPaths = mutableListOf<String>()
 
-        // 1. Private storage
-        val outFile = File(filesDir, "characterization_output.json")
-        outFile.writeText(jsonOutput)
+        // 1. Private storage: the evidence artifact the host retrieves with
+        //    `adb shell run-as org.pocketinspect.characterization cat files/characterization_output.json`
+        //    and stores in its run directory as evidence/android_app_evidence.json.
+        val outFile = File(filesDir, AppJsonLogFormatter.OUTPUT_FILE_NAME)
+        outFile.writeBytes(outputBytes)
+        writtenPaths.add(outFile.absolutePath)
 
-        // 2. External app storage (easily accessible via ADB pull without root/run-as)
+        // 2. External app storage: the same bytes, readable by adb without run-as
+        //    (/sdcard/Android/data/org.pocketinspect.characterization/files/characterization_output.json).
         val extDir = getExternalFilesDir(null)
         if (extDir != null) {
-            val extFile = File(extDir, "characterization_output.json")
-            extFile.writeText(jsonOutput)
+            val extFile = File(extDir, AppJsonLogFormatter.OUTPUT_FILE_NAME)
+            extFile.writeBytes(outputBytes)
+            writtenPaths.add(extFile.absolutePath)
         }
 
-        // 3. Logcat output for direct stream capture
-        Log.i("POCKETINSPECT_APP_JSON", jsonOutput)
+        // 3. Logcat: one compact line per record, each below the logcat entry limit, plus the
+        //    artifact paths and SHA-256. A single entry holding the whole report was truncated.
+        for (line in AppJsonLogFormatter.formatLines(jsonOutput, writtenPaths)) {
+            Log.i(AppJsonLogFormatter.LOG_TAG, line)
+        }
     }
 }
