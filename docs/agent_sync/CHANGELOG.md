@@ -2504,3 +2504,50 @@ Step 10E not started.
 - Branch: `claude/step-10d-correction-followup-audit`, from `main` `e918094`.
 - Review documentation only; no implementation or data file was modified.
 - Commit: see `git log -- docs/architecture/step10d_correction_followup_audit.md`.
+
+---
+
+## 2026-10-05 — Antigravity
+
+### Task
+Step 10D Follow-up Correction — Resolved audit findings R-01 through R-14 (`docs/architecture/step10d_correction_followup_audit.md`, audit commit `e57f44f`).
+
+### Changes
+- `scripts/device_characterization/adb_collector.py`:
+  - **R-01 & R-07**: Implemented explicit writing of `evidence/observed_props.json`, `evidence/commands.log`, and `evidence/manifest.json` containing SHA-256 hashes and file sizes for all raw evidence files.
+  - **R-02**: Removed hardcoded `atrace_adb_available` flag. Implemented actual profiling capability probe (`adb shell atrace --list_categories`), recording stdout/stderr/exit code to `evidence/atrace_evidence.txt`. Flag is set ONLY when probe succeeds.
+  - **R-03**: Added explicit ADB connection state classification (`ADB_MISSING`, `NO_DEVICE`, `UNAUTHORIZED`, `OFFLINE`, `MULTIPLE_DEVICES`, `CONNECTED`). Logged all ADB commands to `evidence/commands.log`.
+  - **R-04 & R-07**: Expanded ADB probes for `dumpsys battery`, `dumpsys thermalservice`, `/sys/class/thermal/thermal_zone*`, `cpufreq`, `gpuclk`, `dumpsys media.camera`, and network state probe (`settings get global airplane_mode_on`).
+- `mobile/characterization/`:
+  - **R-05**: Added `settings.gradle.kts`, Gradle wrapper (`gradle/wrapper/gradle-wrapper.properties` with Gradle 8.5), wrapper scripts (`gradlew`, `gradlew.bat`), pinned AGP 8.2.2 and Kotlin 1.9.22 in `build.gradle.kts`. Removed duplicate `package="..."` attribute in `AndroidManifest.xml`.
+  - **R-04**: Added `BatteryTelemetryCollector` and `CameraTelemetryCollector` in `Collectors.kt`. Updated `MainActivity.kt` to serialize evidence to files and Logcat (`POCKETINSPECT_APP_JSON`).
+- `src/monitoring/characterization/collectors.py`:
+  - **R-06**: Fixed `EnergyMeasurementCapabilityChecker` null-value rule for `EXTERNAL_REQUIRED` state (`value = None`). Removed unevidenced `props.get("selected_level")` override.
+  - **R-08**: Updated RAM variant verification to nominal 3 GB range (`2700 MB <= total_ram <= 3300 MB`).
+  - **R-07**: Fixed `soc_model` evidence reference to `evidence/getprop_evidence.txt#ro.soc.model`.
+- `scripts/device_characterization/run_characterization.py`:
+  - **R-03 & R-10**: Added `--require-device` CLI option preventing silent dry-run fallback when a connected device is required. Added mock input isolation raising `ValueError` if synthetic `mock_observed` is passed to a real connected run.
+- `src/monitoring/characterization/report_generator.py`:
+  - **R-11**: Enforced atomic write cleanup to prevent partial/corrupt run files on validation error.
+- `research/results/device_characterization/run_20261005_100000/README.txt` & `run_20261006_100000/README.txt`:
+  - **R-14**: Created README notes explaining pre-audit dry-run status for historical folders.
+- `tests/test_device_characterization_connected_e2e.py`:
+  - **R-12**: Added comprehensive end-to-end unit test suite verifying ADB connection state classification, profiling probes, evidence manifest generation, `--require-device` rejection, and connected-path schema validation.
+
+### Research decisions
+- Maintained D-16 (`absolute_energy_claimed: false`).
+- Retained schema rules and explicit status hierarchy.
+- REAL DEVICE CHARACTERIZATION NOT YET PERFORMED. Software prepared for physical device connection.
+
+### Verification
+- `pytest`: **278 passed** (100% pass rate in 36.72s).
+- Android build configuration: Reproducible Gradle build setup committed (`settings.gradle.kts`, `build.gradle.kts`, `gradlew`, `gradlew.bat`).
+- Connected path end-to-end test (`test_device_characterization_connected_e2e.py`): 6/6 tests passed cleanly.
+
+### Real Device Status
+- **REAL OPPO A5 2020 CHARACTERIZATION: NOT YET PERFORMED.**
+
+### Git
+- Branch: `antigravity/step-10d-followup-correction`
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md`
+

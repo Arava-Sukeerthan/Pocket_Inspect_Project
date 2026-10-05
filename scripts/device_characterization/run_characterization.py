@@ -69,6 +69,7 @@ def run_characterization(
     repeat_index: int = 1,
     mock_observed: Optional[dict] = None,
     dry_run: bool = False,
+    require_device: bool = False,
     overwrite: bool = False,
 ) -> Tuple[Path, dict]:
     """Runs a characterization pass and writes schema-valid output."""
@@ -82,7 +83,7 @@ def run_characterization(
     if not run_id:
         run_id = f"run_{now_utc.strftime('%Y%m%d_%H%M%S')}"
 
-    # F-02: Date mismatch check between run_id and actual start time date
+    # F-02 / R-11: Date mismatch check between run_id and actual start time date
     if "_" in run_id:
         date_part = run_id.split("_")[1]
         if len(date_part) == 8 and date_part.isdigit() and date_part != today_str:
@@ -95,17 +96,29 @@ def run_characterization(
     results_base = ROOT / cfg.get("output", {}).get("results_directory", "research/results/device_characterization")
     output_dir = results_base / run_id
 
-    # F-14: Silent overwrite guard
+    # F-14 / R-11: Silent overwrite guard
     run_file = output_dir / "characterization.json"
     if run_file.exists() and not overwrite:
         raise FileExistsError(f"Run directory '{output_dir}' already contains characterization.json. Silent overwrite refused (F-14).")
 
     # ADB check & raw evidence collection
     adb = ADBCollector()
-    adb_connected = adb.is_device_connected() and not dry_run
-    props: Dict[str, Any] = {}
+    conn_status = adb.get_connection_status()
 
-    if mock_observed:
+    # R-03 / R-10: Connection state handling and device requirement check
+    if require_device and conn_status != "CONNECTED":
+        raise RuntimeError(
+            f"Device execution requested (--require-device) but ADB connection status is '{conn_status}' (R-03 error). "
+            "Connected-device execution cannot silently fall back to dry run."
+        )
+
+    adb_connected = (conn_status == "CONNECTED") and not dry_run
+
+    if adb_connected and mock_observed:
+        raise ValueError("Synthetic mock_observed overrides cannot be merged into a real connected device run (R-10 isolation failure).")
+
+    props: Dict[str, Any] = {}
+    if mock_observed and not adb_connected:
         props.update(mock_observed)
 
     if adb_connected:
@@ -152,10 +165,11 @@ def run_characterization(
         thermal=thermal_cap,
         energy=energy_cap,
         conditions={
-            "charging": props.get("charging", False),
-            "network": "OFFLINE",
+            "charging": props.get("charging_state"),
+            "network": props.get("network_state", "NOT_TESTED"),
             "usb_connected": adb_connected,
             "adb_connected": adb_connected,
+            "adb_connection_status": conn_status,
             "boot_id": boot_id,
             "is_dry_run": not adb_connected,
         },
@@ -163,7 +177,7 @@ def run_characterization(
 
     run_dict = run.to_dict()
 
-    # Process and validate using report generator
+    # Process and validate using report generator (R-11 atomic write)
     generator = CharacterizationReportGenerator()
     res = generator.process_run(run_dict, output_dir=output_dir, overwrite=overwrite)
 
@@ -176,6 +190,7 @@ def main():
     parser.add_argument("--run-id", type=str, default=None, help="Optional run ID")
     parser.add_argument("--repeat-index", type=int, default=1, help="Repeat index (1 or 2)")
     parser.add_argument("--dry-run", action="store_true", help="Execute dry run without connected device")
+    parser.add_argument("--require-device", action="store_true", help="Fail if connected device is unavailable (prevent dry-run fallback)")
     parser.add_argument("--overwrite", action="store_true", help="Force overwrite existing run directory")
     args = parser.parse_args()
 
@@ -185,6 +200,7 @@ def main():
         run_id=args.run_id,
         repeat_index=args.repeat_index,
         dry_run=args.dry_run,
+        require_device=args.require_device,
         overwrite=args.overwrite
     )
     print(f"Characterization run completed successfully.")
