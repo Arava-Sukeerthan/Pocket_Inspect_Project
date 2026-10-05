@@ -2123,3 +2123,91 @@ Step 10C-DR: pre-data-collection decision resolution. Each of D-01 to D-16 is re
 - Branch: `claude/step-10c-decision-resolution`, from `origin/main` `e4b237b`. PRs #15 and #16 were already merged, and `main` is content-identical to `6bc6ba5`, so no stacking was needed.
 - Commit: see `git log -- research/experiments/pre_data_collection_decision_register.md`.
 - Push status: pushed; PR opened against `main`; not merged.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10C-DR review correction: the final pre-data-collection freeze. These are methodological corrections to PR #17 only. No experiments, measurements, model benchmarking, dataset collection or empirical results were produced.
+
+### Corrections and reasons
+- **D-02 frozen** (researcher approval): α = 0.05, two-sided tests, Holm over H1–H5.
+  - Recorded as a **new** pre-data-collection decision, not an earlier project decision.
+  - `configs/research_protocol.yaml` (Step 10A) is unchanged and still shows `to_be_preregistered` as the historical record.
+- **D-03.** Target power frozen at 0.80. The item and run counts stay PILOT-DEPENDENT; the pilot estimates the effect and variability, clustered at item level. Runs are never independent observations.
+- **D-06 revised.**
+  - The C1-equivalence threshold rule is withdrawn.
+  - Replaced by a frozen risk-controlled selective-acceptance procedure: one acceptance-risk target r* for all configurations; candidate thresholds are the calibrated confidences on Calibration-τ; τᵢ is the smallest threshold whose upper Clopper–Pearson bound on accepted-item error is ≤ r*; coverage is reported; the infeasible case is defined.
+  - The numerical r* is UNSET (REQUIRES FUTURE APPROVAL).
+  - Configuration-specific temperature scaling is preserved, and the test set is never used.
+- **D-12 revised.**
+  - Inference latency, verification latency and total per-item decision time are now separate quantities, reported separately.
+  - Verification is no longer forced inside the C1 inference latency. The C1-at-R0 reference now governs only configuration admissibility (inference latency).
+  - A total decision-time budget is imposed only if approved, with a pilot-based freeze procedure.
+  - D-07 eligibility no longer depends on a per-item time budget.
+- **D-16 revised.**
+  - The external battery-side reference is preferred.
+  - An explicit fallback hierarchy is defined: E-1 battery-side reference; E-2 supply-powered external session; E-3 software-relative only, with no absolute energy.
+  - The agreement threshold is now PRE-DATA-COLLECTION DECISION REQUIRED; it is no longer tied by default to the SESOI.
+  - Absolute energy is never forced.
+- **D-10 revised.**
+  - Thermal-status API availability is no longer assumed, and the proposed NONE/LIGHT/MODERATE/SEVERE mapping is removed.
+  - The thermal source is DEVICE-VERIFICATION DEPENDENT (Step 10D). The fallback is temperature plus frequency-capping evidence.
+  - Any platform-level mapping REQUIRES FUTURE APPROVAL after the device's reported levels are observed.
+
+### Files changed
+- `research/experiments/pre_data_collection_decision_register.md`:
+  - new status DEVICE-VERIFICATION DEPENDENT;
+  - the four freeze categories and the §3a classification table;
+  - D-02, D-03, D-06, D-07, D-10, D-12 and D-16 rewritten;
+  - statistical parameters added to the reconciliation;
+  - blockers updated.
+- `configs/pre_data_collection.yaml`: restructured into `frozen_now`, `pilot_dependent`, `device_verification_dependent` and `requires_future_approval`. The only numbers are the approved α and target power.
+- `research/experiments/decision_traceability.csv`: D-02, D-03, D-06, D-10, D-12 and D-16 updated.
+- `tests/test_decision_register.py`: updated for the new config structure; 4 new tests (α/power, threshold rule, latency separation, thermal); mutation-checked.
+
+### Decisions frozen
+- D-02 (α, sidedness, Holm);
+- D-03 target power;
+- the D-04, D-05, D-08, D-09, D-10, D-14 and D-15 rules;
+- the D-06 procedure;
+- the D-07 eligibility and stopping rules;
+- the D-12 separation;
+- the D-16 method, fallback hierarchy, network policy and single-device scope.
+
+### Still open
+- **Pilot-dependent:**
+  - D-01 SESOI;
+  - D-03 counts;
+  - D-07 order;
+  - D-09 sizes;
+  - D-10 thresholds;
+  - D-11;
+  - D-12 inference reference;
+  - D-13;
+  - D-15 margin;
+  - D-16 measured agreement.
+- **Device-verification dependent:**
+  - D-10 thermal source;
+  - D-16 energy level (E-1/E-2/E-3);
+  - on-device trace;
+  - D-13 low-memory behaviour;
+  - D-11 stability.
+- **Requires future approval:**
+  - D-06 r*;
+  - D-16 agreement threshold;
+  - ECE binning rule;
+  - D-12 total budget (if needed);
+  - D-10 thermal mapping (if the API exists);
+  - D-05 requirement floor (deferred).
+
+### Verification
+- `python -m pytest -q`: **251 passed** (247 + 4 new).
+- GC-03, RQ1, the hypotheses, B1–B5, B5-F and the recovery metric are unchanged.
+- Step 10A artefacts unchanged (pinned hashes).
+
+### Git
+- Branch: `claude/step-10c-final-decision-freeze`, from the PR #17 branch head `f81bc69`.
+- Commit: see `git log -- configs/pre_data_collection.yaml`.
+- Push status: pushed; PR opened against `main`; not merged.
