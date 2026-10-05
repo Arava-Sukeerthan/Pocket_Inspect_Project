@@ -15,6 +15,8 @@ from src.literature.gap_analysis import (
     CATEGORY_LABELS,
     COMBINATION_MATRIX_FIELDS,
     GAP_MATRIX_FIELDS,
+    LIMITATION_CAUSES,
+    SCOPE_STATEMENT,
     load_classification_file,
 )
 
@@ -67,7 +69,8 @@ class TestCombinationGapAnalyzer(unittest.TestCase):
             ],
             "candidates": [
                 {"id": "GC-X", "category": "candidate_gap", "title": "t", "primary_combination": "C-1"},
-                {"id": "EL-X", "category": "evidence_limitation", "title": "u"},
+                {"id": "EL-X", "category": "evidence_limitation", "title": "u",
+                 "limitation_causes": ["missing_schema_field"]},
             ],
         }
         self.analyzer = CombinationGapAnalyzer(self.records, self.config, "abc")
@@ -123,6 +126,22 @@ class TestCombinationGapAnalyzer(unittest.TestCase):
     def test_ranking_key_rejected(self):
         bad = dict(self.config, candidates=[{"id": "GC-X", "category": "candidate_gap", "title": "t",
                                              "primary_combination": "C-1", "rank": 1}])
+        with self.assertRaises(ValueError):
+            CombinationGapAnalyzer(self.records, bad)
+
+    def test_camera_input_classified_yes_is_counted(self):
+        # A Yes visual-inspection value (camera/image input) puts the record in scope and can satisfy it.
+        row = self._row("C-2")
+        self.assertIn("P1", row["all_yes_ids"])
+
+    def test_limitation_without_cause_rejected(self):
+        bad = dict(self.config, candidates=[{"id": "EL-X", "category": "evidence_limitation", "title": "u"}])
+        with self.assertRaises(ValueError):
+            CombinationGapAnalyzer(self.records, bad)
+
+    def test_unknown_limitation_cause_rejected(self):
+        bad = dict(self.config, candidates=[{"id": "EL-X", "category": "evidence_limitation", "title": "u",
+                                             "limitation_causes": ["absence_of_work"]}])
         with self.assertRaises(ValueError):
             CombinationGapAnalyzer(self.records, bad)
 
@@ -202,6 +221,29 @@ class TestVisualInspectionScope(unittest.TestCase):
         core = [r["visual_inspection_scope"] for r in self.rows.values() if r["analysis_population"] == "core"]
         self.assertEqual(len(core), 46)
         self.assertEqual((core.count("Yes"), core.count("No"), core.count("Unknown")), (20, 19, 7))
+
+    def test_non_optical_modalities_are_no(self):
+        # Approved definition: point clouds, magnetic flux leakage and ultrasonic sensing are No, not Unknown.
+        for pid in ("P021", "P040", "P048", "P051"):
+            self.assertEqual(self.rows[pid]["visual_inspection_scope"], "No", pid)
+            self.assertEqual(self.rows[pid]["basis_category"], "non-optical inspection input", pid)
+
+    def test_camera_image_video_input_is_yes(self):
+        # Full-text records whose actual inspection input is camera images or video frames.
+        for pid in ("P011", "P015", "P016", "P020"):
+            self.assertEqual(self.rows[pid]["visual_inspection_scope"], "Yes", pid)
+            self.assertEqual(self.rows[pid]["evidence_level"], "full text", pid)
+
+    def test_training_only_images_do_not_make_yes(self):
+        # P002: dashcam video only labels training data; the deployed input is an accelerometer.
+        self.assertEqual(self.rows["P002"]["visual_inspection_scope"], "No")
+        self.assertIn("training", self.rows["P002"]["basis"])
+        self.assertIn("accelerometer", self.rows["P002"]["basis"])
+
+    def test_definition_is_researcher_approved(self):
+        vis = self.config["derived_attributes"]["visual_inspection_scope"]
+        self.assertIn("researcher-approved", vis["status"])
+        self.assertIn("optical image/video/camera", vis["approved_definition"])
 
     def test_non_visual_peripheral_records(self):
         self.assertEqual(self.rows["P002"]["visual_inspection_scope"], "No")
@@ -289,6 +331,21 @@ class TestCommittedGapAnalysis(unittest.TestCase):
         self.assertFalse((GAP_DIR / "research_gap.md").exists())
         for phrase in ("the research gap is", "selected gap", "final gap:", "recommended gap"):
             self.assertNotIn(phrase, md)
+
+    def test_every_candidate_is_corpus_bounded(self):
+        md = self.analyzer.generate_gap_candidates_markdown()
+        self.assertEqual(md.count(f"| Scope | {SCOPE_STATEMENT} |"), len(self.config["candidates"]))
+        for row in self.candidates:
+            self.assertIn(SCOPE_STATEMENT, row["description"])
+        lowered = md.lower()
+        for phrase in ("novel", "the first", "no previous work", "no existing research", "nobody has"):
+            self.assertNotIn(phrase, lowered)
+
+    def test_evidence_limitations_name_their_causes(self):
+        for cand in self.config["candidates"]:
+            if cand["category"] == "evidence_limitation":
+                self.assertTrue(cand["limitation_causes"], cand["id"])
+                self.assertTrue(set(cand["limitation_causes"]) <= set(LIMITATION_CAUSES), cand["id"])
 
     def test_no_numerical_ranking(self):
         for name in GAP_MATRIX_FIELDS + COMBINATION_MATRIX_FIELDS:

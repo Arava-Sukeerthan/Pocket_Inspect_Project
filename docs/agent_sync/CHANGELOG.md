@@ -1145,3 +1145,72 @@ Step 9.7 revision: methodology correction of the candidate-gap analysis before m
 - Branch: `claude/affectionate-ride-9uem3p` (PR #9). Previous commit: `2a4f2e8`.
 - Commit: see `git log -- research/gap_analysis/visual_inspection_scope.csv`.
 - Push status: pushed to the branch; not merged; `main` not modified.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.7 final methodology correction before PR #9 review. Builds on `8622c90`. No merge, no Step 9.8, no final gap.
+
+### Changes
+- **`configs/gap_analysis.yaml`:**
+  - `visual_inspection_scope` carries the researcher-approved operational definition: inspection of a physical object, component, surface, structure or manufactured/industrial item using optical image/video/camera observations as the actual inspection input;
+  - rules updated: no Yes from camera mentions, training-only images, YOLO, segmentation, manufacturing or visualizations; non-optical modalities are No; Unknown is reserved for unstated input;
+  - candidates rewritten with explicit in-scope Yes/No/Unknown counts, a conclusion line, per-field evidence fields and named-paper status lists;
+  - each EL entry now names its `limitation_causes`.
+- **`src/literature/gap_analysis.py`:**
+  - every candidate carries a fixed corpus-bounded scope statement (report and `gap_matrix.csv`);
+  - per-field coverage and named-paper status tables are generated from the data;
+  - limitation causes use a validated vocabulary (Unknown coding, insufficient full text, missing schema field, limited search, unresolved paper evidence), and an EL without a cause is rejected;
+  - the approved definition is shown in the report.
+- **`research/gap_analysis/visual_inspection_scope.csv`:** P021, P040, P048 and P051 bases restated as "non-optical inspection input"; values unchanged (No).
+- **`gap_matrix.csv` and `gap_candidates.md`:** regenerated. `combination_matrix.csv` is unchanged.
+- **`tests/test_gap_analysis.py`:** new tests:
+  - non-optical modalities = No;
+  - camera/image/video input = Yes;
+  - training-only images ≠ Yes (P002);
+  - approved-definition status;
+  - corpus-bounded scope statement on every candidate;
+  - no novelty phrasing;
+  - EL causes required and validated.
+
+### Research decisions
+- **Approved visual-inspection definition** applied. P021 and P040 (point clouds), P048 (magnetic flux leakage) and P051 (ultrasonic) are No, not Unknown. The 7 core Unknown records (P001, P008, P012, P018, P023, P042, P049) stay Unknown because their actual input is not stated.
+- **Core subset preserved at 46.** The 54 records minus P002, P013 (peripheral) minus P010, P024, P026, P035, P036, P052 (survey/review). All remain in `papers.csv`, and their values are not evidence of absence.
+- **Candidate gaps** (unordered; corpus-bounded wording; each states "No complete match found in the analyzed core corpus"):
+  - **GC-01:** 27 in scope (visual Yes 20, Unknown 7).
+    - resource_awareness: Yes 0 / No 4 / Unknown 23; adaptive_inference: Yes 0 / No 4 / Unknown 23.
+    - P011 is No on both; 22/27 unresolved.
+    - Outside-scope counterexamples: P029, P031, P033, P034.
+  - **GC-02:** 27 in scope. energy_evaluation: Yes 0 / No 4 / Unknown 23; thermal_evaluation: Yes 0 / No 4 / Unknown 23.
+    - Verified No: P011, P015, P016, P020.
+    - P007 is an unresolved potential counterexample.
+  - **GC-03:** all four components verified separately (smartphone, visual inspection, runtime adaptation, confidence-aware downstream decision). confidence_gating in scope: Yes 1 (P016) / No 2 / Unknown 24. No paper meets three of the four components.
+- **Evidence limitations EL-01 to EL-06** are kept separate and are not competing gaps:
+  - EL-01: Unknown coding, missing schema field, limited search;
+  - EL-02, EL-03, EL-04: Unknown coding, insufficient full text;
+  - EL-05: unresolved paper evidence (P032), insufficient full text, Unknown coding;
+  - EL-06: missing schema field, limited search.
+- **Unknown** is never treated as No or absence; the high Unknown rate is stated as a limit on candidate strength.
+- **P013** stays excluded from core counting. `accuracy_metrics` stays blank and is never used as a criterion. The approved characteristic values are unchanged.
+
+### Verification
+- `python -m pytest -q`: 63 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 31 columns; 0 duplicate IDs.
+- `papers.csv` SHA-256 `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521` (unchanged); `git diff -- research/literature/` is empty.
+- The generator reproduces the committed outputs. No novelty phrasing appears in the report.
+
+### Uncertain items
+- Researcher review of GC-01 to GC-03 and EL-01 to EL-06.
+- Review of the 7 Unknown visual-inspection records.
+- 3D-print versus general small-component framing.
+- Whether more full-text review or a further search batch is needed.
+
+### Remaining work
+- Researcher review of PR #9. No final gap; `research_gap.md` not created.
+
+### Git
+- Branch: `claude/affectionate-ride-9uem3p` (PR #9). Previous commit: `8622c90`.
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
+- Push status: pushed to the branch; not merged; `main` not modified.

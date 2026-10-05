@@ -64,38 +64,49 @@ core_subset_rationale:
 # ---------------------------------------------------------------------------
 derived_attributes:
   visual_inspection_scope:
-    status: analysis-only (pending researcher review)
+    status: >-
+      researcher-approved operational definition (Step 9.7 methodology
+      correction, 2026-10-05); per-paper values are analysis-only and not a
+      column of papers.csv
+    approved_definition: >-
+      "Visual inspection" means inspection of a physical object, component,
+      surface, structure, or manufactured/industrial item using optical
+      image/video/camera observations as the actual inspection input.
     classification_file: research/gap_analysis/visual_inspection_scope.csv
     column: visual_inspection_scope
     definition:
       yes: >-
-        The paper's actual inspection/detection task uses optical image, video
-        or camera observations to inspect a physical object, component,
-        surface, structure or manufactured/industrial item, and the coded
-        fields of papers.csv (application, dataset, hardware, evidence) state
-        that input explicitly.
+        The actual inspection input is optical image, video or camera data used
+        to inspect a physical object, component, surface, structure or
+        manufactured/industrial item, and the coded fields of papers.csv
+        (application, dataset, hardware, evidence) state that input explicitly.
       no: >-
-        The paper has no inspection task (e.g. mobile-AI benchmarks,
-        adaptive-inference systems on general vision workloads, generic
-        selective-prediction methods), or the actual deployed/evaluated input
-        is non-visual or non-optical (accelerometer, numeric/tabular
-        measurements, magnetic flux leakage, ultrasonic imaging, 3D point
-        clouds only).
+        The actual inspection input is non-optical sensing (accelerometer,
+        numeric/tabular measurements, point clouds, magnetic flux leakage,
+        ultrasonic sensing, physiological or other non-image signals), or the
+        paper has no inspection task (mobile-AI benchmarks, adaptive-inference
+        systems on general vision workloads, generic selective-prediction
+        methods).
       unknown: >-
         The paper has an inspection task, but the available coded evidence
-        does not establish whether its input is visual.
+        does not establish whether its actual inspection input is optical
+        image/video/camera data.
     rules:
       - >-
-        Visual = Yes is not inferred from a camera mention alone, images used
-        only for training labels, the use of YOLO or another vision model, the
-        words "computer vision" or "segmentation", or a manufacturing domain.
-        The actual task input must be stated (e.g. P002: dashcam video only
-        labels training data, so No).
+        Yes is never assigned merely because a paper mentions a camera,
+        contains images used only for training, uses YOLO, uses segmentation,
+        operates in manufacturing or contains visualizations. The actual
+        inspection input must be optical image/video/camera data (e.g. P002:
+        dashcam video only labels training data; the deployed input is an
+        accelerometer, so No).
       - >-
-        Non-optical imaging (ultrasonic, X-ray) and point-cloud-only input are
-        No, because PocketInspect concerns camera-based inspection. This
-        boundary is a definitional choice for researcher review (affects P021,
-        P040, P051).
+        Non-optical inspection modalities are No by the approved definition,
+        not Unknown: P021 and P040 (point-cloud input), P048 (magnetic flux
+        leakage), P051 (ultrasonic sensing).
+      - >-
+        Unknown is reserved for inspection papers whose actual input is not
+        stated in the coded evidence (core: P001, P008, P012, P018, P023, P042,
+        P049). Unknown is never treated as Yes or No.
       - >-
         Camera-viewpoint planning for optical inspection (P041) is Yes; it is
         noted in the basis that no defect detector is evaluated.
@@ -265,40 +276,46 @@ candidates:
     dimensions: [1, 2, 4, 5]
     primary_combination: C-GC01
     supplementary_combinations: [C-A, C-B, C-C, C-F]
+    evidence_fields: [smartphone, visual_inspection_scope, resource_awareness, adaptive_inference, on_device]
+    paper_status: [P011, P001, P029, P031, P033, P034]
     description: >-
-      Within the frozen corpus, no in-scope core paper is coded Yes for
-      smartphone, visual-inspection scope and runtime resource awareness or
-      adaptive inference together. The only paper coded Yes for both
-      smartphone and visual-inspection scope (P011, version of record read) is
-      coded No for resource awareness and adaptive inference. Smartphone papers
-      with runtime adaptation (P029, P033, P034 resource-aware and adaptive;
-      P031 resource-aware through DVFS only) are all outside the
-      visual-inspection scope. For 22 of the 27 in-scope papers the available
-      coding is insufficient to determine the combination.
+      In scope: 27 core papers whose visual_inspection_scope is not No (20 Yes,
+      7 Unknown). Within them, resource_awareness is Yes 0, No 4, Unknown 23
+      and adaptive_inference is Yes 0, No 4, Unknown 23; smartphone is Yes for
+      2 (P001, P011). P011 (smartphone, visual inspection and on-device
+      segmentation; version of record read) is coded No for both
+      resource_awareness and adaptive_inference. P001 (smartphone) has
+      visual_inspection_scope and both runtime fields Unknown (full text
+      inaccessible). No in-scope paper satisfies the combination; for 22 of
+      the 27 the available coding is insufficient to determine it. Outside the
+      visual-inspection scope, smartphone runtime adaptation is coded in P029,
+      P033 and P034 (resource-aware and adaptive) and P031 (resource-aware via
+      DVFS; adaptive_inference No).
+    conclusion: >-
+      No complete match found in the analyzed core corpus. This is not a
+      finding that no such research exists.
     counterexample_assessment: >-
-      No full counterexample. P011 is a partial counterexample (smartphone,
-      visual inspection and on-device inference, without runtime adaptation);
-      it narrows the candidate to runtime adaptation, not smartphone visual
-      inspection as such. P029, P031, P033 and P034 show smartphone runtime
-      adaptation for general vision workloads; the candidate is therefore
-      limited to its application within visual inspection. P001 (smartphone
-      Yes; visual-inspection scope and runtime fields Unknown, full text
-      inaccessible) is unresolved and could be a counterexample.
+      No full counterexample. P011 is a partial counterexample (smartphone
+      visual inspection without runtime adaptation): it narrows the candidate
+      to runtime adaptation, not smartphone visual inspection as such. P029,
+      P031, P033 and P034 are outside-scope counterexamples showing smartphone
+      runtime adaptation on general vision workloads; the candidate is
+      therefore limited to visual inspection. P001 is unresolved and could be a
+      counterexample.
     evidence_basis: >-
       Direct full-text evidence for P011 (version of record), P015, P016, P020
       (versions of record) and P029, P031, P033, P034 (same-version copies).
       P007 is excluded by smartphone = No coded at abstract level. The 22
-      unresolved papers are abstract-level records, mostly with smartphone,
-      resource awareness and adaptive inference Unknown.
+      unresolved papers are abstract-level records.
     evidence_limitations: >-
-      Only one in-scope paper is coded Yes for smartphone and visual-inspection
-      scope. 22 of 27 in-scope papers are unresolved. One search batch, top
-      12-15 results per query, no snowballing. visual_inspection_scope is an
-      analysis-only classification pending researcher review.
+      The 22/27 unresolved rate (23/27 Unknown for each runtime field) limits
+      the strength of this candidate: the observation rests on four papers with
+      verified No values and a single verified smartphone visual-inspection
+      paper. One search batch, top 12-15 results per query, no snowballing.
     gap_type: integration (with deployment context)
     evidence_strength: >-
-      Limited. A direct corpus observation, but it rests on a single verified
-      smartphone visual-inspection paper.
+      Limited. A direct corpus observation, weakened by the high Unknown rate
+      and by resting on one verified smartphone visual-inspection paper.
     not_claimed: >-
       That smartphone visual inspection with runtime adaptation does not exist
       in the wider literature.
@@ -310,33 +327,40 @@ candidates:
     dimensions: [1, 2, 7, 8, 9, 16]
     primary_combination: C-GC02
     supplementary_combinations: [C-D, C-E, C-S1, C-K]
+    evidence_fields: [visual_inspection_scope, smartphone, edge_device, on_device, energy_evaluation, thermal_evaluation]
+    paper_status: [P007, P011, P015, P016, P020]
     description: >-
-      Within the frozen corpus, no in-scope core paper is coded Yes for
-      visual-inspection scope, smartphone/edge/on-device deployment and an
-      energy or thermal evaluation together. Four in-scope papers are coded No
-      for both energy and thermal evaluation after full-text review (P011,
-      P015, P016, P020). Every core paper coded Yes for energy or thermal
-      evaluation is coded No for visual-inspection scope (P006, P028, P029,
-      P030, P031, P032, P034). For 23 of the 27 in-scope papers the available
-      coding is insufficient to determine the combination.
+      In scope: 27 core papers whose visual_inspection_scope is not No (20 Yes,
+      7 Unknown). Within them, energy_evaluation is Yes 0, No 4, Unknown 23 and
+      thermal_evaluation is Yes 0, No 4, Unknown 23; the four No values (P011,
+      P015, P016, P020) come from full-text review. Smartphone/edge/on-device
+      deployment is coded Yes for P001 (smartphone), P007, P011 and P016.
+      P007 (OAK-D on Raspberry Pi; visual inspection and edge Yes) has energy
+      and thermal Unknown because its full text was inaccessible. No in-scope
+      paper satisfies the combination; for 23 of the 27 the available coding
+      is insufficient to determine it. Every core paper coded Yes for energy or
+      thermal evaluation (P006, P028, P029, P030, P031, P032, P034) is outside
+      the visual-inspection scope.
+    conclusion: >-
+      No complete match found in the analyzed core corpus. This is not a
+      finding that such evaluations are absent from the field.
     counterexample_assessment: >-
-      No full counterexample. P007 (visual inspection on an OAK-D/Raspberry Pi
-      edge device; energy and thermal Unknown, full text inaccessible) is a
-      potential counterexample that cannot be resolved and narrows the
-      candidate to "not shown within the corpus". P011 and P016 are one
-      criterion short with a coded No.
+      No full counterexample. P007 is an unresolved potential counterexample
+      (energy and thermal Unknown, full text inaccessible). P011 and P016 are
+      one criterion short with a coded No.
     evidence_basis: >-
       Direct full-text No values for P011, P015, P016 and P020. The energy and
       thermal Yes values outside the scope come from full text (P029, P031,
       P034) and abstracts (P006, P028, P030, P032).
     evidence_limitations: >-
-      Most in-scope papers are coded from abstracts, and abstracts rarely
-      report energy or temperature, so their Unknown values must not be read as
-      No. Only four in-scope papers have verified No values.
+      23/27 in-scope papers are Unknown for energy and for thermal evaluation.
+      Abstracts rarely report energy or temperature, so these Unknown values
+      are not evidence of absence. P007 is unresolved.
     gap_type: evaluation
     evidence_strength: >-
-      Limited. No counterexample is coded, but the observation rests on four
-      verified papers and one unresolved potential counterexample (P007).
+      Limited. No coded counterexample, but only four in-scope papers have
+      verified No values and one potential counterexample (P007) is
+      unresolved.
     not_claimed: >-
       That visual-inspection systems are generally not evaluated for energy or
       thermal behaviour.
@@ -344,36 +368,46 @@ candidates:
     category: candidate_gap
     title: >-
       Limited evidence of integrated smartphone visual inspection combining
-      runtime adaptation with confidence-aware downstream decisions
+      runtime adaptation with confidence-aware downstream decisions within the
+      reviewed corpus
     dimensions: [1, 4, 5, 12, 13, 15]
     primary_combination: C-GC03
     supplementary_combinations: [C-L, C-GC01, C-H]
+    evidence_fields: [smartphone, visual_inspection_scope, adaptive_inference, resource_awareness, confidence_gating, uncertainty]
+    paper_status: [P011, P001, P016, P025, P029, P031, P033, P034]
     description: >-
-      Within the frozen corpus, no in-scope core paper combines smartphone
-      visual inspection, runtime adaptation and a confidence-triggered
-      downstream action, and no paper satisfies three of the four criteria.
-      Each component was checked separately (component table below):
-      smartphone with visual-inspection scope Yes only in P011, which is coded
-      No for runtime adaptation and confidence gating; smartphone runtime
-      adaptation only outside the visual-inspection scope (P029, P031, P033,
-      P034); confidence gating Yes only in P016 (edge 3D-print system; the
-      gate prompts the user to stop the print) and P025 (generic early exit).
+      Components verified separately within the 27 in-scope core papers:
+      (1) smartphone Yes 2 (P001, P011), No 4, Unknown 21; (2) visual
+      inspection Yes 20, Unknown 7; (3) runtime adaptation: adaptive_inference
+      and resource_awareness each Yes 0, No 4, Unknown 23; (4) confidence-aware
+      downstream decision: confidence_gating Yes 1 (P016, a stop-print prompt
+      on an edge 3D-print system, not a smartphone), No 2, Unknown 24. P011,
+      the only paper with (1) and (2) both Yes, is coded No for (3) and (4).
+      Across the whole core subset, smartphone runtime adaptation appears only
+      outside the visual-inspection scope (P029, P031, P033, P034), and the
+      other confidence_gating = Yes paper (P025, generic early exit) is also
+      outside it. No paper satisfies three of the four components.
+    conclusion: >-
+      No complete match found in the analyzed core corpus. This does not
+      establish that the combination is absent outside the corpus.
     counterexample_assessment: >-
-      No full or partial counterexample (no paper meets three of four
-      criteria). The broader variant that also accepts uncertainty estimation
-      (C-L) has no counterexample either. P001 remains unresolved.
+      No full or partial counterexample (no paper satisfies three of the four
+      components). The broader variant accepting uncertainty estimation as the
+      confidence-aware component (C-L) has no counterexample either. P001 is
+      unresolved.
     evidence_basis: >-
-      Direct for P011 (version of record). The component separation is
-      indirect: it is assembled from the Yes records of each component.
+      Direct for P011 (version of record) and P016 (version of record). The
+      component separation is assembled from the Yes records of each
+      component.
     evidence_limitations: >-
-      The coding is insufficient to determine confidence gating for 38 of the
-      46 core papers. The combination was never searched as one query. The
-      observation depends on the same thin smartphone visual-inspection
-      evidence as GC-01.
+      confidence_gating is Unknown for 24 of 27 in-scope papers (38 of the 46
+      core papers); runtime fields are Unknown for 23 of 27. The combination
+      was never searched as one query, and the observation depends on the same
+      thin smartphone visual-inspection evidence as GC-01.
     gap_type: integration
     evidence_strength: >-
-      Limited. The integrated combination does not appear in the corpus, but
-      its components are sparsely and mostly abstract-level coded.
+      Limited. No complete match exists in the corpus, but every component is
+      sparsely and mostly abstract-level coded.
     not_claimed: >-
       That no integrated system of this kind exists outside the corpus.
 
@@ -383,22 +417,24 @@ candidates:
     title: Confidence-triggered recapture or additional view
     dimensions: [11, 12, 13]
     primary_combination: C-H
+    limitation_causes: [unknown_coding, missing_schema_field, limited_search]
     description: >-
       The available coding is insufficient to determine confidence gating for
       38 of the 46 core papers. The two papers coded Yes trigger a stop-print
-      notification (P016) and an early exit (P025); neither triggers recapture
-      or an additional view. The six multi-view papers (P037, P038, P039, P041,
-      P042, P043) are Unknown for confidence gating.
+      prompt (P016) and an early exit (P025); neither triggers recapture or an
+      additional view. The six multi-view papers (P037, P038, P039, P041, P042,
+      P043) are Unknown for confidence gating. The schema does not code which
+      action a gate triggers.
     counterexample_assessment: >-
-      No coded counterexample. The six multi-view papers are partial
-      candidates whose confidence gating is Unknown; any of them could be a
-      counterexample.
+      No coded counterexample; the six multi-view papers are unresolved
+      partial candidates, any of which could be a counterexample.
     evidence_basis: >-
-      Gate actions are read from evidence text (full text for P016, abstract
-      for P025). The multi-view side is abstract-level only.
+      Gate actions read from evidence text (full text for P016, abstract for
+      P025); the multi-view side is abstract-level only.
     evidence_limitations: >-
-      38/46 Unknown for confidence gating; the action type is not a coded
-      field; the targeted Batch 1 query on blur/recapture returned 0 hits.
+      38/46 Unknown for confidence gating; the gate action is not a schema
+      field; the single targeted Batch 1 query on blur/recapture returned 0
+      hits.
     gap_type: evidence limitation
     evidence_strength: Insufficient to support a gap statement.
     not_claimed: That the 38 Unknown papers do not use confidence gating.
@@ -408,19 +444,20 @@ candidates:
     title: Multi-view inspection under resource-aware or on-device execution
     dimensions: [2, 4, 11]
     primary_combination: C-I
+    limitation_causes: [unknown_coding, insufficient_full_text]
     description: >-
       The six multi-view papers are Unknown for resource awareness, smartphone
       and on-device inference. The resource-aware papers read in full text
       (P029, P031, P033, P034) are coded No for multi-view. For 38 of the 46
       core papers the coding is insufficient to determine the combination.
     counterexample_assessment: >-
-      No coded counterexample. Every multi-view paper is a partial candidate
-      with resource awareness Unknown.
+      No coded counterexample; every multi-view paper is an unresolved partial
+      candidate with resource awareness Unknown.
     evidence_basis: Direct No on the resource-aware side; abstract-level Unknown on the multi-view side.
     evidence_limitations: >-
       The multi-view papers were never read in full text, and deployment
       details are often absent from abstracts.
-    gap_type: evidence limitation (possible deployment gap)
+    gap_type: evidence limitation
     evidence_strength: Insufficient to support a gap statement.
     not_claimed: That multi-view inspection papers do not consider resources.
   - id: EL-03
@@ -429,20 +466,21 @@ candidates:
     title: Anomaly detection with resource-aware runtime or edge deployment
     dimensions: [2, 4, 14]
     primary_combination: C-J
+    limitation_causes: [unknown_coding, insufficient_full_text]
     description: >-
       Every anomaly-detection paper (P009, P037, P038, P040, P043, P047, P050)
       is Unknown for resource awareness. The resource-aware papers read in full
       text are coded No for anomaly detection. For 38 of the 46 core papers the
       coding is insufficient to determine the combination.
     counterexample_assessment: >-
-      No coded counterexample. Every anomaly-detection paper is a partial
-      candidate with resource awareness Unknown.
+      No coded counterexample; every anomaly-detection paper is an unresolved
+      partial candidate with resource awareness Unknown.
     evidence_basis: Abstract-level Unknown on the anomaly side; direct No on the resource-aware side.
     evidence_limitations: >-
-      Anomaly-detection papers were not read in full text. Several are datasets
-      or benchmarks (P009, P037, P038), for which deployment fields may not
-      apply.
-    gap_type: evidence limitation (possible deployment gap)
+      Anomaly-detection papers were not read in full text; several are
+      datasets or benchmarks (P009, P037, P038), for which deployment fields
+      may not apply.
+    gap_type: evidence limitation
     evidence_strength: Insufficient to support a gap statement.
     not_claimed: That anomaly-detection work does not address resource constraints.
   - id: EL-04
@@ -451,6 +489,7 @@ candidates:
     title: Uncertainty estimation in edge or on-device inspection deployment
     dimensions: [2, 12]
     primary_combination: C-S3
+    limitation_causes: [unknown_coding, insufficient_full_text]
     description: >-
       All nine uncertainty papers (P045-P051, P053, P054) are Unknown for edge
       and on-device inference. The edge/on-device papers read in full text
@@ -458,13 +497,13 @@ candidates:
       of the 46 core papers the coding is insufficient to determine the
       combination.
     counterexample_assessment: >-
-      No coded counterexample. Every uncertainty paper is a partial candidate
-      with deployment Unknown.
+      No coded counterexample; every uncertainty paper is an unresolved partial
+      candidate with deployment Unknown.
     evidence_basis: Abstract-level Unknown on the uncertainty side; direct No on the edge side.
     evidence_limitations: >-
       Uncertainty papers were not read in full text. P045 and P046 are generic
       selective-prediction methods, not inspection systems.
-    gap_type: evidence limitation (possible deployment gap)
+    gap_type: evidence limitation
     evidence_strength: Insufficient to support a gap statement.
     not_claimed: That uncertainty-aware inspection is not deployed on edge devices.
   - id: EL-05
@@ -474,16 +513,17 @@ candidates:
     dimensions: [5, 8, 9]
     primary_combination: C-S2
     supplementary_combinations: [C-G]
+    limitation_causes: [unresolved_paper_evidence, insufficient_full_text, unknown_coding]
     description: >-
       No core paper is coded Yes for adaptive inference, thermal and energy
-      evaluation together. P032 (adaptive inference and thermal evaluation Yes)
-      is one criterion short with energy evaluation Unknown, and its full text
+      evaluation together. P032 (adaptive inference and thermal evaluation
+      Yes) is one criterion short with energy evaluation Unknown; its full text
       was inaccessible. P028 and P030 are one criterion short with thermal
       evaluation Unknown. Adaptive inference with energy and latency
       evaluation (C-G) has counterexamples (P028, P029, P034).
     counterexample_assessment: >-
       No full counterexample, but P032, P028 and P030 are unresolved partial
-      counterexamples. P032 in particular may resolve the question.
+      counterexamples; P032 in particular may resolve the question.
     evidence_basis: >-
       Direct for P029, P031, P034 (full text); unresolved for P028, P030 and
       P032 (abstract-level; P032 full text inaccessible).
@@ -498,6 +538,7 @@ candidates:
     category: evidence_limitation
     title: Image quality / acquisition robustness and PASS/REVIEW decision outputs
     dimensions: [10, 15]
+    limitation_causes: [missing_schema_field, limited_search]
     description: >-
       These dimensions are not coded in papers.csv, so the frozen corpus
       cannot show whether papers address them. One targeted Batch 1 query
@@ -505,8 +546,8 @@ candidates:
       hits; a single zero-hit query is not evidence of absence.
     evidence_basis: papers.csv schema (no field); search_log.md Batch 1 §1b (one G6 query, 0 hits).
     evidence_limitations: >-
-      A coding and search limitation. Assessing it needs new coding fields or
-      a dedicated search, both outside Step 9.7.
+      Assessing these dimensions needs new coding fields or a dedicated
+      search, both outside Step 9.7.
     gap_type: evidence/search limitation
     evidence_strength: Not assessable from the frozen corpus.
     not_claimed: That the literature lacks image-quality or acquisition-robustness evaluation.
@@ -541,7 +582,7 @@ p013_unresolved:
 
 researcher_review:
   - "Confirm, reword or reject each of GC-01, GC-02 and GC-03, and the reclassification of former GC-04 to GC-09 as evidence limitations EL-01 to EL-06."
-  - "Approve or amend the visual_inspection_scope classification (visual_inspection_scope.csv), in particular the 7 core Unknown records (P001, P008, P012, P018, P023, P042, P049) and the non-optical boundary (P021, P040, P051)."
+  - "Review the per-paper visual_inspection_scope values under the approved definition, in particular the 7 core Unknown records (P001, P008, P012, P018, P023, P042, P049)."
   - "Approve or amend the core-analysis rule (exclusion of P002, P013 and the six review/survey records)."
   - "Decide whether candidate gaps are framed for 3D-printed parts specifically (PROJECT_SPEC.md §1) or small-component visual inspection generally; no 3D-print record in the corpus is coded smartphone = Yes."
   - "Decide whether further full-text review (e.g. P001, P007, P032, the multi-view, anomaly and uncertainty records) or a further search batch is needed before any gap statement."

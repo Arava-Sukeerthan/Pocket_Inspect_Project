@@ -37,6 +37,18 @@ CATEGORY_LABELS = {
     CATEGORY_LIMITATION: "Evidence limitation / unresolved question",
 }
 
+SCOPE_STATEMENT = ("This is a corpus-bounded observation from the verified PocketInspect literature corpus, "
+                   "not a claim that no such work exists elsewhere.")
+
+# Allowed causes of an evidence limitation.
+LIMITATION_CAUSES = {
+    "unknown_coding": "Unknown coding",
+    "insufficient_full_text": "insufficient full text",
+    "missing_schema_field": "missing schema field",
+    "limited_search": "limited search",
+    "unresolved_paper_evidence": "unresolved paper evidence",
+}
+
 # Keys that would turn a candidate list into a ranking or a selection.
 FORBIDDEN_CANDIDATE_KEYS = ("score", "rank", "ranking", "priority", "final", "selected", "weight")
 
@@ -199,6 +211,15 @@ class CombinationGapAnalyzer:
             for key in cand:
                 if key.lower() in FORBIDDEN_CANDIDATE_KEYS:
                     raise ValueError(f"{cand.get('id')}: ranking/selection key '{key}' is not allowed")
+            causes = cand.get("limitation_causes", [])
+            if cand.get("category") == CATEGORY_LIMITATION and not causes:
+                raise ValueError(f"{cand.get('id')}: an evidence limitation must name its limitation_causes")
+            for cause in causes:
+                if cause not in LIMITATION_CAUSES:
+                    raise ValueError(f"{cand.get('id')}: unknown limitation cause '{cause}'")
+            for field in cand.get("evidence_fields", []):
+                if field not in set(BOOLEAN_FIELDS) | set(self.derived):
+                    raise ValueError(f"{cand.get('id')}: unknown evidence field '{field}'")
             if cand.get("category") not in CATEGORY_LABELS:
                 raise ValueError(f"{cand.get('id')}: invalid category '{cand.get('category')}'")
             for cid in [cand.get("primary_combination")] + list(cand.get("supplementary_combinations", [])):
@@ -365,7 +386,7 @@ class CombinationGapAnalyzer:
             rows.append({
                 "candidate_gap": f"{cand['id']}: {_text(cand['title'])}",
                 "category": CATEGORY_LABELS[cand["category"]],
-                "description": _text(cand.get("description")),
+                "description": f"{_text(cand.get('description'))} Scope: {SCOPE_STATEMENT}",
                 "primary_combination": combo["id"],
                 "criteria": ev["criteria"],
                 "supporting_papers": ev["excluded_by_no_ids"],
@@ -375,7 +396,7 @@ class CombinationGapAnalyzer:
                 "no_count": ev["excluded_by_no_count"],
                 "unknown_count": ev["unresolved_count"],
                 "evidence_basis": _text(cand.get("evidence_basis")),
-                "evidence_limitations": _text(cand.get("evidence_limitations")),
+                "evidence_limitations": self._limitations_text(cand),
                 "visual_inspection_basis": self._visual_basis(combo, ev),
                 "researcher_review_status": REVIEW_STATUS,
             })
@@ -387,7 +408,7 @@ class CombinationGapAnalyzer:
         return {
             "candidate_gap": f"{cand['id']}: {_text(cand['title'])}",
             "category": CATEGORY_LABELS[cand["category"]],
-            "description": _text(cand.get("description")),
+            "description": f"{_text(cand.get('description'))} Scope: {SCOPE_STATEMENT}",
             "primary_combination": "None",
             "criteria": na,
             "supporting_papers": "None",
@@ -397,7 +418,7 @@ class CombinationGapAnalyzer:
             "no_count": "n/a",
             "unknown_count": "n/a",
             "evidence_basis": _text(cand.get("evidence_basis")),
-            "evidence_limitations": _text(cand.get("evidence_limitations")),
+            "evidence_limitations": CombinationGapAnalyzer._limitations_text(cand),
             "visual_inspection_basis": "Not used",
             "researcher_review_status": REVIEW_STATUS,
         }
@@ -439,6 +460,34 @@ class CombinationGapAnalyzer:
             if r.get("paper_id") == pid:
                 return r
         return None
+
+    @staticmethod
+    def _limitations_text(cand: Dict[str, Any]) -> str:
+        causes = [LIMITATION_CAUSES[c] for c in cand.get("limitation_causes", [])]
+        text = _text(cand.get("evidence_limitations"))
+        return f"Causes: {', '.join(causes)}. {text}" if causes else text
+
+    def _field_lines(self, combo: Dict[str, Any], fields: List[str]) -> List[str]:
+        """Per-field (not per-group) Yes/No/Unknown coverage inside the combination's scope."""
+        lines = []
+        scoped = [r for r in self.primary_core_records() if self.in_scope(r, combo)]
+        for field in fields:
+            vals = {YES: [], NO: [], UNKNOWN: []}
+            for r in scoped:
+                vals[self.field_value(r, field)].append(r["paper_id"])
+            lines.append(f"| `{field}` | {len(vals[YES])} | {len(vals[NO])} | {len(vals[UNKNOWN])} | "
+                         f"{', '.join(vals[YES]) or '—'} | {', '.join(vals[NO]) or '—'} |")
+        return lines
+
+    def _status_lines(self, pids: List[str], fields: List[str]) -> List[str]:
+        lines = []
+        for pid in pids:
+            rec = self._record(pid)
+            if rec is None:
+                raise ValueError(f"paper_status: unknown paper {pid}")
+            vals = ", ".join(f"{f}={self.field_value(rec, f)}" for f in fields)
+            lines.append(f"| {pid} | {self.population_of(pid)} | {vals} |")
+        return lines
 
     def _component_lines(self, combo: Dict[str, Any]) -> List[str]:
         """Per-criterion Yes/No/Unknown coverage inside the combination's scope."""
@@ -519,6 +568,9 @@ class CombinationGapAnalyzer:
             add(f"**`visual_inspection_scope`** ({_text(vis.get('status'))}). Per-paper values and their basis: "
                 f"[`{Path(vis.get('classification_file', '')).name}`]({Path(vis.get('classification_file', '')).name}).")
             add("")
+            if vis.get("approved_definition"):
+                add(f"> **Approved definition:** {_text(vis['approved_definition'])}")
+                add("")
             for key in ("yes", "no", "unknown"):
                 if vis.get("definition", {}).get(key):
                     add(f"- **{key.capitalize()}**: {_text(vis['definition'][key])}")
@@ -558,7 +610,7 @@ class CombinationGapAnalyzer:
             add(f"### {cand['id']}: {_text(cand['title'])}")
             add("")
             if cand.get("formerly"):
-                add(f"_Formerly {cand['formerly']} in the first Step 9.7 version._")
+                add(f"_Formerly {cand['formerly']} in the initial Step 9.7 version._")
                 add("")
             if not cand.get("primary_combination"):
                 add("| Item | Content |")
@@ -569,7 +621,9 @@ class CombinationGapAnalyzer:
                                    ("Evidence strength (descriptive)", "evidence_strength"),
                                    ("Not claimed", "not_claimed")):
                     add(f"| {label} | {_text(cand.get(key))} |")
+                add(f"| Limitation causes | {', '.join(LIMITATION_CAUSES[c] for c in cand.get('limitation_causes', []))} |")
                 add("| Counts | Not assessable: the dimension is not coded in `papers.csv` |")
+                add(f"| Scope | {SCOPE_STATEMENT} |")
                 add(f"| Researcher-review status | {REVIEW_STATUS} |")
                 add("")
                 return
@@ -595,9 +649,31 @@ class CombinationGapAnalyzer:
             add(f"| Visual-inspection basis | {self._visual_basis(combo, ev)} |")
             add(f"| Gap type | {_text(cand.get('gap_type'))} |")
             add(f"| Evidence strength (descriptive) | {_text(cand.get('evidence_strength'))} |")
+            if cand.get("conclusion"):
+                add(f"| Conclusion | {_text(cand['conclusion'])} |")
+            if cand.get("limitation_causes"):
+                add(f"| Limitation causes | {', '.join(LIMITATION_CAUSES[c] for c in cand['limitation_causes'])} |")
             add(f"| Not claimed | {_text(cand.get('not_claimed'))} |")
+            add(f"| Scope | {SCOPE_STATEMENT} |")
             add(f"| Researcher-review status | {REVIEW_STATUS} |")
             add("")
+            if cand.get("evidence_fields"):
+                add("Per-field coverage inside the scope of the primary combination "
+                    "(Unknown means the coding is insufficient, not absence):")
+                add("")
+                add("| Field | Yes | No | Unknown | Yes records | No records |")
+                add("| :-- | --: | --: | --: | :-- | :-- |")
+                md.extend(self._field_lines(combo, cand["evidence_fields"]))
+                add("")
+            if cand.get("paper_status"):
+                fields = list(dict.fromkeys([f for g in combo["criteria"] for f in g] +
+                                            list(cand.get("evidence_fields", []))))
+                add("Status of named papers (coded values):")
+                add("")
+                add("| Paper | Population | Values |")
+                add("| :-- | :-- | :-- |")
+                md.extend(self._status_lines(cand["paper_status"], fields))
+                add("")
             add("Component coverage inside the scope of the primary combination:")
             add("")
             add("| Criterion | Yes | No | Unknown | Yes records |")

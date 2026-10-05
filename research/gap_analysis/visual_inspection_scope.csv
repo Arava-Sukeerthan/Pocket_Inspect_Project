@@ -19,7 +19,7 @@ P017,Yes,core,explicit optical image/video/camera input,abstract,dataset 'ABS an
 P018,Unknown,core,inspection task; image/camera input not stated in coded fields,abstract,application 'Real-time detection of five common FFF printing defects'; dataset 'Deliberately designed defect dataset'. Input modality not stated in coded fields (abstract only).
 P019,Yes,core,explicit optical image/video/camera input,abstract,evidence 'Camera images classified by CNN'; hardware 'Camera integrated with 3D printer'.
 P020,Yes,core,explicit optical image/video/camera input,full text,Full text: Raspberry Pi camera images of printed layers classified on a PC workstation.
-P021,No,core,non-optical or non-image input,abstract,dataset 'Synthetic 3D point clouds with defects'; application 'Geometric defect detection ... from 3D point clouds'.
+P021,No,core,non-optical inspection input,abstract,Point-cloud input: dataset 'Synthetic 3D point clouds with defects'; application 'Geometric defect detection ... from 3D point clouds'. Non-optical modality: No under the approved definition.
 P022,Yes,core,explicit optical image/video/camera input,abstract,"dataset 'Defect images from Taguchi L9 design ...'; application 'Warping, stringing and cracking detection in 3D-printed PLA/ABS parts'."
 P023,Unknown,core,inspection task; image/camera input not stated in coded fields,abstract,application 'Real-time monitoring and autonomous correction of FDM extrusion errors'; dataset and hardware Unknown. Sensing modality not stated in coded fields (abstract only).
 P024,Unknown,review/survey,review/survey (not counted),abstract,Review: 'Review of machine learning across the additive manufacturing workflow'; visual scope not established. Not counted in core gap analysis.
@@ -38,7 +38,7 @@ P036,No,review/survey,review/survey (not counted),abstract,Review: 'Review of ef
 P037,Yes,core,explicit optical image/video/camera input,abstract,"dataset 'Real-IAD (150K high-resolution images, 30 objects)'; multi-view industrial anomaly detection benchmark."
 P038,Yes,core,explicit optical image/video/camera input,abstract,dataset 'MANTA (137.3K images ...; 5 viewpoints per object)'; evidence 'each image is captured from five distinct viewpoints'.
 P039,Yes,core,explicit optical image/video/camera input,abstract,evidence 'completes imaging of the cap's outer side in four views'; hardware 'four-view imaging system'.
-P040,No,core,non-optical or non-image input,abstract,application 'Surface defect identification from 3D point clouds'; evidence states the method classifies defects on 3D point clouds and argues against image-based input.
+P040,No,core,non-optical inspection input,abstract,Point-cloud input: application 'Surface defect identification from 3D point clouds'; evidence states the method classifies defects on 3D point clouds. Non-optical modality: No under the approved definition.
 P041,Yes,core,explicit optical image/video/camera input,abstract,application 'Camera viewpoint placement for model-based optical surface inspection'; evidence 'well-placed camera viewpoints for inspection'. Planning task: no defect detector is evaluated.
 P042,Unknown,core,inspection task; image/camera input not stated in coded fields,abstract,application 'Evaluation of automated inspection viewpoint planning vs expert plans'; dataset 'Various objects'. Sensor modality not stated in coded fields.
 P043,Yes,core,explicit optical image/video/camera input,abstract,"evidence 'features from multi-view RGB images and corresponding point clouds'; datasets MVTec3D-AD, Eyecandies."
@@ -46,10 +46,10 @@ P044,Yes,core,explicit optical image/video/camera input,abstract,"evidence 'loca
 P045,No,core,not an inspection task,abstract,application 'Selective classification (reject option) with guaranteed risk' (generic method).
 P046,No,core,not an inspection task,abstract,application 'End-to-end training of classification with integrated rejection' (generic method).
 P047,Yes,core,explicit optical image/video/camera input,abstract,evidence 'trains only on defect-free images with synthetic multi-scale defects'; PCB defect detection.
-P048,No,core,non-optical or non-image input,abstract,dataset 'Magnetic flux leakage signals from dedicated experimental setup'.
+P048,No,core,non-optical inspection input,abstract,Magnetic flux leakage input: dataset 'Magnetic flux leakage signals from dedicated experimental setup'. Non-optical modality: No under the approved definition.
 P049,Unknown,core,inspection task; image/camera input not stated in coded fields,abstract,application 'Crack boundary detection with epistemic and aleatoric uncertainty'; dataset 'Benchmark crack datasets (names not in abstract)'. Input modality not stated in coded fields.
 P050,Yes,core,explicit optical image/video/camera input,abstract,application 'Pixel-level visual anomaly detection' (pixel-level output on visual data).
-P051,No,core,non-optical or non-image input,abstract,dataset 'Simulated ... and experimental ultrasonic images' (non-optical NDE imaging; outside the optical-camera definition).
+P051,No,core,non-optical inspection input,abstract,Ultrasonic sensing input: dataset 'Simulated (hybrid FE/ray model) and experimental ultrasonic images'. Non-optical modality: No under the approved definition.
 P052,No,review/survey,review/survey (not counted),abstract,Review: 'Review of uncertainty quantification in deep learning'. Not counted.
 P053,Yes,core,explicit optical image/video/camera input,abstract,dataset 'Images from Hefei-Fuzhou high-speed railway line'; contact wire support defect detection.
 P054,Yes,core,explicit optical image/video/camera input,abstract,dataset 'Small casting image dataset'; casting product defect classification.
