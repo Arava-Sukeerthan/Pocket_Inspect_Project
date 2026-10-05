@@ -2877,3 +2877,56 @@ Base commit: `ff1a68f`
 - Branch: `antigravity/step-10d-final-correction-round5`
 - Base commit: `ff1a68f`
 - Push status: pending commit & push
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10D Correction Round 6: implementation of the six findings (P5-01 to P5-06) from the independent review of Antigravity's Round 5 commit `f4c98c1`. Claude Code acted as the implementation agent for this round only; an independent review of the final commit is still required.
+
+### Changes
+- `scripts/device_characterization/adb_collector.py`
+  - P5-01: `_normalize_app_output()` now returns one record per known app metric (`state`, `value`, `unit`, `error_message`).
+  - P5-01: a new `_merge_app_observations()` applies an app value only when no host value exists, and sets `<metric>_is_app_derived` only in that case.
+  - P5-04: only an explicit list of app metrics is mapped. Generic item fields (`state`, `value`, `verified`, `metric`, `report_status`, …) and section names are no longer copied into `observed_props`.
+- `src/monitoring/characterization/collectors.py`
+  - P5-01: evidence citations depend only on whether the final value came from the app. The earlier inference ("a host probe failed, so the value must be from the app") is removed.
+  - P5-02: a non-AVAILABLE app state (`API_UNSUPPORTED`, `UNAVAILABLE`, `ERROR`) for `thermal_status_api` is preserved, with a null value and `verified: false`. `thermal_status_api_available` is set only from an AVAILABLE app result.
+  - P5-03: an app `camera_probe` ERROR, or a non-AVAILABLE `camera_<id>_hardware_level`, becomes the camera result's state, keeping the error message and citing `android_app_evidence.json#<metric>`.
+- `configs/device_characterization.yaml`
+  - P5-05: new `run_status_rules.mandatory_probes: [getprop, meminfo]`, taken from protocol §2 (observed identity, variant check) and §9 criterion 2.
+  - `ABORTED` is documented as unused, because the protocol defines no abort workflow.
+- `scripts/device_characterization/run_characterization.py`
+  - P5-05: `_determine_run_status()` reads the mandatory probes from the config. A connected run where one failed → `FAILED`; otherwise `COMPLETE`; no device → `DRY_RUN`. The validity rule is unchanged from Round 5; it is now configured and documented instead of hard-coded.
+- `tests/test_device_characterization_connected_e2e.py`
+  - New tests, run through the real path: synthetic ADB transport → parsers → normalizer and merge → collectors → report generator → `characterization.json`. They cover P5-01 (host wins with host evidence; app fallback with app evidence; host failure without app data), P5-02 (`API_UNSUPPORTED`, `UNAVAILABLE`, `ERROR`, `AVAILABLE`), P5-03, P5-04 and P5-05.
+  - The final assertion of `test_p03_unmocked_collector_e2e_pipeline` previously passed only because a host value was cited to the app file, which was the P5-01 bug. It now handles records with no `evidence_ref`.
+- `docs/agent_sync/CHANGELOG.md` (P5-06)
+  - Merged `main` and resolved the conflict, keeping every entry. Claude's round-2 review entry from `main` is placed before Antigravity Rounds 3–5, in chronological order.
+  - No historical entry was edited.
+
+### Corrections to earlier entries (append-only; the old entries are left as written)
+- **Round 5 entry**, "Fallback values derived from on-device Android telemetry cite `evidence/android_app_evidence.json`": that held only when the host probe failed. At `f4c98c1`, a host value was also cited to the app file whenever the app reported the same metric. From this round:
+  - a host-selected value cites host evidence;
+  - only an app value used because the host probe failed or was absent cites `android_app_evidence.json#<metric>`.
+- **Round 5 implementation report**, which claimed `battery_level_pct` and `battery_health` were integrated: those metrics do not exist in the Kotlin app, the Python pipeline or the tests. The app battery metrics are `battery_level_percent`, `battery_voltage`, `battery_temperature` and `is_charging`. `is_charging` is not consumed by any collector.
+- **Rounds 2–5 entries**, "Push status: pending commit & push": these are stale. Those commits are on origin (`3f4b7aa`, `6673058`, `ff1a68f`, `f4c98c1`).
+
+### Verification
+- Full suite run twice: 309 passed, 309 passed. `git status` was clean after both runs. `research/results/device_characterization/` holds only the two historical dry-run folders, and `device_capability_matrix.md` is unchanged.
+- Mutation check: putting the Round 5 merge behaviour back in a scratch plugin (not committed) makes 6 of the new tests fail: both P5-01 tests, the three P5-02 state tests, and P5-03.
+- No test has statements after a `return` (syntax-tree check over `tests/`).
+- Android build: not executed. There is no Android SDK, and Google's Maven server is blocked in this environment. The wrapper is unchanged.
+
+### Research decisions
+- None. No change to GC-03, the RQs, the hypotheses, C1–C4, R0–R3, r*, D-01 to D-16, or the protocol and schema under `research/`.
+- The config addition only records the existing run-status rule.
+
+### Real device status
+- OPPO A5 2020 connected: NO. Physical characterization: NO. Real-device evidence: NONE.
+
+### Git
+- Branch: `claude/step-10d-correction-round6`, from `f4c98c1`, with `main` (`5d750cf`) merged in.
+
+Step 10E not started.
