@@ -1,0 +1,17 @@
+decision_id,decision,related_RQ,related_hypothesis,related_protocol_section,status,freeze_point,evidence,impact
+D-01,Smallest meaningful effect (SESOI),RQ1;RQ2;RQ3;RQ5;RQ6,H1;H2;H3;H5,experimental_protocol.md §6; register §4 D-01,PILOT-DEPENDENT,FP-1,Step 10A hypotheses §1; Step 10C §6,Practical significance; recovery denominator; precision margin; energy tolerance
+D-02,Significance level,RQ1-RQ6,H1;H2;H3;H4;H5,experimental_protocol.md §8; register §4 D-02,PRE-DATA-COLLECTION FREEZE,FP-0,configs/research_protocol.yaml statistics.significance_level,All confirmatory tests; power
+D-03,Statistical power and sample size,RQ3;RQ1,H2,experimental_protocol.md §7; register §4 D-03,PILOT-DEPENDENT,FP-1,Step 10C §7 pilot procedure,Test-split size; runs per condition
+D-04,Resource-cost metric for ladder ordering,RQ2,H1;H5,model_selection_protocol.md §2 step 5; register §4 D-04,RESOLVED,FP-2,Step 10B model_ladder.md S3,C1-C4 ordering (identities TO BE EMPIRICALLY DETERMINED)
+D-05,Minimum inspection requirement,RQ2,H1,model_selection_protocol.md §2 step 6; register §4 D-05,RESOLVED,FP-2,Step 10C ladder step 6,Ladder admissibility
+D-06,Confidence threshold rule,RQ3;RQ4,H2;H4,confidence_verification_protocol.md §3; register §4 D-06,RESOLVED,FP-3,Step 10C confidence protocol §3,"Thresholds for B4, B5, B5-F"
+D-07,Verification action order,RQ3;RQ5,H2;H3,confidence_verification_protocol.md §4-5; register §4 D-07,PILOT-DEPENDENT,FP-2,Step 10C confidence protocol §5,Verification behaviour and cost
+D-08,Additional-view combination,RQ3,H2,confidence_verification_protocol.md §5; register §4 D-08,RESOLVED,FP-0,"Step 10B dataset_selection.md §5 (label semantics, V-05)",A2 decisions
+D-09,Data split proportions,RQ1-RQ6,H1;H2;H4,confidence_verification_protocol.md §1; register §4 D-09,PILOT-DEPENDENT,FP-1,Step 10C confidence protocol §1,All splits; leakage control
+D-10,Resource-state classification rule,RQ2,H1;H5,resource_states.md §3-5; register §4 D-10,RESOLVED,FP-0 (rule); FP-1 (thresholds),Step 10C resource_states.md,R0-R3 for E1/E2
+D-11,Controlled pressure mechanism,RQ2;RQ5,H1;H3;H5,resource_states.md §7; register §4 D-11,PILOT-DEPENDENT,FP-1,Step 10C resource_states.md §7,Manipulated factor
+D-12,Per-item time budget,RQ5;RQ6,H3;H5,resource_states.md §8; register §4 D-12,PILOT-DEPENDENT,FP-2,Step 10C admissibility criteria; F3/F4,Admissibility; action feasibility
+D-13,Model memory residency,RQ2;RQ5,H1;H3,resource_states.md §8; register §4 D-13,PILOT-DEPENDENT,FP-1,Step 10C resource_states.md §8,Switch latency; A3 feasibility
+D-14,Repeated runs and McNemar,RQ2;RQ3;RQ6,H1;H2;H5,experimental_protocol.md §8; register §4 D-14 and §5,RESOLVED,FP-0,Step 10A H1/H2 tests; Step 10C refinement issue 1,Validity of paired accuracy tests
+D-15,Recovery and precision,RQ3;RQ1,H2,experimental_protocol.md §6; register §4 D-15,RESOLVED,FP-0 (rule); FP-1 (margin),Step 10C refinement issue 3,H2 support condition
+D-16,"Energy validation, network, additional devices",RQ5;RQ6,H3;H5,measurement_protocol.md §4; generalization_framework.md §4; register §4 D-16,RESOLVED,FP-1 (energy values),Step 10B/10C measurement docs,Energy outcomes; telemetry; scope

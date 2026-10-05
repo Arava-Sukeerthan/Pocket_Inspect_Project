@@ -2060,3 +2060,66 @@ D-01 to D-16 (`experimental_protocol.md` §14). They include:
 - Branch: `claude/step-10c-generalizable-experimental-protocol`. It is based on the Step 10B branch head `ac7fda6`, because PR #15 is not yet merged, so this PR is stacked on #15.
 - Commit: see `git log -- research/experiments/experimental_protocol.md`.
 - Push status: pushed; PR opened against `main`; not merged.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10C-DR: pre-data-collection decision resolution. Each of D-01 to D-16 is resolved, frozen as a procedure, or explicitly deferred. **Methodology only.** No experiments, measurements, model benchmarking, dataset collection or empirical results were produced.
+
+### Changes
+- **`research/experiments/pre_data_collection_decision_register.md` (new, canonical).** It contains:
+  - a status legend and the ID mapping to Step 10C (renumbered D-01 to D-16; no item dropped);
+  - the 9-column summary register;
+  - the detailed resolution of each decision;
+  - the statistical reconciliation table;
+  - freeze points FP-0 to FP-4;
+  - the blockers before Step 10D.
+- **`configs/pre_data_collection.yaml` (new).** Frozen rules only. No numerical parameters. Open items are listed under `not_frozen` with their status.
+- **`research/experiments/decision_traceability.csv` (new).** D-01 to D-16, with RQ, hypothesis, protocol section, status, freeze point, evidence and impact.
+- **Step 10C pointers.**
+  - `research/experiments/experimental_protocol.md` §14: a note pointing to the register (the table is unchanged).
+  - `configs/experiment_protocol.yaml`: a `decision_register` key.
+- **Tests.**
+  - `tests/test_decision_register.py` (new): 11 tests, mutation-checked.
+  - `tests/test_dataset_device_model.py` and `tests/test_research_protocol.py`: the `research/experiments/` allow-list now includes the two new documents.
+
+### Decision status
+- **RESOLVED:**
+  - D-04: latency as the primary ordering metric; no composite score; tie rule; minimum rung rule.
+  - D-05: data-derived no-skill floors; the requirement-based floor is DEFERRED.
+  - D-06: upper Clopper–Pearson bound on selective error ≤ C1's error on Calibration-τ; B4 uses the B2 configuration; B5-F uses the same rule on pooled outputs.
+  - D-08: any-view max fusion, conditional on V-05.
+  - D-10: classification rule; thresholds PILOT-DEPENDENT.
+  - D-14: item-aggregated sign-flip permutation test with cluster bootstrap; McNemar only where valid; run blocks for cost outcomes.
+  - D-15: recall recovery preserved, plus a precision non-inferiority safeguard.
+  - D-16: Bland–Altman agreement tied to the energy SESOI; fully offline; USB disconnected for battery runs; OPPO only.
+- **PRE-DATA-COLLECTION FREEZE** (researcher approval needed): D-02 (PROPOSAL: two-sided family-wise α = 0.05 with Holm). Also the D-10 thermal-status mapping and the ECE binning rule.
+- **PILOT-DEPENDENT:**
+  - D-01: "NO NUMERICAL VALUE IS JUSTIFIED BEFORE PILOT CHARACTERIZATION";
+  - D-03 (power PROPOSAL 0.80; sample size from pilot);
+  - D-07, D-09, D-11 (provisional primary: scripted background compute load), D-12 (C1 median per-item time at R0), D-13.
+- **NOT APPLICABLE:** none.
+
+### Statistical reconciliation
+- H1, H2, H2.b and H5: "Step 10A method refined because of repeated/clustered design".
+- H3, H4, RQ1 and Holm: "Step 10A method retained".
+- The Step 10A hypotheses text is unchanged.
+
+### Unresolved / pilot-dependent
+- FP-0 approvals: α, power, thermal mapping, ECE binning.
+- G2 (V-01, V-03, V-05) and device verification (V-07 to V-10, V-13).
+- Energy reference (V-11).
+- G3 (Stage 2) and G4 (ladder selection).
+- Pilot-dependent values close at FP-1 and FP-2.
+
+### Verification
+- `python -m pytest -q`: **247 passed** (236 + 11 new).
+- GC-03, RQ1, B1–B5, B5-F and the recovery metric are unchanged.
+- Step 10A artefacts unchanged (pinned hashes); `papers.csv` unchanged.
+
+### Git
+- Branch: `claude/step-10c-decision-resolution`, from `origin/main` `e4b237b`. PRs #15 and #16 were already merged, and `main` is content-identical to `6bc6ba5`, so no stacking was needed.
+- Commit: see `git log -- research/experiments/pre_data_collection_decision_register.md`.
+- Push status: pushed; PR opened against `main`; not merged.

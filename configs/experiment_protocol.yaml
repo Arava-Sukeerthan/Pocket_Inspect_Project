@@ -96,5 +96,6 @@ gates:
   G3: {status: OPEN_REQUIRES_VERIFICATION, protocol_specified: true, dataset_collected: false}
   G4: {status: OPEN_REQUIRES_VERIFICATION, methodology_defined: true, empirical_selection_done: false}
 
+decision_register: research/experiments/pre_data_collection_decision_register.md   # Step 10C-DR (renumbered; mapping in register section 2)
 decisions_required: [D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16]
 results: []

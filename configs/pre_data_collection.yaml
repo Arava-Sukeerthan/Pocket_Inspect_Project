@@ -1,0 +1,87 @@
+# Step 10C-DR: pre-data-collection decisions.
+#
+# Contains ONLY decisions that are frozen (status RESOLVED) as rules. It holds
+# no numerical experimental parameter: every value that needs measurement or
+# researcher approval is listed under `not_frozen` with its status and has no
+# value here. Canonical register:
+# research/experiments/pre_data_collection_decision_register.md
+
+step: "10C-DR"
+status_values: [RESOLVED, PRE-DATA-COLLECTION FREEZE, PILOT-DEPENDENT, DEFERRED, NOT APPLICABLE]
+freeze_points: [FP-0, FP-1, FP-2, FP-3, FP-4]
+unchanged: [GC-03, RQ1, B1, B2, B3, B4, B5, B5-F_ablation, recovery_metric]
+
+frozen:
+  D-04:
+    primary_cost_metric: median_steady_state_per_item_latency_at_R0_on_device
+    secondary_roles: {peak_memory: admissibility_gate, energy_per_item: order_confirmation_if_validated, thermal_rise: reported, cpu_gpu_utilisation: reported}
+    composite_score: not_used
+    tie_rule: [cluster_bootstrap_latency_ci_includes_zero, lower_peak_memory, higher_validation_recall]
+    minimum_rungs_for_adaptation: two_or_more_admissible_rungs_else_stop_and_report
+    ladder_identities: TO BE EMPIRICALLY DETERMINED
+  D-05:
+    floors: [auroc_lower_ci_above_no_skill, precision_lower_ci_above_validation_prevalence, recall_lower_ci_above_false_positive_rate]
+    evaluation_split: validation
+    requirement_based_floor: DEFERRED
+  D-06:
+    rule: smallest_tau_with_upper_clopper_pearson_selective_error_on_calibration_tau_at_most_C1_error_on_calibration_tau
+    fallback_if_unattainable: verify_all_subject_to_D-07_cap
+    b4_configuration: same_as_B2
+    b5f_rule: same_rule_on_pooled_calibration_tau_outputs_equal_weight_per_configuration
+    uses_test_set: false
+  D-08:
+    primary_fusion: max_calibrated_defect_probability_across_considered_views
+    sensitivity_fusion: mean_calibrated_probability
+    condition: V-05_confirms_item_label_is_any_view_anomalous
+  D-09_procedure:
+    unit: physical_item
+    stratification: [object_category, defect_status]
+    official_real_iad_split_reused: false
+    allocation_order: [test_from_D-03, calibration_tau_from_D-06_feasibility, calibration_T_equal_to_calibration_tau, validation, train_remainder]
+    leakage_checks: [no_item_in_two_splits, all_views_same_split, manifests_hashed]
+  D-10_rule:
+    dimensions: [thermal, battery, memory, compute]
+    excluded_from_state: [latency, accuracy, confidence]
+    aggregation: maximum_of_dimension_levels
+    unavailable_dimension: removed_for_whole_study_at_FP-1
+    transient_gap: hold_last_valid_level_and_flag_telemetry_gap
+    escalation: may_skip_levels
+    de_escalation: one_level_at_a_time
+  D-14:
+    unit_accuracy: item_aggregated_across_runs
+    test: paired_item_level_sign_flip_permutation
+    ci: item_cluster_bootstrap
+    sensitivity: logistic_mixed_model_item_and_run_random_intercepts
+    mcnemar_valid_only_for: [one_paired_observation_per_item_e.g._E1_deterministic, single_run_sensitivity]
+    unit_cost: counterbalanced_run_block
+    cost_test: paired_wilcoxon_signed_rank
+    runs_treated_as_independent: false
+  D-15:
+    primary_recovery_metric: item_level_defect_recall
+    h2_support_requires: [recall_recovery, precision_non_inferiority_B5_vs_B3]
+    precision_margin: from_D-01
+    secondary: [f1_recovery, false_reject_rate, false_accept_rate, referral_rate, coverage]
+  D-16:
+    energy_agreement_method: bland_altman_with_proportional_bias_check
+    energy_tolerance: energy_sesoi_from_D-01
+    external_energy_validation_required: true
+    network: fully_offline_airplane_mode_wifi_bluetooth_data_off
+    usb_during_battery_runs: disconnected
+    inference: on_device_only
+    experimental_platforms: ["OPPO A5 2020 (3 GB RAM variant)"]
+    multi_device_validation: future_work_not_in_scope
+
+not_frozen:
+  D-01: {status: PILOT-DEPENDENT, freeze_point: FP-1, note: "NO NUMERICAL VALUE IS JUSTIFIED BEFORE PILOT CHARACTERIZATION"}
+  D-02: {status: PRE-DATA-COLLECTION FREEZE, freeze_point: FP-0, note: "alpha proposal awaits researcher approval; no value frozen"}
+  D-03: {status: PILOT-DEPENDENT, freeze_point: FP-1, note: "power proposal awaits approval; sample size from pilot"}
+  D-07: {status: PILOT-DEPENDENT, freeze_point: FP-2, note: "eligibility and stopping rule fixed; order among automated actions from measured costs"}
+  D-09_sizes: {status: PILOT-DEPENDENT, freeze_point: FP-1}
+  D-10_thresholds: {status: PILOT-DEPENDENT, freeze_point: FP-1}
+  D-10_categorical_mapping: {status: PRE-DATA-COLLECTION FREEZE, freeze_point: FP-0}
+  D-11: {status: PILOT-DEPENDENT, freeze_point: FP-1, provisional_primary: scripted_background_compute_load}
+  D-12: {status: PILOT-DEPENDENT, freeze_point: FP-2, rule: median_per_item_time_of_C1_at_R0_on_validation}
+  D-13: {status: PILOT-DEPENDENT, freeze_point: FP-1}
+  D-15_margin: {status: PILOT-DEPENDENT, freeze_point: FP-1}
+  D-16_energy_values: {status: PILOT-DEPENDENT, freeze_point: FP-1}
+  ece_binning_rule: {status: PRE-DATA-COLLECTION FREEZE, freeze_point: FP-0}

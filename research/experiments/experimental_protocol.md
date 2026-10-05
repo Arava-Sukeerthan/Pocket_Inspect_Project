@@ -297,6 +297,8 @@ Another compatible resource-constrained smartphone can repeat the experiment by 
 
 ## 14. Decisions Required Before Data Collection
 
+> **Step 10C-DR update.** These items are resolved, frozen as procedures, or explicitly deferred in the canonical [`pre_data_collection_decision_register.md`](pre_data_collection_decision_register.md). That register uses a renumbered D-01 to D-16, and its §2 maps every item below to the new IDs.
+
 | ID | Decision |
 | :-- | :-- |
 | D-01 | SESOI values (accuracy; cost) via the §6 procedure |
