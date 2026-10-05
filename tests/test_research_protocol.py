@@ -339,8 +339,14 @@ class TestResearchProtocol(unittest.TestCase):
             self.assertEqual(files, ["README.md", "__init__.py"], module)
         for folder in ("mobile", "experiments", "models", "backend"):
             self.assertEqual(sorted(p.name for p in (ROOT / folder).iterdir()), ["README.md"], folder)
-        for folder in ("results", "figures", "tables", "manuscript_data", "experiments"):
+        for folder in ("results", "figures", "tables", "manuscript_data"):
             self.assertEqual(sorted(p.name for p in (ROOT / "research" / folder).iterdir()), ["README.md"], folder)
+        # research/experiments holds only the README and the Step 10C protocol documents (no runs, no results)
+        step_10c_docs = {"experimental_protocol.md", "resource_states.md", "model_selection_protocol.md",
+                         "confidence_verification_protocol.md", "measurement_protocol.md",
+                         "generalization_framework.md", "experimental_matrix.csv", "log_schema.json"}
+        self.assertLessEqual({p.name for p in (ROOT / "research" / "experiments").iterdir()} - {"README.md"},
+                             step_10c_docs)
         # research/datasets holds only the README and the Step 10B design documents (no data)
         step_10b_docs = {"dataset_selection.md", "device_requirements.md", "model_ladder.md",
                          "measurement_hardware.md", "verification_checklist.md", "dataset_device_model_matrix.csv"}

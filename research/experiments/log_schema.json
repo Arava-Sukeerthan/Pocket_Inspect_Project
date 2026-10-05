@@ -1,0 +1,421 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pocketinspect/step10c/log_schema.json",
+  "title": "PocketInspect experiment log record (one record per item decision)",
+  "description": "Step 10C protocol schema. Contains no data. x-availability marks REQUIRED, OPTIONAL or CONDITIONALLY_AVAILABLE fields; conditionally available fields are null with a reason in notes when unavailable, never estimated.",
+  "type": "object",
+  "properties": {
+    "experiment_id": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Experiment family and protocol version, e.g. E2 with frozen-config hash"
+    },
+    "run_id": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Unique run identifier"
+    },
+    "timestamp": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Wall-clock ISO 8601 timestamp of the item decision"
+    },
+    "monotonic_time_ns": {
+      "type": "integer",
+      "x-availability": "REQUIRED",
+      "description": "Device monotonic clock (elapsedRealtimeNanos) for synchronisation",
+      "x-unit": "ns"
+    },
+    "device_id": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Unit identifier of the physical device"
+    },
+    "device_model": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Device model name as recorded by the researcher"
+    },
+    "ram_variant": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "RAM variant of the experimental unit (experimental platform: 3 GB variant)"
+    },
+    "android_api_level": {
+      "type": "integer",
+      "x-availability": "REQUIRED",
+      "description": "Installed Android API level"
+    },
+    "dataset": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Dataset identifier and version"
+    },
+    "split": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Data split",
+      "enum": [
+        "train",
+        "validation",
+        "calibration_T",
+        "calibration_tau",
+        "test",
+        "pilot"
+      ]
+    },
+    "stage": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Experimental stage",
+      "enum": [
+        "stage1",
+        "stage2"
+      ]
+    },
+    "baseline": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Baseline or ablation",
+      "enum": [
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B5-F",
+        "forced"
+      ]
+    },
+    "item_id": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Physical item / dataset sample identifier"
+    },
+    "image_id": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Image identifier"
+    },
+    "view_id": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "View identifier within the item"
+    },
+    "ground_truth": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Item-level ground-truth label",
+      "enum": [
+        "defective",
+        "normal"
+      ]
+    },
+    "pressure_condition": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Controlled pressure protocol and schedule identifier, or 'natural'"
+    },
+    "resource_state": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Classified resource state from the frozen estimator",
+      "enum": [
+        "R0",
+        "R1",
+        "R2",
+        "R3"
+      ]
+    },
+    "resource_state_inputs": {
+      "type": "object",
+      "x-availability": "REQUIRED",
+      "description": "Raw signals and per-dimension levels used for this classification"
+    },
+    "battery_level": {
+      "type": "integer",
+      "x-availability": "REQUIRED",
+      "description": "Battery level",
+      "x-unit": "percent"
+    },
+    "battery_voltage": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "x-availability": "CONDITIONALLY_AVAILABLE",
+      "description": "Battery voltage (EXTRA_VOLTAGE)",
+      "x-unit": "mV"
+    },
+    "battery_current": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "x-availability": "CONDITIONALLY_AVAILABLE",
+      "description": "BATTERY_PROPERTY_CURRENT_NOW; sign convention recorded",
+      "x-unit": "uA"
+    },
+    "battery_temperature": {
+      "type": "integer",
+      "x-availability": "REQUIRED",
+      "description": "EXTRA_TEMPERATURE",
+      "x-unit": "tenths of degree Celsius"
+    },
+    "ram_usage": {
+      "type": "integer",
+      "x-availability": "REQUIRED",
+      "description": "App memory (PSS) at decision time",
+      "x-unit": "kB"
+    },
+    "available_ram": {
+      "type": "integer",
+      "x-availability": "REQUIRED",
+      "description": "ActivityManager.MemoryInfo.availMem",
+      "x-unit": "bytes"
+    },
+    "low_memory_flag": {
+      "type": "boolean",
+      "x-availability": "REQUIRED",
+      "description": "ActivityManager.MemoryInfo.lowMemory"
+    },
+    "cpu_usage": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "x-availability": "CONDITIONALLY_AVAILABLE",
+      "description": "Device-wide CPU utilisation (host-side)",
+      "x-unit": "fraction"
+    },
+    "app_cpu_time": {
+      "type": "integer",
+      "x-availability": "REQUIRED",
+      "description": "App CPU time consumed for this item",
+      "x-unit": "ms"
+    },
+    "cpu_frequency": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "x-availability": "CONDITIONALLY_AVAILABLE",
+      "description": "Per-cluster CPU frequency",
+      "x-unit": "kHz"
+    },
+    "gpu_usage": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "x-availability": "CONDITIONALLY_AVAILABLE",
+      "description": "GPU utilisation where readable",
+      "x-unit": "fraction"
+    },
+    "model_config": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Configuration used for the initial inference",
+      "enum": [
+        "C1",
+        "C2",
+        "C3",
+        "C4"
+      ]
+    },
+    "model_hash": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Hash of the model file"
+    },
+    "model_switch": {
+      "type": "boolean",
+      "x-availability": "REQUIRED",
+      "description": "Whether a configuration switch preceded this item"
+    },
+    "model_load_time": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "x-availability": "REQUIRED",
+      "description": "Load or swap time if a load occurred, otherwise null",
+      "x-unit": "ms"
+    },
+    "inference_latency": {
+      "type": "number",
+      "x-availability": "REQUIRED",
+      "description": "Initial inference latency (preprocessing and inference)",
+      "x-unit": "ms"
+    },
+    "prediction": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Initial prediction",
+      "enum": [
+        "defective",
+        "normal"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "x-availability": "REQUIRED",
+      "description": "Raw softmax probability of the predicted class (not calibrated)",
+      "x-unit": "probability"
+    },
+    "calibrated_confidence": {
+      "type": "number",
+      "x-availability": "REQUIRED",
+      "description": "Temperature-scaled probability of the predicted class",
+      "x-unit": "probability"
+    },
+    "threshold": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "x-availability": "REQUIRED",
+      "description": "Frozen threshold applied (null when verification disabled)",
+      "x-unit": "probability"
+    },
+    "verification_triggered": {
+      "type": "boolean",
+      "x-availability": "REQUIRED",
+      "description": "Whether calibrated confidence fell below the threshold"
+    },
+    "verification_action": {
+      "type": "array",
+      "x-availability": "REQUIRED",
+      "description": "Ordered list of actions taken (A0-A4)"
+    },
+    "verification_latency": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "x-availability": "REQUIRED",
+      "description": "Total latency of verification actions",
+      "x-unit": "ms"
+    },
+    "final_prediction": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Final decision",
+      "enum": [
+        "defective",
+        "normal",
+        "referred"
+      ]
+    },
+    "correct": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "x-availability": "REQUIRED",
+      "description": "Final automated decision equals ground truth (null if referred)"
+    },
+    "energy_measurement": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "x-availability": "CONDITIONALLY_AVAILABLE",
+      "description": "External-reference and software-counter energy for the enclosing measurement interval, with interval ID and validation status",
+      "x-unit": "J"
+    },
+    "thermal_measurement": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "x-availability": "CONDITIONALLY_AVAILABLE",
+      "description": "Temperatures: battery, readable zones, external surface probe",
+      "x-unit": "degree Celsius"
+    },
+    "thermal_state": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-availability": "CONDITIONALLY_AVAILABLE",
+      "description": "Platform thermal status if the API exists; separate from temperature"
+    },
+    "environment_metadata": {
+      "type": "object",
+      "x-availability": "REQUIRED",
+      "description": "Ambient temperature, lighting, screen and network state, charging state"
+    },
+    "camera_metadata": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "x-availability": "CONDITIONALLY_AVAILABLE",
+      "description": "Per-frame CaptureResult fields (Stage 2)"
+    },
+    "config_hash": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Hash of the frozen experiment configuration"
+    },
+    "git_commit": {
+      "type": "string",
+      "x-availability": "REQUIRED",
+      "description": "Repository commit of the app and protocol"
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-availability": "OPTIONAL",
+      "description": "Free-text notes, protocol deviations"
+    }
+  },
+  "required": [
+    "experiment_id",
+    "run_id",
+    "timestamp",
+    "monotonic_time_ns",
+    "device_id",
+    "device_model",
+    "ram_variant",
+    "android_api_level",
+    "dataset",
+    "split",
+    "stage",
+    "baseline",
+    "item_id",
+    "image_id",
+    "view_id",
+    "ground_truth",
+    "pressure_condition",
+    "resource_state",
+    "resource_state_inputs",
+    "battery_level",
+    "battery_temperature",
+    "ram_usage",
+    "available_ram",
+    "low_memory_flag",
+    "app_cpu_time",
+    "model_config",
+    "model_hash",
+    "model_switch",
+    "model_load_time",
+    "inference_latency",
+    "prediction",
+    "confidence",
+    "calibrated_confidence",
+    "threshold",
+    "verification_triggered",
+    "verification_action",
+    "verification_latency",
+    "final_prediction",
+    "correct",
+    "environment_metadata",
+    "config_hash",
+    "git_commit"
+  ],
+  "additionalProperties": false
+}

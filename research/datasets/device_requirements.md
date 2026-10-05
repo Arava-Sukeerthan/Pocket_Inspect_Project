@@ -2,7 +2,9 @@
 
 _Step 10B, 2026-10-05, Claude Code. Research design only._
 
-**No smartphone is selected and none is claimed to be available.**
+> **Step 10C update (2026-10-05): gate G1 CLOSED.** The researcher confirmed the actual experimental device: **OPPO A5 2020, 3 GB RAM variant** (Snapdragon 665, Adreno 610; Android 9 / ColorOS at launch). The 4 GB and 6 GB variants are not the experimental device. Its capabilities against the requirements below are still **REQUIRES DEVICE VERIFICATION**, and the installed Android version is unknown. See [`measurement_protocol.md`](../experiments/measurement_protocol.md) §1. The rest of this document records the Step 10B requirement analysis. Its pre-confirmation status lines are kept as an audit trail.
+
+**No smartphone is selected and none is claimed to be available.** _(Step 10B status, superseded by the update above.)_
 
 **ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION.** A repository search (2026-10-05) of all non-literature files (configs, docs, `PROJECT_SPEC.md`, `mobile/`, `research/` outside the literature and gap-analysis records) found no documented device owned by or available to the project. Until the researcher records an actual device (exact model and source), no phone is selected (gate G1 in [`verification_checklist.md`](verification_checklist.md)).
 - The repository does not specify an available device. The phones named in `docs/agent_sync/CHANGELOG.md` and `research/gap_analysis/` belong to papers in the literature corpus, not to this project.
