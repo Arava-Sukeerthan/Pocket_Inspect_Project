@@ -1060,7 +1060,10 @@
     "charging": false,
     "network": "OFFLINE",
     "usb_connected": false,
-    "adb_connected": false
+    "adb_connected": false,
+    "is_dry_run": true,
+    "is_valid_step10d_device_evidence": false,
+    "notes": "Historical pre-audit dry-run artifact (PR #20). Preserved for auditability per F-02."
   },
   "performance_results": null
 }
