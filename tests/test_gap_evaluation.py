@@ -1,0 +1,355 @@
+"""
+Tests for the Step 9.8 candidate-gap evaluation (src/literature/gap_evaluation.py,
+configs/gap_evaluation.yaml and the research/gap_analysis/ evaluation artefacts).
+
+The tests check the committed artefacts and verify that the validator rejects
+planted violations (ranking columns, novelty language, Unknown converted to No,
+missing evidence levels, missing search limitations, recoded corpus values).
+"""
+import csv
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+
+import yaml
+
+from src.literature.gap_evaluation import (
+    CORPUS_ID_PATTERN,
+    EVALUATION_SECTIONS,
+    SEARCH_LOG_REQUIRED_FIELDS,
+    GapEvaluationValidator,
+    sha256_of,
+)
+
+ROOT = Path(__file__).resolve().parent.parent
+EVAL_CONFIG = ROOT / "configs" / "gap_evaluation.yaml"
+PAPERS_CSV = ROOT / "research" / "literature" / "papers.csv"
+LITERATURE_DIR = ROOT / "research" / "literature"
+GAP_DIR = ROOT / "research" / "gap_analysis"
+FROZEN_SHA = "c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521"
+CANDIDATES = ["GC-01", "GC-02", "GC-03"]
+
+
+def _validator():
+    return GapEvaluationValidator.from_file(EVAL_CONFIG, project_root=ROOT)
+
+
+class _Sandbox:
+    """Copy the files the validator reads into a temporary project root."""
+
+    FILES = [
+        "configs/gap_evaluation.yaml",
+        "research/literature/papers.csv",
+        "research/gap_analysis/visual_inspection_scope.csv",
+        "research/gap_analysis/counterexample_candidates.csv",
+        "research/gap_analysis/targeted_search_log.md",
+        "research/gap_analysis/candidate_gap_matrix.csv",
+        "research/gap_analysis/candidate_gap_evaluation.md",
+    ]
+
+    def __enter__(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        for rel in self.FILES:
+            dst = self.root / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / rel, dst)
+        return self
+
+    def __exit__(self, *exc):
+        self.tmp.cleanup()
+
+    def validator(self):
+        return GapEvaluationValidator.from_file(self.root / "configs/gap_evaluation.yaml", project_root=self.root)
+
+    def rewrite_csv(self, rel, mutate):
+        path = self.root / rel
+        with open(path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            fields, rows = reader.fieldnames, list(reader)
+        fields, rows = mutate(list(fields), rows)
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def edit_text(self, rel, old, new):
+        path = self.root / rel
+        text = path.read_text(encoding="utf-8")
+        assert old in text, old
+        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+class TestCommittedEvaluation(unittest.TestCase):
+    """The committed Step 9.8 artefacts satisfy every guard-rail."""
+
+    def test_full_validation_passes(self):
+        self.assertEqual(_validator().validate(), [])
+
+    # 1. papers.csv is frozen
+    def test_papers_csv_is_frozen(self):
+        self.assertEqual(sha256_of(PAPERS_CSV), FROZEN_SHA)
+        self.assertEqual(_validator().check_frozen_corpus(), [])
+        config = yaml.safe_load(EVAL_CONFIG.read_text(encoding="utf-8"))
+        self.assertEqual(config["frozen_corpus"]["sha256"], FROZEN_SHA)
+        self.assertEqual(config["frozen_corpus"]["records"], 54)
+        self.assertEqual(config["frozen_corpus"]["columns"], 31)
+
+    # 2. candidate IDs are exactly GC-01, GC-02, GC-03
+    def test_candidate_ids_are_exactly_gc01_to_gc03(self):
+        v = _validator()
+        self.assertEqual(v.candidate_ids, CANDIDATES)
+        self.assertEqual(sorted({r["candidate_id"] for r in v.counterexamples()}), CANDIDATES)
+        self.assertEqual(sorted({r["candidate_id"] for r in v.matrix()}), CANDIDATES)
+        doc = v.path("evaluation").read_text(encoding="utf-8")
+        for cid in CANDIDATES:
+            self.assertIn(f"## {CANDIDATES.index(cid) + 4}. {cid} evaluation", doc)
+        for gid in ("GC-04", "GC-05", "GC-06", "GC-07", "GC-08", "GC-09"):
+            self.assertNotIn(gid, doc)
+
+    def test_candidate_wording_matches_step_9_7(self):
+        gap_config = yaml.safe_load((ROOT / "configs" / "gap_analysis.yaml").read_text(encoding="utf-8"))
+        step97 = {c["id"]: c["title"] for c in gap_config["candidates"] if c["id"] in CANDIDATES}
+        eval_candidates = _validator().config["candidates"]
+        for cid in CANDIDATES:
+            normalise = lambda s: s.replace("behavior", "behaviour")
+            self.assertEqual(normalise(eval_candidates[cid]), normalise(step97[cid]))
+
+    # 3. no candidate is ranked
+    def test_no_candidate_is_ranked(self):
+        v = _validator()
+        self.assertEqual(v.check_no_ranking(), [])
+        for row in v.matrix():
+            self.assertIn(row["assessment"], v.config["assessment_values"])
+            self.assertIn(row["confidence"], v.config["confidence_values"])
+        # every candidate is assessed on the same 14 criteria (no selective treatment)
+        dims = [d["name"] for d in v.config["dimensions"]]
+        self.assertEqual(len(dims), 14)
+        for cid in CANDIDATES:
+            self.assertEqual(sorted(r["criterion"] for r in v.matrix() if r["candidate_id"] == cid), sorted(dims))
+        self.assertNotIn("rank", " ".join(v.config.keys()).lower())
+
+    # 4. no final research gap exists
+    def test_no_final_research_gap_exists(self):
+        self.assertFalse((GAP_DIR / "research_gap.md").exists())
+        self.assertEqual(_validator().check_forbidden_files(), [])
+        doc = (GAP_DIR / "candidate_gap_evaluation.md").read_text(encoding="utf-8")
+        last = [ln.strip() for ln in doc.splitlines() if ln.strip()][-1]
+        self.assertEqual(last, "Final research-gap selection remains a researcher decision and is outside Step 9.8.")
+
+    # 5. Unknown is not converted to No
+    def test_unknown_is_not_converted_to_no(self):
+        v = _validator()
+        corpus = v.corpus_records()
+        scope = v.visual_scope()
+        corpus_rows = [r for r in v.counterexamples() if CORPUS_ID_PATTERN.match(r["paper_id_or_external_id"])]
+        self.assertTrue(corpus_rows)
+        for row in corpus_rows:
+            pid = row["paper_id_or_external_id"]
+            for field in v.config["characteristic_fields"]:
+                expected = scope[pid] if field == "visual_inspection" else corpus[pid][field]
+                self.assertEqual(row[field], expected, f"{pid} {field} recoded")
+                if expected == "Unknown":
+                    self.assertNotEqual(row[field], "No")
+        # P001 and P007 stay Unknown on the fields that keep them potential counterexamples
+        p001 = next(r for r in corpus_rows if r["paper_id_or_external_id"] == "P001")
+        self.assertEqual(p001["visual_inspection"], "Unknown")
+        self.assertEqual(p001["counterexample_strength"], "potential")
+        p007 = next(r for r in corpus_rows if r["paper_id_or_external_id"] == "P007")
+        self.assertEqual((p007["energy_evaluation"], p007["thermal_evaluation"]), ("Unknown", "Unknown"))
+
+    def test_snippet_level_rows_do_not_assert_no_without_basis(self):
+        for row in _validator().counterexamples():
+            if row["evidence_level"] in ("search_snippet_only", "unresolved"):
+                for field in _validator().config["characteristic_fields"]:
+                    if row[field] == "No":
+                        self.assertIn(f"{field} No because", row["notes"])
+
+    # 6. counterexample data does not modify papers.csv
+    def test_counterexamples_are_not_added_to_papers_csv(self):
+        v = _validator()
+        self.assertEqual(v.externals_absent_from_corpus(), [])
+        self.assertEqual(len(v.corpus_records()), 54)
+        externals = v.external_rows()
+        self.assertTrue(externals)
+        corpus_ids = set(v.corpus_records())
+        for row in externals:
+            self.assertNotIn(row["paper_id_or_external_id"], corpus_ids)
+            self.assertIn("not added to papers.csv", row["notes"])
+
+    # 7. evaluation does not modify the canonical literature
+    def test_validation_does_not_modify_canonical_literature(self):
+        before = {p.name: (sha256_of(p), p.stat().st_mtime_ns) for p in LITERATURE_DIR.iterdir() if p.is_file()}
+        _validator().validate()
+        after = {p.name: (sha256_of(p), p.stat().st_mtime_ns) for p in LITERATURE_DIR.iterdir() if p.is_file()}
+        self.assertEqual(before, after)
+        self.assertEqual(sha256_of(PAPERS_CSV), FROZEN_SHA)
+
+    # 8. forbidden novelty language is rejected
+    def test_committed_texts_have_no_forbidden_language(self):
+        v = _validator()
+        for key in ("evaluation", "search_log", "counterexamples", "matrix"):
+            self.assertEqual(v.forbidden_language(v.path(key).read_text(encoding="utf-8")), [], key)
+
+    def test_forbidden_language_detector(self):
+        v = _validator()
+        for sentence in (
+            "There is no prior work on smartphone inspection.",
+            "This is the first study of its kind.",
+            "GC-03 is novel.",
+            "We recommend GC-02 as the strongest candidate.",
+            "The final research gap is GC-01.",
+            "This has never been studied.",
+        ):
+            self.assertTrue(v.forbidden_language(sentence), sentence)
+        for sentence in (
+            "No candidate is ranked.",
+            "No final research gap is selected.",
+            "No complete match was found in the analyzed core corpus.",
+        ):
+            self.assertEqual(v.forbidden_language(sentence), [], sentence)
+
+    # 9. candidate evidence includes an evidence level
+    def test_every_evidence_row_has_an_evidence_level(self):
+        v = _validator()
+        for row in v.counterexamples():
+            self.assertIn(row["evidence_level"], v.config["evidence_levels"])
+            self.assertIn(row["counterexample_strength"], v.config["counterexample_strengths"])
+        tokens = list(v.config["evidence_levels"]) + ["not_applicable"]
+        for row in v.matrix():
+            self.assertTrue(any(t in row["evidence_level"] for t in tokens), row["criterion"])
+
+    # 10. targeted searches record limitations
+    def test_targeted_searches_record_limitations(self):
+        entries = _validator().search_entries()
+        self.assertGreaterEqual(len(entries), 24)
+        for sid, fields in entries.items():
+            for name in SEARCH_LOG_REQUIRED_FIELDS:
+                self.assertTrue(fields.get(name, "").strip(), f"{sid} lacks {name}")
+            self.assertTrue(fields["Search limitations"].strip(), sid)
+        candidates = {c for f in entries.values() for c in CANDIDATES if c in f["Candidate"]}
+        self.assertEqual(sorted(candidates), CANDIDATES)
+
+    def test_required_queries_were_logged(self):
+        log = (GAP_DIR / "targeted_search_log.md").read_text(encoding="utf-8")
+        for query in (
+            "smartphone visual inspection confidence-aware",
+            "mobile inspection confidence gating",
+            "smartphone defect detection recapture",
+            "mobile visual inspection additional view",
+            "smartphone inspection adaptive inference confidence",
+            "edge inspection confidence-triggered recapture",
+            "mobile visual inspection uncertainty decision",
+            "smartphone industrial inspection multi-view confidence",
+        ):
+            self.assertIn(f"`{query}`", log)
+
+    def test_evaluation_has_required_sections_and_framework(self):
+        v = _validator()
+        self.assertEqual(v.check_evaluation(), [])
+        self.assertEqual(len(EVALUATION_SECTIONS), 15)
+        for dim in v.config["dimensions"]:
+            for key in ("evidence_required", "strong_evidence", "weak_evidence", "disqualifying_or_weakening"):
+                self.assertTrue(dim[key].strip(), f"{dim['id']} lacks {key}")
+
+
+class TestValidatorRejectsViolations(unittest.TestCase):
+    """Planted violations in a sandbox copy must be reported."""
+
+    def test_rejects_modified_papers_csv(self):
+        with _Sandbox() as sb:
+            path = sb.root / "research/literature/papers.csv"
+            path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+            self.assertTrue(any("SHA-256" in e for e in sb.validator().check_frozen_corpus()))
+
+    def test_rejects_ranking_column(self):
+        with _Sandbox() as sb:
+            sb.rewrite_csv("research/gap_analysis/candidate_gap_matrix.csv",
+                           lambda f, rows: (f + ["rank"], [dict(r, rank="1") for r in rows]))
+            self.assertTrue(any("rank" in e for e in sb.validator().check_no_ranking()))
+
+    def test_rejects_numeric_assessment(self):
+        with _Sandbox() as sb:
+            sb.rewrite_csv("research/gap_analysis/candidate_gap_matrix.csv",
+                           lambda f, rows: (f, [dict(rows[0], assessment="4")] + rows[1:]))
+            v = sb.validator()
+            self.assertTrue(v.check_matrix())
+            self.assertTrue(v.check_no_ranking())
+
+    def test_rejects_unknown_converted_to_no_for_corpus_record(self):
+        with _Sandbox() as sb:
+            def mutate(fields, rows):
+                for r in rows:
+                    if r["paper_id_or_external_id"] == "P007":
+                        r["energy_evaluation"] = "No"
+                return fields, rows
+            sb.rewrite_csv("research/gap_analysis/counterexample_candidates.csv", mutate)
+            errors = sb.validator().check_counterexamples()
+            self.assertTrue(any("P007" in e and "energy_evaluation" in e for e in errors))
+
+    def test_rejects_no_from_snippet_without_basis(self):
+        with _Sandbox() as sb:
+            def mutate(fields, rows):
+                for r in rows:
+                    if r["evidence_level"] == "search_snippet_only":
+                        r["thermal_evaluation"] = "No"
+                        break
+                return fields, rows
+            sb.rewrite_csv("research/gap_analysis/counterexample_candidates.csv", mutate)
+            self.assertTrue(any("without a stated basis" in e for e in sb.validator().check_counterexamples()))
+
+    def test_rejects_missing_evidence_level(self):
+        with _Sandbox() as sb:
+            sb.rewrite_csv("research/gap_analysis/counterexample_candidates.csv",
+                           lambda f, rows: (f, [dict(rows[0], evidence_level="")] + rows[1:]))
+            self.assertTrue(any("evidence_level" in e for e in sb.validator().check_counterexamples()))
+
+    def test_rejects_extra_candidate(self):
+        with _Sandbox() as sb:
+            sb.rewrite_csv("research/gap_analysis/counterexample_candidates.csv",
+                           lambda f, rows: (f, rows + [dict(rows[0], candidate_id="GC-04")]))
+            self.assertTrue(any("GC-04" in e for e in sb.validator().check_counterexamples()))
+
+    def test_rejects_missing_search_limitations(self):
+        with _Sandbox() as sb:
+            log = sb.root / "research/gap_analysis/targeted_search_log.md"
+            lines = log.read_text(encoding="utf-8").splitlines()
+            idx = next(i for i, ln in enumerate(lines) if ln.startswith("| Search limitations |"))
+            lines[idx] = "| Search limitations |  |"
+            log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            self.assertTrue(any("Search limitations" in e for e in sb.validator().check_search_log()))
+
+    def test_rejects_novelty_language_in_evaluation(self):
+        with _Sandbox() as sb:
+            sb.edit_text("research/gap_analysis/candidate_gap_evaluation.md",
+                         "## 1. Purpose\n", "## 1. Purpose\n\nThis is the first work on GC-01.\n")
+            self.assertTrue(any("forbidden" in e for e in sb.validator().check_evaluation()))
+
+    def test_rejects_missing_closing_sentence(self):
+        with _Sandbox() as sb:
+            sb.edit_text("research/gap_analysis/candidate_gap_evaluation.md",
+                         "Final research-gap selection remains a researcher decision and is outside Step 9.8.",
+                         "GC-02 is selected.")
+            self.assertTrue(any("closing sentence" in e for e in sb.validator().check_evaluation()))
+
+    def test_rejects_research_gap_file(self):
+        with _Sandbox() as sb:
+            (sb.root / "research/gap_analysis/research_gap.md").write_text("# Gap\n", encoding="utf-8")
+            self.assertTrue(sb.validator().check_forbidden_files())
+
+    def test_rejects_external_paper_added_to_corpus(self):
+        with _Sandbox() as sb:
+            v = sb.validator()
+            title = v.external_rows()[0]["title"]
+            def mutate(fields, rows):
+                rows.append(dict(rows[0], paper_id="P999", title=title))
+                return fields, rows
+            sb.rewrite_csv("research/literature/papers.csv", mutate)
+            v = sb.validator()
+            self.assertIn(title, v.externals_absent_from_corpus())
+            self.assertTrue(v.check_frozen_corpus())
+
+
+if __name__ == "__main__":
+    unittest.main()

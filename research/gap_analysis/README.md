@@ -25,6 +25,11 @@ The evaluated combinations, analysis populations, derived attributes and candida
   - [`gap_candidates.md`](gap_candidates.md): the report.
 - **No ranking or selection.** No candidate is scored, ranked or selected. `research_gap.md` is never written by the tool.
 - The frozen evidence base is recorded in [`corpus_freeze.md`](corpus_freeze.md).
+- **Step 9.8 candidate evaluation.** Framework and guard-rails are in [`configs/gap_evaluation.yaml`](../../configs/gap_evaluation.yaml); `src/literature/gap_evaluation.py` validates the artefacts (read-only).
+  - [`counterexample_candidates.csv`](counterexample_candidates.csv): every paper assessed as a possible counterexample to GC-01 to GC-03. External papers are kept here only, never added to `papers.csv`.
+  - [`targeted_search_log.md`](targeted_search_log.md): the targeted disproof searches, with counts and limitations.
+  - [`candidate_gap_matrix.csv`](candidate_gap_matrix.csv): qualitative candidate × criterion assessments (14 criteria; no scores).
+  - [`candidate_gap_evaluation.md`](candidate_gap_evaluation.md): the written evaluation. It does not rank or select a candidate.
 
 The earlier hard-coded prototype combinations (GAP-001 to GAP-006) are retired. They remain only as the fallback used when no configuration file is present.
 
