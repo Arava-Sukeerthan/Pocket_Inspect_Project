@@ -2,14 +2,17 @@
 ADB collector for host-side shell paths, evidence parsing, and provenance.
 
 Executes ADB commands (`getprop`, `/proc/stat`, `/proc/meminfo`, cpufreq, thermal zones,
-dumpsys meminfo, atrace, boot_id) to collect raw evidence from the connected physical device (OPPO A5 2020)
-and parses it into structured device observation properties with real evidence files.
+dumpsys battery, dumpsys thermalservice, dumpsys media.camera, atrace, boot_id) to collect raw
+evidence from the connected physical device (OPPO A5 2020) and parses it into structured device
+observation properties with real evidence files, SHA-256 manifests, and observed_props.json.
 """
 
 import hashlib
+import json
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -27,12 +30,15 @@ class ADBCollector:
     def __init__(self, device_id: Optional[str] = None, timeout_seconds: int = 15):
         self.device_id = device_id
         self.timeout = timeout_seconds
+        self.command_logs: List[Dict[str, Any]] = []
 
     def _adb_cmd(self, args: List[str]) -> Tuple[int, str, str]:
-        cmd = [_get_adb_binary()]
+        adb_bin = _get_adb_binary()
+        cmd = [adb_bin]
         if self.device_id:
             cmd.extend(["-s", self.device_id])
         cmd.extend(args)
+        ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         try:
             res = subprocess.run(
                 cmd,
@@ -40,8 +46,22 @@ class ADBCollector:
                 text=True,
                 timeout=self.timeout
             )
+            self.command_logs.append({
+                "timestamp": ts,
+                "cmd": cmd,
+                "exit_code": res.returncode,
+                "stdout_snippet": res.stdout[:500] if res.stdout else "",
+                "stderr_snippet": res.stderr[:500] if res.stderr else ""
+            })
             return res.returncode, res.stdout, res.stderr
         except Exception as e:
+            self.command_logs.append({
+                "timestamp": ts,
+                "cmd": cmd,
+                "exit_code": -1,
+                "stdout_snippet": "",
+                "stderr_snippet": str(e)
+            })
             return -1, "", str(e)
 
     def get_adb_version(self) -> str:
@@ -51,9 +71,52 @@ class ADBCollector:
             return match.group(1) if match else out.strip().splitlines()[0]
         return "unknown"
 
+    def get_connection_status(self) -> str:
+        """Classifies the connection state explicitly.
+
+        Returns one of:
+          - ADB_MISSING
+          - NO_DEVICE
+          - UNAUTHORIZED
+          - OFFLINE
+          - MULTIPLE_DEVICES
+          - CONNECTED
+        """
+        adb_bin = _get_adb_binary()
+        if not os.path.exists(adb_bin) and adb_bin != "adb":
+            return "ADB_MISSING"
+
+        code, stdout, stderr = self._adb_cmd(["devices"])
+        if code != 0:
+            return "ADB_MISSING"
+
+        lines = [line.strip() for line in stdout.splitlines() if line.strip() and not line.startswith("List of devices")]
+        if not lines:
+            return "NO_DEVICE"
+
+        if len(lines) > 1 and not self.device_id:
+            return "MULTIPLE_DEVICES"
+
+        target_line = lines[0]
+        if self.device_id:
+            matching = [l for l in lines if l.startswith(self.device_id)]
+            if matching:
+                target_line = matching[0]
+
+        parts = target_line.split()
+        if len(parts) >= 2:
+            state = parts[1]
+            if state == "device":
+                return "CONNECTED"
+            elif state == "unauthorized":
+                return "UNAUTHORIZED"
+            elif state == "offline":
+                return "OFFLINE"
+
+        return "NO_DEVICE"
+
     def is_device_connected(self) -> bool:
-        code, stdout, _ = self._adb_cmd(["get-state"])
-        return code == 0 and "device" in stdout.strip()
+        return self.get_connection_status() == "CONNECTED"
 
     def get_properties(self) -> Dict[str, str]:
         code, stdout, _ = self._adb_cmd(["shell", "getprop"])
@@ -86,7 +149,7 @@ class ADBCollector:
         return zones
 
     def parse_proc_meminfo(self, text: str) -> Dict[str, int]:
-        """Parses /proc/meminfo text into kB values and total RAM in MB."""
+        """Parses /proc/meminfo text into kB values and total/avail RAM in MB."""
         res = {}
         for line in text.splitlines():
             if ":" in line:
@@ -97,9 +160,12 @@ class ADBCollector:
                     res[k] = int(v_str)
                 except ValueError:
                     pass
+        out = {}
         if "MemTotal" in res:
-            res["total_ram_mb"] = res["MemTotal"] // 1024
-        return res
+            out["total_ram_mb"] = res["MemTotal"] // 1024
+        if "MemAvailable" in res:
+            out["available_memory_mb"] = res["MemAvailable"] // 1024
+        return out
 
     def parse_proc_cpuinfo(self, text: str) -> Dict[str, Any]:
         """Parses /proc/cpuinfo text for processor count and hardware model."""
@@ -110,6 +176,57 @@ class ADBCollector:
             "hardware": hardware.group(1).strip() if hardware else None,
         }
 
+    def parse_dumpsys_battery(self, text: str) -> Dict[str, Any]:
+        """Parses dumpsys battery output."""
+        res: Dict[str, Any] = {}
+        for line in text.splitlines():
+            line = line.strip()
+            if ":" in line:
+                k, v = line.split(":", 1)
+                k = k.strip()
+                v = v.strip()
+                if k == "level":
+                    try:
+                        res["battery_level_percent"] = int(v)
+                    except ValueError:
+                        pass
+                elif k == "voltage":
+                    try:
+                        res["battery_voltage"] = int(v)
+                    except ValueError:
+                        pass
+                elif k == "temperature":
+                    try:
+                        res["battery_temperature"] = int(v) / 10.0
+                    except ValueError:
+                        pass
+                elif k == "AC powered" and v == "true":
+                    res["charging_state"] = True
+                    res["plugged_source"] = "AC"
+                elif k == "USB powered" and v == "true":
+                    res["charging_state"] = True
+                    res["plugged_source"] = "USB"
+                elif k == "Wireless powered" and v == "true":
+                    res["charging_state"] = True
+                    res["plugged_source"] = "Wireless"
+                elif k == "status":
+                    try:
+                        st = int(v)
+                        # BatteryManager.BATTERY_STATUS_CHARGING = 2, FULL = 5
+                        res["battery_status_code"] = st
+                        if "charging_state" not in res:
+                            res["charging_state"] = st in (2, 5)
+                    except ValueError:
+                        pass
+                elif k == "current now":
+                    try:
+                        res["battery_current_now"] = int(v)
+                    except ValueError:
+                        pass
+        if "charging_state" not in res:
+            res["charging_state"] = False
+        return res
+
     def get_boot_id(self) -> str:
         ok, out = self.read_file("/proc/sys/kernel/random/boot_id")
         if ok and out.strip():
@@ -119,19 +236,55 @@ class ADBCollector:
             return f"uptime_{out_up.strip().split()[0]}"
         return "unknown_boot_id"
 
+    def probe_profiling_capability(self, ev_dir: Path) -> Tuple[bool, Path]:
+        """Executes actual atrace profiling probe and records evidence."""
+        ev_dir.mkdir(parents=True, exist_ok=True)
+        code, out, err = self._adb_cmd(["shell", "atrace", "--list_categories"])
+        ev_file = ev_dir / "atrace_evidence.txt"
+        ev_file.write_text(f"Exit Code: {code}\nSTDOUT:\n{out}\nSTDERR:\n{err}", encoding="utf-8")
+        success = (code == 0 and len(out.strip()) > 0 and "No such file" not in err)
+        return success, ev_file
+
+    def probe_network_state(self, ev_dir: Path) -> Tuple[Optional[str], Path]:
+        """Probes airplane mode / network state via settings get global."""
+        ev_dir.mkdir(parents=True, exist_ok=True)
+        code, out, err = self._adb_cmd(["shell", "settings", "get", "global", "airplane_mode_on"])
+        ev_file = ev_dir / "network_evidence.txt"
+        ev_file.write_text(f"Exit Code: {code}\nSTDOUT:\n{out}\nSTDERR:\n{err}", encoding="utf-8")
+        if code == 0:
+            val = out.strip()
+            if val == "1":
+                return "OFFLINE", ev_file
+            elif val == "0":
+                return "ONLINE", ev_file
+        return None, ev_file
+
     def collect_raw_evidence_and_observations(self, output_dir: Path) -> Tuple[List[Path], Dict[str, Any]]:
-        """Collects raw evidence text files and parses device observations."""
+        """Collects raw evidence text files, writes observed_props.json & manifest.json."""
         ev_dir = output_dir / "evidence"
         ev_dir.mkdir(parents=True, exist_ok=True)
         files_saved = []
         observed_props: Dict[str, Any] = {"is_real_device_observation": True}
+        manifest_entries: List[Dict[str, Any]] = []
+
+        def _save_evidence(filename: str, content: str) -> Path:
+            p = ev_dir / filename
+            p.write_text(content, encoding="utf-8")
+            files_saved.append(p)
+            data_bytes = content.encode("utf-8")
+            sha256 = hashlib.sha256(data_bytes).hexdigest()
+            manifest_entries.append({
+                "relative_path": f"evidence/{filename}",
+                "size_bytes": len(data_bytes),
+                "sha256": sha256,
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            })
+            return p
 
         # 1. getprop
         code, out_prop, _ = self._adb_cmd(["shell", "getprop"])
         if code == 0:
-            p = ev_dir / "getprop_evidence.txt"
-            p.write_text(out_prop, encoding="utf-8")
-            files_saved.append(p)
+            _save_evidence("getprop_evidence.txt", out_prop)
             props = self.get_properties()
             observed_props["manufacturer"] = props.get("ro.product.manufacturer")
             observed_props["model"] = props.get("ro.product.model")
@@ -145,39 +298,105 @@ class ADBCollector:
         # 2. dumpsys meminfo / proc meminfo
         ok_mem, out_mem = self.read_file("/proc/meminfo")
         if ok_mem:
-            p = ev_dir / "meminfo_evidence.txt"
-            p.write_text(out_mem, encoding="utf-8")
-            files_saved.append(p)
+            _save_evidence("meminfo_evidence.txt", out_mem)
             mem_parsed = self.parse_proc_meminfo(out_mem)
             observed_props.update(mem_parsed)
 
         # 3. proc cpuinfo
         ok_cpu, out_cpu = self.read_file("/proc/cpuinfo")
         if ok_cpu:
-            p = ev_dir / "cpuinfo_evidence.txt"
-            p.write_text(out_cpu, encoding="utf-8")
-            files_saved.append(p)
+            _save_evidence("cpuinfo_evidence.txt", out_cpu)
             cpu_parsed = self.parse_proc_cpuinfo(out_cpu)
             observed_props.update(cpu_parsed)
 
         # 4. proc stat check
         ok_stat, out_stat = self.read_file("/proc/stat")
         if ok_stat:
-            p = ev_dir / "proc_stat_evidence.txt"
-            p.write_text(out_stat, encoding="utf-8")
-            files_saved.append(p)
+            _save_evidence("proc_stat_evidence.txt", out_stat)
             observed_props["proc_stat_readable_via_adb"] = True
 
-        # 5. thermal zones
+        # 5. thermal zones & dumpsys thermalservice
         zones = self.check_thermal_zones()
+        code_th, out_th, _ = self._adb_cmd(["shell", "dumpsys", "thermalservice"])
+        th_content = f"THERMAL ZONES:\n" + "\n".join([f"{z['zone']}: {z['type']} = {z['temp']}" for z in zones])
+        if code_th == 0:
+            th_content += f"\n\nDUMPSYS THERMALSERVICE:\n{out_th}"
+        _save_evidence("thermal_evidence.txt", th_content)
         if zones:
-            p = ev_dir / "thermal_evidence.txt"
-            p.write_text("\n".join([f"{z['zone']}: {z['type']} = {z['temp']}" for z in zones]), encoding="utf-8")
-            files_saved.append(p)
             observed_props["thermal_zones_readable_count"] = len(zones)
 
-        # 6. Boot ID
+        # 6. dumpsys battery
+        code_bat, out_bat, _ = self._adb_cmd(["shell", "dumpsys", "battery"])
+        if code_bat == 0:
+            _save_evidence("battery_dumpsys_evidence.txt", out_bat)
+            bat_parsed = self.parse_dumpsys_battery(out_bat)
+            observed_props.update(bat_parsed)
+
+        # 7. cpufreq
+        ok_freq, out_freq = self.read_file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+        if ok_freq:
+            _save_evidence("cpufreq_evidence.txt", out_freq)
+            try:
+                observed_props["cpu_scaling_cur_freq"] = int(out_freq.strip())
+            except ValueError:
+                pass
+
+        # 8. GPU sysfs / dumpsys
+        ok_gpu, out_gpu = self.read_file("/sys/class/kgsl/kgsl-3d0/gpuclk")
+        if ok_gpu:
+            _save_evidence("gpu_evidence.txt", out_gpu)
+            try:
+                observed_props["gpu_clock_hz"] = int(out_gpu.strip())
+            except ValueError:
+                pass
+
+        # 9. Camera dumpsys
+        code_cam, out_cam, _ = self._adb_cmd(["shell", "dumpsys", "media.camera"])
+        if code_cam == 0:
+            _save_evidence("camera_dumpsys_evidence.txt", out_cam)
+
+        # 10. Profiling probe (R-02)
+        atrace_avail, _ = self.probe_profiling_capability(ev_dir)
+        files_saved.append(ev_dir / "atrace_evidence.txt")
+        data_bytes = (ev_dir / "atrace_evidence.txt").read_bytes()
+        manifest_entries.append({
+            "relative_path": "evidence/atrace_evidence.txt",
+            "size_bytes": len(data_bytes),
+            "sha256": hashlib.sha256(data_bytes).hexdigest(),
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        })
+        if atrace_avail:
+            observed_props["atrace_adb_available"] = True
+        else:
+            observed_props["atrace_adb_available"] = False
+
+        # 11. Network state probe (R-07)
+        net_state, _ = self.probe_network_state(ev_dir)
+        files_saved.append(ev_dir / "network_evidence.txt")
+        data_bytes = (ev_dir / "network_evidence.txt").read_bytes()
+        manifest_entries.append({
+            "relative_path": "evidence/network_evidence.txt",
+            "size_bytes": len(data_bytes),
+            "sha256": hashlib.sha256(data_bytes).hexdigest(),
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        })
+        observed_props["network_state"] = net_state
+
+        # 12. Boot ID
         observed_props["boot_id"] = self.get_boot_id()
-        observed_props["atrace_adb_available"] = True
+
+        # 13. Save command log (R-03)
+        cmd_log_json = json.dumps(self.command_logs, indent=2)
+        _save_evidence("commands.log", cmd_log_json)
+
+        # 14. Write observed_props.json (R-01)
+        observed_props["source_evidence_manifest"] = manifest_entries
+        observed_props_json = json.dumps(observed_props, indent=2)
+        _save_evidence("observed_props.json", observed_props_json)
+
+        # 15. Write manifest.json (R-01, R-07)
+        manifest_file = ev_dir / "manifest.json"
+        manifest_file.write_text(json.dumps(manifest_entries, indent=2), encoding="utf-8")
+        files_saved.append(manifest_file)
 
         return files_saved, observed_props

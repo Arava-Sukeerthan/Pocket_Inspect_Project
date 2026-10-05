@@ -9,7 +9,6 @@ import android.hardware.camera2.CameraManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
-import android.os.SystemClock
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.TimeZone
@@ -71,7 +70,7 @@ class DeviceIdentityCollector(private val context: Context) {
             verified = true,
             verification_method = "android_api",
             observed_at = now,
-            evidence_ref = "evidence/device_app_evidence.json#manufacturer"
+            evidence_ref = "evidence/android_app_evidence.json#manufacturer"
         ))
 
         results.add(CapabilityResult(
@@ -83,7 +82,7 @@ class DeviceIdentityCollector(private val context: Context) {
             verified = true,
             verification_method = "android_api",
             observed_at = now,
-            evidence_ref = "evidence/device_app_evidence.json#model"
+            evidence_ref = "evidence/android_app_evidence.json#model"
         ))
 
         if (Build.VERSION.SDK_INT >= 31) {
@@ -97,7 +96,7 @@ class DeviceIdentityCollector(private val context: Context) {
                 verified = true,
                 verification_method = "android_api",
                 observed_at = now,
-                evidence_ref = "evidence/device_app_evidence.json#soc_model"
+                evidence_ref = "evidence/android_app_evidence.json#soc_model"
             ))
         } else {
             results.add(CapabilityResult(
@@ -136,7 +135,7 @@ class MemoryTelemetryCollector(private val context: Context) {
                 verified = true,
                 verification_method = "android_api",
                 observed_at = now,
-                evidence_ref = "evidence/device_app_evidence.json#total_ram_mb"
+                evidence_ref = "evidence/android_app_evidence.json#total_ram_mb"
             ))
 
             results.add(CapabilityResult(
@@ -149,7 +148,7 @@ class MemoryTelemetryCollector(private val context: Context) {
                 verified = true,
                 verification_method = "android_api",
                 observed_at = now,
-                evidence_ref = "evidence/device_app_evidence.json#available_memory_mb"
+                evidence_ref = "evidence/android_app_evidence.json#available_memory_mb"
             ))
         }
         return results
@@ -173,7 +172,7 @@ class ThermalTelemetryCollector(private val context: Context) {
                     verified = true,
                     verification_method = "android_api",
                     observed_at = now,
-                    evidence_ref = "evidence/device_app_evidence.json#thermal_status"
+                    evidence_ref = "evidence/android_app_evidence.json#thermal_status"
                 )
             } else {
                 CapabilityResult(
@@ -194,5 +193,129 @@ class ThermalTelemetryCollector(private val context: Context) {
                 notes = "getCurrentThermalStatus requires API >= 29"
             )
         }
+    }
+}
+
+class BatteryTelemetryCollector(private val context: Context) {
+    fun collect(): List<CapabilityResult> {
+        val results = mutableListOf<CapabilityResult>()
+        val now = getIsoTimestamp()
+        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val batteryStatus: Intent? = context.registerReceiver(null, filter)
+
+        if (batteryStatus != null) {
+            val level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+            val batteryPct = if (level >= 0 && scale > 0) (level * 100) / scale else null
+            val voltage = batteryStatus.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+            val temp10 = batteryStatus.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
+            val tempC = if (temp10 != -1) temp10 / 10.0 else null
+            val statusInt = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+            val pluggedInt = batteryStatus.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+            val isCharging = statusInt == BatteryManager.BATTERY_STATUS_CHARGING || statusInt == BatteryManager.BATTERY_STATUS_FULL
+
+            results.add(CapabilityResult(
+                metric = "battery_level_percent",
+                state = RuntimeState.AVAILABLE.name,
+                report_status = ReportStatus.VERIFIED.name,
+                value = batteryPct,
+                unit = "percent",
+                source = "BatteryManager.EXTRA_LEVEL",
+                verified = true,
+                verification_method = "android_api",
+                observed_at = now,
+                evidence_ref = "evidence/android_app_evidence.json#battery_level_percent"
+            ))
+
+            results.add(CapabilityResult(
+                metric = "battery_voltage",
+                state = RuntimeState.AVAILABLE.name,
+                report_status = ReportStatus.VERIFIED.name,
+                value = if (voltage > 0) voltage else null,
+                unit = "mV",
+                source = "BatteryManager.EXTRA_VOLTAGE",
+                verified = voltage > 0,
+                verification_method = "android_api",
+                observed_at = now,
+                evidence_ref = "evidence/android_app_evidence.json#battery_voltage"
+            ))
+
+            results.add(CapabilityResult(
+                metric = "battery_temperature",
+                state = RuntimeState.AVAILABLE.name,
+                report_status = ReportStatus.VERIFIED.name,
+                value = tempC,
+                unit = "degC",
+                source = "BatteryManager.EXTRA_TEMPERATURE",
+                verified = tempC != null,
+                verification_method = "android_api",
+                observed_at = now,
+                evidence_ref = "evidence/android_app_evidence.json#battery_temperature"
+            ))
+
+            results.add(CapabilityResult(
+                metric = "is_charging",
+                state = RuntimeState.AVAILABLE.name,
+                report_status = ReportStatus.VERIFIED.name,
+                value = isCharging,
+                unit = "boolean",
+                source = "BatteryManager.EXTRA_STATUS",
+                verified = true,
+                verification_method = "android_api",
+                observed_at = now,
+                evidence_ref = "evidence/android_app_evidence.json#is_charging"
+            ))
+        }
+
+        return results
+    }
+}
+
+class CameraTelemetryCollector(private val context: Context) {
+    fun collect(): List<CapabilityResult> {
+        val results = mutableListOf<CapabilityResult>()
+        val now = getIsoTimestamp()
+        val cm = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+        if (cm != null) {
+            try {
+                val ids = cm.cameraIdList
+                results.add(CapabilityResult(
+                    metric = "camera_count",
+                    state = RuntimeState.AVAILABLE.name,
+                    report_status = ReportStatus.VERIFIED.name,
+                    value = ids.size,
+                    source = "CameraManager.getCameraIdList()",
+                    verified = true,
+                    verification_method = "android_api",
+                    observed_at = now,
+                    evidence_ref = "evidence/android_app_evidence.json#camera_count"
+                ))
+
+                if (ids.isNotEmpty()) {
+                    val id0 = ids[0]
+                    val chars = cm.getCameraCharacteristics(id0)
+                    val hwLevel = chars.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)
+                    results.add(CapabilityResult(
+                        metric = "camera_0_hardware_level",
+                        state = RuntimeState.AVAILABLE.name,
+                        report_status = ReportStatus.VERIFIED.name,
+                        value = hwLevel,
+                        source = "CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL",
+                        verified = hwLevel != null,
+                        verification_method = "android_api",
+                        observed_at = now,
+                        evidence_ref = "evidence/android_app_evidence.json#camera_0_hardware_level"
+                    ))
+                }
+            } catch (e: Exception) {
+                results.add(CapabilityResult(
+                    metric = "camera_probe",
+                    state = RuntimeState.ERROR.name,
+                    report_status = ReportStatus.NOT_YET_VERIFIED.name,
+                    error_message = e.message ?: "CameraManager error"
+                ))
+            }
+        }
+        return results
     }
 }

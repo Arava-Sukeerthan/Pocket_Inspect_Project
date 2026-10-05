@@ -111,6 +111,7 @@ class CharacterizationReportGenerator:
     ) -> Dict[str, Any]:
         """Validates run record, saves schema-valid JSON files, and checks repeatability.
         F-14: Refuses to overwrite an existing characterization.json file unless overwrite=True.
+        R-11: Prevents corrupt/partial run files on validation failure.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         run_file = output_dir / "characterization.json"
@@ -122,24 +123,28 @@ class CharacterizationReportGenerator:
         if errors:
             raise ValueError(f"Characterization record failed validation:\n" + "\n".join(errors))
 
-        with open(run_file, "w", encoding="utf-8") as f:
-            json.dump(run_record, f, indent=2)
+        try:
+            with open(run_file, "w", encoding="utf-8") as f:
+                json.dump(run_record, f, indent=2)
 
-        # Generate summary markdown README
-        readme_file = output_dir / "README.md"
-        with open(readme_file, "w", encoding="utf-8") as f:
-            f.write(self._generate_markdown_summary(run_record))
+            readme_file = output_dir / "README.md"
+            with open(readme_file, "w", encoding="utf-8") as f:
+                f.write(self._generate_markdown_summary(run_record))
 
-        # Update capability matrix if device evidence present
-        if run_record.get("conditions", {}).get("adb_connected"):
-            self.update_device_capability_matrix(run_record)
+            # Update capability matrix if device evidence present
+            if run_record.get("conditions", {}).get("adb_connected"):
+                self.update_device_capability_matrix(run_record)
 
-        return {
-            "status": "VALID",
-            "run_file": str(run_file),
-            "readme_file": str(readme_file),
-            "errors": [],
-        }
+            return {
+                "status": "VALID",
+                "run_file": str(run_file),
+                "readme_file": str(readme_file),
+                "errors": [],
+            }
+        except Exception:
+            if run_file.exists() and not overwrite:
+                run_file.unlink(missing_ok=True)
+            raise
 
     def _generate_markdown_summary(self, run_record: Dict[str, Any]) -> str:
         run_id = run_record.get("run_id", "unknown")

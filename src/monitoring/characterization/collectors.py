@@ -140,7 +140,7 @@ class DeviceIdentityCollector:
             RuntimeState.UNAVAILABLE.value if ("soc_model" in props or "ro.soc.model" in props) else RuntimeState.NOT_TESTED.value
         )
         ver_soc = bool(props.get("is_real_device_observation") and obs_soc)
-        ev_soc = "evidence/cpuinfo_evidence.txt#soc_model" if ver_soc else None
+        ev_soc = "evidence/getprop_evidence.txt#ro.soc.model" if ver_soc else None
 
         observed_results.append(CapabilityResult(
             metric="soc_model",
@@ -161,7 +161,7 @@ class DeviceIdentityCollector:
             RuntimeState.UNAVAILABLE.value if ("gpu_renderer" in props or "gles_renderer" in props) else RuntimeState.NOT_TESTED.value
         )
         ver_gpu = bool(props.get("is_real_device_observation") and obs_gpu)
-        ev_gpu = "evidence/device_app_evidence.json#gpu_renderer" if ver_gpu else None
+        ev_gpu = "evidence/observed_props.json#gpu_renderer" if ver_gpu else None
 
         observed_results.append(CapabilityResult(
             metric="gpu_renderer",
@@ -175,10 +175,9 @@ class DeviceIdentityCollector:
             evidence_ref=ev_gpu,
         ))
 
-        # Variant check (3 GB RAM variant)
+        # Variant check (3 GB RAM variant, expected nominal range 2700 MB - 3300 MB)
         if total_ram_mb is not None:
-            # 3 GB RAM usable: ~2400 MB - 3500 MB
-            if 2400 <= total_ram_mb <= 3500:
+            if 2700 <= total_ram_mb <= 3300:
                 variant_val = f"3 GB variant verified (observed total RAM: {total_ram_mb} MB)"
                 ver_v = bool(props.get("is_real_device_observation"))
                 variant_res = CapabilityResult(
@@ -195,7 +194,7 @@ class DeviceIdentityCollector:
                     notes="Observed RAM matches the required 3 GB experimental platform variant.",
                 )
             else:
-                variant_val = f"DISAGREEMENT: Observed RAM {total_ram_mb} MB does not match 3 GB variant range (2400-3500 MB)"
+                variant_val = f"DISAGREEMENT: Observed RAM {total_ram_mb} MB does not match 3 GB variant range (2700-3300 MB)"
                 variant_res = CapabilityResult(
                     metric="variant_check",
                     state=RuntimeState.AVAILABLE.value,
@@ -1298,44 +1297,44 @@ class EnergyMeasurementCapabilityChecker:
         if "E1_feasible" not in props:
             state_e1 = RuntimeState.NOT_TESTED.value
             rep_e1 = ReportStatus.NOT_YET_VERIFIED.value
-            val_e1 = None
+            notes_e1 = "Physical battery terminal access feasibility not yet assessed."
         else:
             e1 = props.get("E1_feasible")
             state_e1 = RuntimeState.EXTERNAL_REQUIRED.value
             rep_e1 = ReportStatus.REQUIRES_EXTERNAL_INSTRUMENTATION.value
-            val_e1 = "Feasible with external power meter + battery terminal access" if e1 is True else None
+            notes_e1 = "Requires physical battery terminal access and safety sign-off." if e1 else "Infeasible battery-side access."
 
         res_e1 = CapabilityResult(
             metric="E1_battery_side_reference",
             state=state_e1,
             report_status=rep_e1,
-            value=val_e1,
+            value=None,
             source="External power meter (e.g. Monsoon / Yokogawa / Keysight)",
             verified=False,
             verification_method="external_hardware_feasibility_check",
-            notes="Requires physical battery terminal access and safety sign-off.",
+            notes=notes_e1,
         )
 
         # E-2 Supply-powered session
         if "E2_feasible" not in props:
             state_e2 = RuntimeState.NOT_TESTED.value
             rep_e2 = ReportStatus.NOT_YET_VERIFIED.value
-            val_e2 = None
+            notes_e2 = "Supply-powered session feasibility not yet assessed."
         else:
             e2 = props.get("E2_feasible")
             state_e2 = RuntimeState.EXTERNAL_REQUIRED.value
             rep_e2 = ReportStatus.REQUIRES_EXTERNAL_INSTRUMENTATION.value
-            val_e2 = "Feasible with external USB power meter during controlled session" if e2 is True else None
+            notes_e2 = "USB battery charging current must be accounted for or isolated." if e2 else "Infeasible USB supply-powered session."
 
         res_e2 = CapabilityResult(
             metric="E2_supply_powered_session",
             state=state_e2,
             report_status=rep_e2,
-            value=val_e2,
+            value=None,
             source="External USB power meter / inline power monitor",
             verified=False,
             verification_method="external_usb_meter_check",
-            notes="USB battery charging current must be accounted for or isolated.",
+            notes=notes_e2,
         )
 
         # E-3 Software relative counters
@@ -1357,21 +1356,18 @@ class EnergyMeasurementCapabilityChecker:
             verified=ver_e3,
             verification_method="software_counter_check",
             observed_at=now if ver_e3 else None,
-            evidence_ref="evidence/battery_evidence.json#E3_counters" if ver_e3 else None,
+            evidence_ref="evidence/battery_dumpsys_evidence.txt#E3_counters" if ver_e3 else None,
             notes="Relative software comparison only; NO absolute energy claimed.",
         )
 
-        # Level selection based on evidence
-        selected_level = props.get("selected_level")
-        if not selected_level:
-            if props.get("E1_feasible") is True:
-                selected_level = "E-1"
-            elif props.get("E2_feasible") is True:
-                selected_level = "E-2"
-            elif props.get("E3_counters_available") is True:
-                selected_level = "E-3"
-            else:
-                selected_level = None
+        # Level selection based on explicit evidence
+        selected_level = None
+        if props.get("E1_feasible") is True:
+            selected_level = "E-1"
+        elif props.get("E2_feasible") is True:
+            selected_level = "E-2"
+        elif props.get("E3_counters_available") is True:
+            selected_level = "E-3"
 
         return EnergyCapability(
             E1_battery_side_reference=res_e1,
