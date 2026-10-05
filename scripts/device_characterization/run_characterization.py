@@ -175,13 +175,13 @@ def run_characterization(
             "usb_connected": adb_connected,
             "adb_connected": adb_connected,
             "adb_connection_status": conn_status,
-            "device_serial": device_serial,
+            "device_serial": device_serial or getattr(adb, "detected_serial", None),
             "boot_id": boot_id,
             "is_dry_run": not adb_connected,
         },
         app_output_status=props.get("app_output_status"),
         manifest_sha256=props.get("manifest_sha256"),
-        run_status="COMPLETE" if adb_connected else "DRY_RUN",
+        run_status="FAILED" if (adb_connected and (props.get("probe_error_getprop") or props.get("probe_error_meminfo"))) else ("COMPLETE" if adb_connected else "DRY_RUN"),
     )
 
     run_dict = run.to_dict()

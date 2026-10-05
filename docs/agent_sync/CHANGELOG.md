@@ -2772,5 +2772,63 @@ Starting commit: `6673058`
 - Starting commit: `6673058`
 - Push status: uncommitted
 
+---
+
+## 2026-10-05 — Antigravity
+
+### Task
+Step 10D — Correction Round 5 (Blocking Corrections Following Independent Claude Audit)
+Branch: `antigravity/step-10d-final-correction-round5`
+Base commit: `ff1a68f`
+
+### Changes
+- `tests/test_device_characterization_connected_e2e.py`:
+  - F-01: Fixed `test_p03_unmocked_collector_e2e_pipeline` indentation bug where assertions were placed inside `mock_adb_cmd` after `return`, preventing assertion execution. Un-indented the test execution block outside the mock function so that all assertions actively execute during pytest runs.
+  - F-02: Added `test_f02_app_evidence_provenance_fallback` verifying that when host probes fail (/proc/meminfo, dumpsys battery) and Android app telemetry provides the fallback values, the resulting `evidence_ref` points directly to `evidence/android_app_evidence.json#<metric>` and never to non-existent host evidence files (`battery_dumpsys_evidence.txt`, `meminfo_evidence.txt`).
+  - F-04: Added `test_f04_malformed_values_e2e_pipeline` verifying that malformed cpufreq (`"INVALID_CPUFREQ_STRING"`), GPU clock (`"NOT_A_GPU_CLOCK_INT"`), and battery current (`"MALFORMED_CURRENT"`) parsed from real ADB output yield `state = "ERROR"` with proper error messages.
+  - F-05: Added `test_f05_unknown_battery_unit_e2e_pipeline` testing dumpsys battery current reading with no unit metadata (raw numeric 5000), verifying `unit = null`, `verified = false`, and `report_status = "AVAILABLE"` (never claiming `unit = "mA"` or `verified = true`).
+  - F-06: Updated `test_p07_probe_failure_semantics` to explicitly assert that `total_ram_mb` probe failure yields `state = "ERROR"`, `error_message = "Meminfo read error"`, and `evidence_ref = "evidence/commands.log#probe_error_meminfo"`.
+- `scripts/device_characterization/adb_collector.py`:
+  - F-03 & F-02: Enhanced `_normalize_app_output` to tag all parsed app telemetry properties with `norm[f"{m}_is_app_derived"] = True` and preserve app item metadata for nested sections (`device_identity`, `memory_telemetry`, `battery_telemetry`, `camera_telemetry`, `thermal_capability`).
+  - F-04: Fixed parsing in `parse_dumpsys_battery`, cpufreq, and GPU clock to preserve `ValueError` parse failures in `probe_error_*` rather than silently dropping or ignoring them.
+  - F-07: Stored detected device serial in `self.detected_serial` during `get_connection_status()` when device auto-detection succeeds.
+- `src/monitoring/characterization/collectors.py`:
+  - F-02 & F-03: Updated `BatteryTelemetryCollector`, `MemoryTelemetryCollector`, `ThermalTelemetryCollector`, `CameraCapabilityCollector`, and `DeviceIdentityCollector` to route `evidence_ref` to `evidence/android_app_evidence.json#<metric>` when properties originate from app telemetry or app fallback.
+  - F-05: Enforced `unit = None` and `verified = False` when battery current unit metadata is not established from evidence.
+  - F-06: Fixed `DeviceIdentityCollector` to remove leftover lines that overwrote `error_message` on `total_ram_mb` probe failure.
+- `scripts/device_characterization/run_characterization.py`:
+  - F-07: Recorded auto-detected device serial in `conditions["device_serial"]` and set `run_status = "FAILED"` when mandatory probes fail on a connected device run.
+
+### Research decisions
+- **F-01 / P-03 Execution**: The E2E unmocked pipeline test is fully active and verified to execute all assertions through the production pipeline.
+- **F-02 App Provenance**: Fallback values derived from on-device Android telemetry cite `evidence/android_app_evidence.json` as their authoritative evidence source.
+- **F-05 Unit Conservatism**: Ambiguous numeric current readings without explicit unit metadata remain unverified (`verified = False`, `unit = null`).
+- **Research Integrity**: RQs, GC-03, C1-C4, R0-R3, r*, D-01..D-16 remain 100% frozen. No physical device characterization performed; no OPPO A5 2020 connected.
+
+### Verification
+- Independent test execution:
+  - `test_p03_unmocked_collector_e2e_pipeline`: PASSED (0.91s)
+  - `test_f04_malformed_values_e2e_pipeline` & `test_p07_probe_failure_semantics`: PASSED (0.73s)
+  - `test_f05_unknown_battery_unit_e2e_pipeline` & `test_r09_battery_current_semantics`: PASSED (0.94s)
+  - `test_p05_manifest_hash_verification` & `test_p05_manifest_validation_cases`: PASSED (1.09s)
+  - `test_r11_atomic_write_and_run_status`: PASSED (0.42s)
+- Full pytest suite executed TWICE:
+  - Run 1: 294 passed in 27.57s (0 failed)
+  - Run 2: 294 passed in 25.97s (0 failed)
+- Working tree: clean after testing; no synthetic run artifacts left in `research/results/device_characterization/`.
+- Device connection: OPPO A5 2020 NOT connected; physical characterization NOT performed.
+
+### Uncertain items
+- Independent Claude Code review of Correction Round 5 required before any physical device characterization.
+
+### Remaining work
+- Commit changes to branch `antigravity/step-10d-final-correction-round5`.
+- Await independent Claude Code review.
+
+### Git
+- Branch: `antigravity/step-10d-final-correction-round5`
+- Base commit: `ff1a68f`
+- Push status: pending commit & push
+
 
 

@@ -112,6 +112,7 @@ class ADBCollector:
         if len(parts) >= 2:
             state = parts[1]
             if state == "device":
+                self.detected_serial = parts[0]
                 return "CONNECTED"
             elif state == "unauthorized":
                 return "UNAUTHORIZED"
@@ -227,7 +228,8 @@ class ADBCollector:
                     try:
                         res["battery_current_now"] = int(v)
                     except ValueError:
-                        pass
+                        res["battery_current_now"] = v
+                        res["probe_error_battery_current"] = f"Failed to parse battery current value: '{v}'"
         if "charging_state" not in res:
             res["charging_state"] = False
         return res
@@ -334,24 +336,46 @@ class ADBCollector:
                         v = item.get("value")
                         unit = item.get("unit")
                         norm[m] = v
+                        norm[f"{m}_is_app_derived"] = True
                         if unit:
                             norm[f"{m}_unit"] = unit
                         norm[f"{m}_app_item"] = item
+
+                        if m == "camera_0_hardware_level":
+                            if "camera_0" not in norm:
+                                norm["camera_0"] = {}
+                            if isinstance(norm["camera_0"], dict):
+                                norm["camera_0"]["hardware_level"] = v
+                            norm["camera_0_hardware_level_is_app_derived"] = True
             elif isinstance(section, dict):
                 for m, v in section.items():
                     norm[m] = v
+                    norm[f"{m}_is_app_derived"] = True
 
         thermal = app_parsed.get("thermal_capability")
         if isinstance(thermal, dict):
             if "metric" in thermal:
-                norm[thermal["metric"]] = thermal.get("value")
+                m = thermal["metric"]
+                v = thermal.get("value")
+                norm[m] = v
+                norm[f"{m}_is_app_derived"] = True
+                norm[f"{m}_app_item"] = thermal
+                if m == "thermal_status_api":
+                    norm["thermal_status_api_available"] = True
             for k, v in thermal.items():
                 if k not in norm:
                     norm[k] = v
+                    norm[f"{k}_is_app_derived"] = True
         elif isinstance(thermal, list):
             for item in thermal:
                 if isinstance(item, dict) and "metric" in item:
-                    norm[item["metric"]] = item.get("value")
+                    m = item["metric"]
+                    v = item.get("value")
+                    norm[m] = v
+                    norm[f"{m}_is_app_derived"] = True
+                    norm[f"{m}_app_item"] = item
+                    if m == "thermal_status_api":
+                        norm["thermal_status_api_available"] = True
 
         for k, v in app_parsed.items():
             if k not in norm and k not in ["run_id", "observed_at"]:
@@ -464,23 +488,23 @@ class ADBCollector:
 
         # 7. cpufreq
         ok_freq, out_freq = self.read_file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-        if ok_freq:
+        if ok_freq and out_freq.strip():
             _save_evidence("cpufreq_evidence.txt", out_freq)
             try:
                 observed_props["cpu_scaling_cur_freq"] = int(out_freq.strip())
             except ValueError:
-                pass
+                observed_props["probe_error_cpufreq"] = f"Failed to parse cpufreq node value: '{out_freq.strip()}'"
         else:
             observed_props["probe_error_cpufreq"] = f"Failed to read cpufreq node: {out_freq}"
 
         # 8. GPU sysfs / dumpsys
         ok_gpu, out_gpu = self.read_file("/sys/class/kgsl/kgsl-3d0/gpuclk")
-        if ok_gpu:
+        if ok_gpu and out_gpu.strip():
             _save_evidence("gpu_evidence.txt", out_gpu)
             try:
                 observed_props["gpu_clock_hz"] = int(out_gpu.strip())
             except ValueError:
-                pass
+                observed_props["probe_error_gpu"] = f"Failed to parse kgsl gpuclk node value: '{out_gpu.strip()}'"
         else:
             observed_props["probe_error_gpu"] = f"Failed to read kgsl gpuclk node: {out_gpu}"
 

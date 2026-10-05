@@ -155,9 +155,10 @@ class DeviceIdentityCollector:
             state_ram = RuntimeState.AVAILABLE.value if total_ram_mb is not None else RuntimeState.UNAVAILABLE.value
             ver_ram = bool(props.get("is_real_device_observation") and total_ram_mb is not None)
             err_ram = None
-            ev_ram = "evidence/meminfo_evidence.txt#total_ram_mb" if ver_ram else None
-        ver_ram = bool(props.get("is_real_device_observation") and total_ram_mb is not None)
-        ev_ram = "evidence/meminfo_evidence.txt#total_ram_mb" if ver_ram else None
+            if "total_ram_mb_app_item" in props or ("total_ram_mb" in props and "probe_error_meminfo" in props):
+                ev_ram = "evidence/android_app_evidence.json#total_ram_mb" if ver_ram else None
+            else:
+                ev_ram = "evidence/meminfo_evidence.txt#total_ram_mb" if ver_ram else None
 
         observed_results.append(CapabilityResult(
             metric="total_ram_mb",
@@ -170,6 +171,7 @@ class DeviceIdentityCollector:
             verification_method="device_observation",
             observed_at=now if ver_ram else None,
             evidence_ref=ev_ram,
+            error_message=err_ram,
         ))
 
         # SoC Model (P-04 provenance check)
@@ -240,7 +242,7 @@ class DeviceIdentityCollector:
                     verified=ver_v,
                     verification_method="observed_ram_range_verification",
                     observed_at=now if ver_v else None,
-                    evidence_ref="evidence/meminfo_evidence.txt#ram_variant_check" if ver_v else None,
+                    evidence_ref=("evidence/android_app_evidence.json#total_ram_mb" if ("total_ram_mb_app_item" in props or props.get("total_ram_mb_is_app_derived") or "probe_error_meminfo" in props) else "evidence/meminfo_evidence.txt#ram_variant_check") if ver_v else None,
                     notes="Observed RAM matches the required 3 GB experimental platform variant.",
                 )
             else:
@@ -436,7 +438,10 @@ class BatteryTelemetryCollector:
                 state_lvl = RuntimeState.AVAILABLE.value
                 err_lvl = None
                 val_lvl = int(raw_lvl)
-                ev_lvl = "evidence/battery_dumpsys_evidence.txt#battery_level_percent" if (is_real and state_lvl == RuntimeState.AVAILABLE.value) else None
+                if "battery_level_percent_app_item" in props or props.get("battery_level_percent_is_app_derived") or ("probe_error_battery" in props and "battery_level_percent" in props):
+                    ev_lvl = "evidence/android_app_evidence.json#battery_level_percent" if (is_real and state_lvl == RuntimeState.AVAILABLE.value) else None
+                else:
+                    ev_lvl = "evidence/battery_dumpsys_evidence.txt#battery_level_percent" if (is_real and state_lvl == RuntimeState.AVAILABLE.value) else None
             else:
                 state_lvl = RuntimeState.ERROR.value
                 err_lvl = f"Implausible battery level value observed: {raw_lvl}"
@@ -481,7 +486,10 @@ class BatteryTelemetryCollector:
                 state_volt = RuntimeState.AVAILABLE.value
                 err_volt = None
                 val_volt = float(raw_volt)
-                ev_volt = "evidence/battery_dumpsys_evidence.txt#battery_voltage" if (is_real and state_volt == RuntimeState.AVAILABLE.value) else None
+                if "battery_voltage_app_item" in props or props.get("battery_voltage_is_app_derived") or ("probe_error_battery" in props and "battery_voltage" in props):
+                    ev_volt = "evidence/android_app_evidence.json#battery_voltage" if (is_real and state_volt == RuntimeState.AVAILABLE.value) else None
+                else:
+                    ev_volt = "evidence/battery_dumpsys_evidence.txt#battery_voltage" if (is_real and state_volt == RuntimeState.AVAILABLE.value) else None
             else:
                 state_volt = RuntimeState.ERROR.value
                 err_volt = f"Implausible battery voltage value observed: {raw_volt} mV"
@@ -526,7 +534,10 @@ class BatteryTelemetryCollector:
                 state_temp = RuntimeState.AVAILABLE.value
                 err_temp = None
                 val_temp = float(raw_temp)
-                ev_temp = "evidence/battery_dumpsys_evidence.txt#battery_temperature" if (is_real and state_temp == RuntimeState.AVAILABLE.value) else None
+                if "battery_temperature_app_item" in props or props.get("battery_temperature_is_app_derived") or ("probe_error_battery" in props and "battery_temperature" in props):
+                    ev_temp = "evidence/android_app_evidence.json#battery_temperature" if (is_real and state_temp == RuntimeState.AVAILABLE.value) else None
+                else:
+                    ev_temp = "evidence/battery_dumpsys_evidence.txt#battery_temperature" if (is_real and state_temp == RuntimeState.AVAILABLE.value) else None
             else:
                 state_temp = RuntimeState.ERROR.value
                 err_temp = f"Implausible battery temperature value observed: {raw_temp} degC"
@@ -621,10 +632,11 @@ class BatteryTelemetryCollector:
                         notes_curr = f"Implausible battery current value: {raw_val}"
                         ev_curr = None
                     elif not unit_known:
-                        # R-09: Never mark battery current VERIFIED when unit cannot be established from evidence!
+                        # R-09 / F-05: Never mark battery current VERIFIED when unit cannot be established from evidence, and set unit = None!
                         state_curr = RuntimeState.AVAILABLE.value
                         val_curr = converted_ma
                         ver_curr = False  # MANDATORY: UNVERIFIED
+                        unit_curr = None  # F-05: DO NOT output unit = "mA" when unit is unknown!
                         notes_curr = f"Battery current unit cannot be conclusively established from raw value {raw_val} without explicit unit metadata (unverified)."
                         ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if is_real else None
                     elif converted_ma == 0.0:
@@ -632,12 +644,14 @@ class BatteryTelemetryCollector:
                         state_curr = RuntimeState.AVAILABLE.value
                         val_curr = 0.0
                         ver_curr = False  # UNVERIFIED
+                        unit_curr = "mA"
                         notes_curr = "Observed battery current reading is 0. Flagged as potential driver sentinel zero (unverified)."
                         ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if is_real else None
                     else:
                         state_curr = RuntimeState.AVAILABLE.value
                         val_curr = converted_ma
                         ver_curr = is_real
+                        unit_curr = "mA"
                         notes_curr = f"Raw current reading: {raw_val} ({explicit_unit}), converted to {converted_ma} mA."
                         ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if ver_curr else None
 
@@ -646,7 +660,7 @@ class BatteryTelemetryCollector:
             state=state_curr,
             report_status=map_runtime_state_to_report_status(RuntimeState(state_curr), verified=ver_curr),
             value=val_curr,
-            unit="mA",
+            unit=unit_curr if 'unit_curr' in locals() else None,
             source="BatteryManager.BATTERY_PROPERTY_CURRENT_NOW / dumpsys battery",
             verified=ver_curr,
             verification_method="battery_property_check",
@@ -736,7 +750,10 @@ class MemoryTelemetryCollector:
             state_avail = RuntimeState.AVAILABLE.value if avail_mb is not None else RuntimeState.UNAVAILABLE.value
             val_avail = avail_mb if state_avail == RuntimeState.AVAILABLE.value else None
             err_avail = None
-            ev_avail = "evidence/meminfo_evidence.txt#available_memory_mb" if (is_real and state_avail == RuntimeState.AVAILABLE.value) else None
+            if "available_memory_mb_app_item" in props or props.get("available_memory_mb_is_app_derived") or ("probe_error_meminfo" in props and "available_memory_mb" in props):
+                ev_avail = "evidence/android_app_evidence.json#available_memory_mb" if (is_real and state_avail == RuntimeState.AVAILABLE.value) else None
+            else:
+                ev_avail = "evidence/meminfo_evidence.txt#available_memory_mb" if (is_real and state_avail == RuntimeState.AVAILABLE.value) else None
 
         ver_avail = is_real and state_avail == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
@@ -1143,6 +1160,11 @@ class ThermalTelemetryCollector:
                 status_api_val = None
 
         ver_status_api = is_real and status_api_state == RuntimeState.AVAILABLE.value
+        if props.get("thermal_status_api_is_app_derived") or "thermal_status_api_app_item" in props:
+            ev_status_api = "evidence/android_app_evidence.json#thermal_status_api" if ver_status_api else None
+        else:
+            ev_status_api = "evidence/thermal_evidence.json#status_api" if ver_status_api else None
+
         res_status_api = CapabilityResult(
             metric="thermal_status_api",
             state=status_api_state,
@@ -1153,7 +1175,7 @@ class ThermalTelemetryCollector:
             verified=ver_status_api,
             verification_method="power_manager_thermal_status_check",
             observed_at=now if ver_status_api else None,
-            evidence_ref="evidence/thermal_evidence.json#status_api" if ver_status_api else None,
+            evidence_ref=ev_status_api,
         )
 
         # Thermal headroom API (API >= 30)
@@ -1316,7 +1338,16 @@ class CameraCapabilityCollector:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         is_real = bool(props.get("is_real_device_observation", False))
 
-        camera_ids = props.get("camera_ids", ["0"])
+        camera_ids = props.get("camera_ids")
+        if not camera_ids and "camera_count" in props:
+            try:
+                cnt = int(props["camera_count"])
+                camera_ids = [str(i) for i in range(cnt)] if cnt > 0 else ["0"]
+            except (ValueError, TypeError):
+                camera_ids = ["0"]
+        if not camera_ids:
+            camera_ids = ["0"]
+
         results_list: List[CameraCapability] = []
 
         for cid in camera_ids:
@@ -1325,7 +1356,11 @@ class CameraCapabilityCollector:
             probe_err_cam = props.get("probe_error_camera")
 
             # Hardware level
-            if "hardware_level" not in cam_info:
+            hw_level = cam_info.get("hardware_level") if isinstance(cam_info, dict) else None
+            if hw_level is None and f"camera_{cid}_hardware_level" in props:
+                hw_level = props[f"camera_{cid}_hardware_level"]
+
+            if hw_level is None:
                 if probe_err_cam:
                     state_hw = RuntimeState.ERROR.value
                     val_hw = None
@@ -1337,11 +1372,13 @@ class CameraCapabilityCollector:
                     err_hw = None
                     ev_hw = None
             else:
-                hw_level = cam_info.get("hardware_level")
-                state_hw = RuntimeState.AVAILABLE.value if hw_level else RuntimeState.UNAVAILABLE.value
+                state_hw = RuntimeState.AVAILABLE.value if hw_level is not None else RuntimeState.UNAVAILABLE.value
                 val_hw = hw_level if state_hw == RuntimeState.AVAILABLE.value else None
                 err_hw = None
-                ev_hw = f"evidence/camera_{cid}_evidence.json#hardware_level" if (is_real and state_hw == RuntimeState.AVAILABLE.value) else None
+                if props.get(f"camera_{cid}_hardware_level_is_app_derived") or f"camera_{cid}_hardware_level_app_item" in props or (cid == "0" and props.get("camera_0_hardware_level_is_app_derived")):
+                    ev_hw = f"evidence/android_app_evidence.json#camera_{cid}_hardware_level" if (is_real and state_hw == RuntimeState.AVAILABLE.value) else None
+                else:
+                    ev_hw = f"evidence/camera_{cid}_evidence.json#hardware_level" if (is_real and state_hw == RuntimeState.AVAILABLE.value) else None
 
             ver_hw = is_real and state_hw == RuntimeState.AVAILABLE.value
             res_cam.append(CapabilityResult(

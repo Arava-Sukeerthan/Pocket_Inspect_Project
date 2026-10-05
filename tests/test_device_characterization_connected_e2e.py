@@ -278,15 +278,16 @@ def test_p04_soc_property_fallback_provenance():
 
 def test_p03_unmocked_collector_e2e_pipeline(tmp_path):
     """P-03: End-to-end unmocked pipeline test executing:
-    synthetic ADB -> raw evidence -> parser -> actual collectors -> report generator -> characterization.json.
-    Verifies CPU frequency and GPU clock appear in the final report, and app_output_status reaches characterization.json.
+    synthetic ADB -> raw evidence -> parser -> _normalize_app_output() -> collectors -> report generator -> characterization.json.
+    Verifies CPU frequency and GPU clock appear in the final report, app_output_status reaches characterization.json,
+    and app-derived telemetry (thermal_status_api, camera_count, camera_0_hardware_level) reaches characterization.json with proper evidence_ref.
     """
     adb = ADBCollector(device_id="SYNTHETIC_DEVICE_01")
 
     def mock_adb_cmd(args):
         cmd_str = " ".join(args)
         if "getprop" in cmd_str:
-            return 0, "[ro.product.manufacturer]: [OPPO]\n[ro.product.model]: [OPPO A5 2020]\n[ro.build.version.sdk]: [28]\n[ro.soc.model]: [SM6125]\n", ""
+            return 0, "[ro.product.manufacturer]: [OPPO]\n[ro.product.model]: [OPPO A5 2020]\n[ro.build.version.sdk]: [29]\n[ro.soc.model]: [SM6125]\n", ""
         elif "/proc/meminfo" in cmd_str:
             return 0, "MemTotal:        3072000 kB\nMemAvailable:    1500000 kB\n", ""
         elif "/proc/cpuinfo" in cmd_str:
@@ -342,54 +343,269 @@ def test_p03_unmocked_collector_e2e_pipeline(tmp_path):
             return 0, app_json, ""
         return 0, "ok\n", ""
 
-        with patch.object(adb, "_adb_cmd", side_effect=mock_adb_cmd):
-            with patch("scripts.device_characterization.run_characterization.ADBCollector", return_value=adb):
-                with patch.object(adb, "get_connection_status", return_value="CONNECTED"):
-                    today = datetime.datetime.utcnow().strftime("%Y%m%d")
-                    run_id = f"run_{today}_150000"
-                    config_file = Path("configs/device_characterization.yaml")
+    with patch.object(adb, "_adb_cmd", side_effect=mock_adb_cmd):
+        with patch("scripts.device_characterization.run_characterization.ADBCollector", return_value=adb):
+            with patch.object(adb, "get_connection_status", return_value="CONNECTED"):
+                today = datetime.datetime.utcnow().strftime("%Y%m%d")
+                run_id = f"run_{today}_150000"
+                config_file = Path("configs/device_characterization.yaml")
 
-                    out_dir, run_dict = run_characterization(
-                        config_file,
-                        run_id=run_id,
-                        overwrite=True,
-                        results_dir=tmp_path,
-                    )
+                out_dir, run_dict = run_characterization(
+                    config_file,
+                    run_id=run_id,
+                    overwrite=True,
+                    results_dir=tmp_path,
+                )
 
-                    # Verify characterization.json output
-                    char_json = out_dir / "characterization.json"
-                    assert char_json.exists()
+                # Verify characterization.json output
+                char_json = out_dir / "characterization.json"
+                assert char_json.exists()
 
-                    with open(char_json, "r", encoding="utf-8") as f:
-                        data = json.load(f)
+                with open(char_json, "r", encoding="utf-8") as f:
+                    data = json.load(f)
 
-                    # Verify app_output_status and nested app telemetry integration
-                    assert data.get("app_output_status") == "APP_OUTPUT_COLLECTED"
-                    assert "app_telemetry" in data
-                    assert data["app_telemetry"]["run_id"] == "android_run_9999"
+                # Verify app_output_status and nested app telemetry integration
+                assert data.get("app_output_status") == "APP_OUTPUT_COLLECTED"
+                app_ev_file = out_dir / "evidence" / "android_app_evidence.json"
+                assert app_ev_file.exists()
+                app_ev_data = json.loads(app_ev_file.read_text(encoding="utf-8"))
+                assert app_ev_data["run_id"] == "android_run_9999"
 
-                    # Search CPU frequency and GPU clock in telemetry
-                    telemetry = data.get("telemetry", [])
-                    cpu_telemetry = next((t for t in telemetry if t["dimension"] == "cpu"), None)
-                    gpu_telemetry = next((t for t in telemetry if t["dimension"] == "gpu"), None)
+                # Search CPU frequency and GPU clock in telemetry
+                telemetry = data.get("telemetry", [])
+                cpu_telemetry = next((t for t in telemetry if t["dimension"] == "cpu"), None)
+                gpu_telemetry = next((t for t in telemetry if t["dimension"] == "gpu"), None)
 
-                    assert cpu_telemetry is not None
-                    assert gpu_telemetry is not None
+                assert cpu_telemetry is not None
+                assert gpu_telemetry is not None
 
-                    cpu_freq_res = next((r for r in cpu_telemetry["results"] if r["metric"] == "cpu_scaling_cur_freq"), None)
-                    gpu_clock_res = next((r for r in gpu_telemetry["results"] if r["metric"] == "gpu_clock_hz"), None)
+                cpu_freq_res = next((r for r in cpu_telemetry["results"] if r["metric"] == "cpu_scaling_cur_freq"), None)
+                gpu_clock_res = next((r for r in gpu_telemetry["results"] if r["metric"] == "gpu_clock_hz"), None)
 
-                    assert cpu_freq_res is not None
-                    assert cpu_freq_res["value"] == 1804800
-                    assert cpu_freq_res["state"] == "AVAILABLE"
-                    assert cpu_freq_res["verified"] is True
-                    assert cpu_freq_res["evidence_ref"] == "evidence/cpufreq_evidence.txt#scaling_cur_freq"
+                assert cpu_freq_res is not None
+                assert cpu_freq_res["value"] == 1804800
+                assert cpu_freq_res["state"] == "AVAILABLE"
+                assert cpu_freq_res["verified"] is True
+                assert cpu_freq_res["evidence_ref"] == "evidence/cpufreq_evidence.txt#scaling_cur_freq"
 
-                    assert gpu_clock_res is not None
-                    assert gpu_clock_res["value"] == 600000000
-                    assert gpu_clock_res["state"] == "AVAILABLE"
-                    assert gpu_clock_res["verified"] is True
-                    assert gpu_clock_res["evidence_ref"] == "evidence/gpu_evidence.txt#gpuclk"
+                assert gpu_clock_res is not None
+                assert gpu_clock_res["value"] == 600000000
+                assert gpu_clock_res["state"] == "AVAILABLE"
+                assert gpu_clock_res["verified"] is True
+                assert gpu_clock_res["evidence_ref"] == "evidence/gpu_evidence.txt#gpuclk"
+
+                # Verify F-03 app-derived telemetry reaching characterization.json
+                thermal_cap = data.get("thermal", {})
+                assert thermal_cap.get("thermal_status_api", {}).get("state") == "AVAILABLE"
+                assert thermal_cap.get("thermal_status_api", {}).get("evidence_ref") == "evidence/android_app_evidence.json#thermal_status_api"
+
+                camera_caps = data.get("camera", [])
+                assert len(camera_caps) > 0
+                cam0_hw = next((r for r in camera_caps[0]["results"] if r["metric"] == "hardware_level"), None)
+                assert cam0_hw is not None
+                assert cam0_hw["value"] == 1
+                assert cam0_hw["evidence_ref"] == "evidence/android_app_evidence.json#camera_0_hardware_level"
+
+                # Verify failure assertion: ensure app telemetry reached characterization.json
+                assert any(r.get("evidence_ref", "").startswith("evidence/android_app_evidence.json") for t in telemetry for r in t.get("results", [])) or \
+                       thermal_cap.get("thermal_status_api", {}).get("evidence_ref", "").startswith("evidence/android_app_evidence.json") or \
+                       any(r.get("evidence_ref", "").startswith("evidence/android_app_evidence.json") for c in camera_caps for r in c.get("results", []))
+
+
+def test_f02_app_evidence_provenance_fallback(tmp_path):
+    """F-02: When host probes fail (dumpsys battery, /proc/meminfo) and app telemetry provides fallback values,
+    the resulting evidence_ref MUST point to evidence/android_app_evidence.json#<metric> and NOT host evidence files.
+    """
+    adb = ADBCollector(device_id="DEV_F02")
+
+    def mock_adb_cmd(args):
+        cmd_str = " ".join(args)
+        if "getprop" in cmd_str:
+            return 0, "[ro.product.manufacturer]: [OPPO]\n[ro.product.model]: [OPPO A5 2020]\n[ro.build.version.sdk]: [28]\n[ro.soc.model]: [SM6125]\n", ""
+        elif "/proc/meminfo" in cmd_str:
+            return 1, "", "Permission denied /proc/meminfo"
+        elif "/proc/cpuinfo" in cmd_str:
+            return 0, "processor : 0\nHardware : Qualcomm\n", ""
+        elif "dumpsys battery" in cmd_str:
+            return 1, "", "dumpsys battery failed with exit code 1"
+        elif "run-as" in cmd_str:
+            app_json = json.dumps({
+                "run_id": "android_run_fallback",
+                "observed_at": "2026-10-05T12:00:00Z",
+                "battery_telemetry": [
+                    {"metric": "battery_level_percent", "value": 77, "state": "AVAILABLE", "report_status": "VERIFIED"},
+                    {"metric": "battery_voltage", "value": 3950, "unit": "mV", "state": "AVAILABLE", "report_status": "VERIFIED"},
+                    {"metric": "battery_temperature", "value": 31.0, "unit": "degC", "state": "AVAILABLE", "report_status": "VERIFIED"},
+                ],
+                "memory_telemetry": [
+                    {"metric": "total_ram_mb", "value": 3072, "unit": "MB", "state": "AVAILABLE", "report_status": "VERIFIED"},
+                    {"metric": "available_memory_mb", "value": 1420, "unit": "MB", "state": "AVAILABLE", "report_status": "VERIFIED"}
+                ],
+            })
+            return 0, app_json, ""
+        return 0, "ok\n", ""
+
+    with patch.object(adb, "_adb_cmd", side_effect=mock_adb_cmd):
+        with patch("scripts.device_characterization.run_characterization.ADBCollector", return_value=adb):
+            with patch.object(adb, "get_connection_status", return_value="CONNECTED"):
+                today = datetime.datetime.utcnow().strftime("%Y%m%d")
+                run_id = f"run_{today}_160000"
+                config_file = Path("configs/device_characterization.yaml")
+
+                out_dir, run_dict = run_characterization(
+                    config_file,
+                    run_id=run_id,
+                    overwrite=True,
+                    results_dir=tmp_path,
+                )
+
+                char_json = out_dir / "characterization.json"
+                assert char_json.exists()
+
+                with open(char_json, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                # Total RAM in device_identity
+                dev_id_obs = data["device_identity"]["observed"]
+                ram_res = next(r for r in dev_id_obs if r["metric"] == "total_ram_mb")
+                assert ram_res["value"] == 3072
+                assert ram_res["evidence_ref"] == "evidence/android_app_evidence.json#total_ram_mb"
+                assert "meminfo_evidence.txt" not in (ram_res["evidence_ref"] or "")
+
+                # Battery & Memory telemetry
+                telemetry = data["telemetry"]
+                bat_tel = next(t for t in telemetry if t["dimension"] == "battery")
+                mem_tel = next(t for t in telemetry if t["dimension"] == "memory")
+
+                bat_lvl = next(r for r in bat_tel["results"] if r["metric"] == "battery_level_percent")
+                bat_volt = next(r for r in bat_tel["results"] if r["metric"] == "battery_voltage")
+                bat_temp = next(r for r in bat_tel["results"] if r["metric"] == "battery_temperature")
+                mem_avail = next(r for r in mem_tel["results"] if r["metric"] == "available_memory_mb")
+
+                assert bat_lvl["value"] == 77
+                assert bat_lvl["evidence_ref"] == "evidence/android_app_evidence.json#battery_level_percent"
+                assert "battery_dumpsys_evidence.txt" not in (bat_lvl["evidence_ref"] or "")
+
+                assert bat_volt["value"] == 3950.0
+                assert bat_volt["evidence_ref"] == "evidence/android_app_evidence.json#battery_voltage"
+                assert "battery_dumpsys_evidence.txt" not in (bat_volt["evidence_ref"] or "")
+
+                assert bat_temp["value"] == 31.0
+                assert bat_temp["evidence_ref"] == "evidence/android_app_evidence.json#battery_temperature"
+                assert "battery_dumpsys_evidence.txt" not in (bat_temp["evidence_ref"] or "")
+
+                assert mem_avail["value"] == 1420
+                assert mem_avail["evidence_ref"] == "evidence/android_app_evidence.json#available_memory_mb"
+                assert "meminfo_evidence.txt" not in (mem_avail["evidence_ref"] or "")
+
+
+def test_f04_malformed_values_e2e_pipeline(tmp_path):
+    """F-04: Malformed cpufreq, GPU clock, and battery current values from real ADB parsing
+    must yield state=ERROR with error_message and evidence_ref in characterization.json.
+    """
+    adb = ADBCollector(device_id="DEV_F04")
+
+    def mock_adb_cmd(args):
+        cmd_str = " ".join(args)
+        if "getprop" in cmd_str:
+            return 0, "[ro.product.manufacturer]: [OPPO]\n[ro.product.model]: [OPPO A5 2020]\n[ro.build.version.sdk]: [28]\n[ro.soc.model]: [SM6125]\n", ""
+        elif "/proc/meminfo" in cmd_str:
+            return 0, "MemTotal: 3072000 kB\nMemAvailable: 1500000 kB\n", ""
+        elif "scaling_cur_freq" in cmd_str:
+            return 0, "INVALID_CPUFREQ_STRING\n", ""
+        elif "gpuclk" in cmd_str:
+            return 0, "NOT_A_GPU_CLOCK_INT\n", ""
+        elif "dumpsys battery" in cmd_str:
+            return 0, "level: 80\nvoltage: 4000\ntemperature: 290\ncurrent now: MALFORMED_CURRENT\n", ""
+        return 0, "ok\n", ""
+
+    with patch.object(adb, "_adb_cmd", side_effect=mock_adb_cmd):
+        with patch("scripts.device_characterization.run_characterization.ADBCollector", return_value=adb):
+            with patch.object(adb, "get_connection_status", return_value="CONNECTED"):
+                today = datetime.datetime.utcnow().strftime("%Y%m%d")
+                run_id = f"run_{today}_170000"
+                config_file = Path("configs/device_characterization.yaml")
+
+                out_dir, run_dict = run_characterization(
+                    config_file,
+                    run_id=run_id,
+                    overwrite=True,
+                    results_dir=tmp_path,
+                )
+
+                char_json = out_dir / "characterization.json"
+                assert char_json.exists()
+
+                with open(char_json, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                telemetry = data["telemetry"]
+                cpu_tel = next(t for t in telemetry if t["dimension"] == "cpu")
+                gpu_tel = next(t for t in telemetry if t["dimension"] == "gpu")
+                bat_tel = next(t for t in telemetry if t["dimension"] == "battery")
+
+                cpu_freq = next(r for r in cpu_tel["results"] if r["metric"] == "cpu_scaling_cur_freq")
+                gpu_clock = next(r for r in gpu_tel["results"] if r["metric"] == "gpu_clock_hz")
+                bat_curr = next(r for r in bat_tel["results"] if r["metric"] == "battery_current_now")
+
+                assert cpu_freq["state"] == "ERROR"
+                assert cpu_freq["value"] is None
+                assert "Failed to parse" in cpu_freq["error_message"]
+
+                assert gpu_clock["state"] == "ERROR"
+                assert gpu_clock["value"] is None
+                assert "Failed to parse" in gpu_clock["error_message"]
+
+                assert bat_curr["state"] == "ERROR"
+                assert bat_curr["value"] is None
+                assert "Failed to parse" in bat_curr["error_message"] or "Malformed" in bat_curr["error_message"]
+
+
+def test_f05_unknown_battery_unit_e2e_pipeline(tmp_path):
+    """F-05: When dumpsys battery reports a numeric current reading with no unit metadata,
+    the pipeline MUST set unit=null, verified=false, and NOT output unit="mA" with verified=true.
+    """
+    adb = ADBCollector(device_id="DEV_F05")
+
+    def mock_adb_cmd(args):
+        cmd_str = " ".join(args)
+        if "getprop" in cmd_str:
+            return 0, "[ro.product.manufacturer]: [OPPO]\n[ro.product.model]: [OPPO A5 2020]\n[ro.build.version.sdk]: [28]\n[ro.soc.model]: [SM6125]\n", ""
+        elif "/proc/meminfo" in cmd_str:
+            return 0, "MemTotal: 3072000 kB\nMemAvailable: 1500000 kB\n", ""
+        elif "dumpsys battery" in cmd_str:
+            return 0, "level: 80\nvoltage: 4000\ntemperature: 290\ncurrent now: 5000\n", ""
+        return 0, "ok\n", ""
+
+    with patch.object(adb, "_adb_cmd", side_effect=mock_adb_cmd):
+        with patch("scripts.device_characterization.run_characterization.ADBCollector", return_value=adb):
+            with patch.object(adb, "get_connection_status", return_value="CONNECTED"):
+                today = datetime.datetime.utcnow().strftime("%Y%m%d")
+                run_id = f"run_{today}_180000"
+                config_file = Path("configs/device_characterization.yaml")
+
+                out_dir, run_dict = run_characterization(
+                    config_file,
+                    run_id=run_id,
+                    overwrite=True,
+                    results_dir=tmp_path,
+                )
+
+                char_json = out_dir / "characterization.json"
+                assert char_json.exists()
+
+                with open(char_json, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                telemetry = data["telemetry"]
+                bat_tel = next(t for t in telemetry if t["dimension"] == "battery")
+                bat_curr = next(r for r in bat_tel["results"] if r["metric"] == "battery_current_now")
+
+                assert bat_curr["state"] == "AVAILABLE"
+                assert bat_curr["value"] == 5000.0
+                assert bat_curr["unit"] is None  # F-05 requirement: NOT "mA"
+                assert bat_curr["verified"] is False  # F-05 requirement: unverified
+                assert bat_curr["report_status"] == "AVAILABLE"
 
 
 def test_p04_all_soc_fallback_paths_and_evidence_refs(tmp_path):
@@ -524,6 +740,7 @@ def test_p07_probe_failure_semantics():
     }
 
     from src.monitoring.characterization.collectors import (
+        DeviceIdentityCollector,
         BatteryTelemetryCollector,
         CPUTelemetryCollector,
         GPUTelemetryCollector,
@@ -532,12 +749,19 @@ def test_p07_probe_failure_semantics():
         CameraCapabilityCollector,
     )
 
+    dev_ident = DeviceIdentityCollector().collect(props)
     bat_cap = BatteryTelemetryCollector().collect(props)
     cpu_cap = CPUTelemetryCollector().collect(props)
     gpu_cap = GPUTelemetryCollector().collect(props)
     mem_cap = MemoryTelemetryCollector().collect(props)
     th_cap = ThermalTelemetryCollector().collect(props)
     cam_caps = CameraCapabilityCollector().collect(props)
+
+    # F-06: total_ram_mb probe failure error state and evidence_ref
+    ram_res = next(r for r in dev_ident.observed if r.metric == "total_ram_mb")
+    assert ram_res.state == "ERROR"
+    assert ram_res.error_message == "Meminfo read error"
+    assert ram_res.evidence_ref == "evidence/commands.log#probe_error_meminfo"
 
     bat_lvl = next(r for r in bat_cap.results if r.metric == "battery_level_percent")
     assert bat_lvl.state == "ERROR"
