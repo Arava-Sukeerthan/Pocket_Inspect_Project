@@ -140,7 +140,9 @@ def test_f05_verified_requires_existing_evidence_file(tmp_path):
         "sha256": hashlib.sha256(content).hexdigest(),
         "created_at": "2026-10-05T10:00:02Z"
     }]
-    (ev_dir / "manifest.json").write_text(json.dumps(manifest_data, indent=2), encoding="utf-8")
+    manifest_bytes = json.dumps(manifest_data, indent=2).encode("utf-8")
+    (ev_dir / "manifest.json").write_bytes(manifest_bytes)
+    record["manifest_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
     errors_ok = validate_characterization_record(record, output_dir=output_dir)
     assert errors_ok == []
 
@@ -167,3 +169,120 @@ def test_f02_date_mismatch_rejection(tmp_path):
     # Passing run_id with future date (e.g. 20991231) raises ValueError
     with pytest.raises(ValueError, match="does not match actual start time date"):
         run_characterization(cfg_path, run_id="run_20991231_100000", dry_run=True, results_dir=tmp_path)
+
+
+def test_r09_battery_current_ambiguous_unit_and_safety():
+    """R-09: Unit safety for battery current. Unannotated ambiguous units must NOT be marked VERIFIED."""
+    from src.monitoring.characterization.collectors import BatteryTelemetryCollector, RuntimeState, ReportStatus
+
+    collector = BatteryTelemetryCollector()
+
+    # 1. Explicit mA -> VERIFIED
+    res_ma = collector.collect({"battery_current_now": 150, "battery_current_unit": "mA", "is_real_device_observation": True})
+    curr_res = next(r for r in res_ma.results if r.metric == "battery_current_now")
+    assert curr_res.value == 150.0
+    assert curr_res.verified is True
+    assert curr_res.report_status == ReportStatus.VERIFIED.value
+
+    # 2. Explicit uA -> VERIFIED
+    res_ua = collector.collect({"battery_current_now": 150000, "battery_current_unit": "uA", "is_real_device_observation": True})
+    curr_res = next(r for r in res_ua.results if r.metric == "battery_current_now")
+    assert curr_res.value == 150.0
+    assert curr_res.verified is True
+    assert curr_res.report_status == ReportStatus.VERIFIED.value
+
+    # 3. Ambiguous 5000 (no unit metadata) -> MUST NOT be marked VERIFIED!
+    res_amb = collector.collect({"battery_current_now": 5000, "is_real_device_observation": True})
+    curr_res = next(r for r in res_amb.results if r.metric == "battery_current_now")
+    assert curr_res.value == 5000.0
+    assert curr_res.verified is False  # UNVERIFIED
+    assert curr_res.report_status == ReportStatus.AVAILABLE.value
+
+    # 4. Zero current with known unit -> UNVERIFIED
+    res_zero = collector.collect({"battery_current_now": 0, "battery_current_unit": "mA", "is_real_device_observation": True})
+    curr_res = next(r for r in res_zero.results if r.metric == "battery_current_now")
+    assert curr_res.value == 0.0
+    assert curr_res.verified is False  # UNVERIFIED
+
+    # 5. Missing current -> NOT_TESTED
+    res_miss = collector.collect({})
+    curr_res = next(r for r in res_miss.results if r.metric == "battery_current_now")
+    assert curr_res.state == RuntimeState.NOT_TESTED.value
+
+    # 6. Malformed current ("abc") -> ERROR
+    res_mal = collector.collect({"battery_current_now": "abc", "battery_current_unit": "mA", "is_real_device_observation": True})
+    curr_res = next(r for r in res_mal.results if r.metric == "battery_current_now")
+    assert curr_res.state == RuntimeState.ERROR.value
+    assert curr_res.verified is False
+    assert "Malformed" in (curr_res.error_message or "")
+
+    # 7. Implausibly large current (1,000,000 mA) -> ERROR
+    res_large = collector.collect({"battery_current_now": 1000000, "battery_current_unit": "mA", "is_real_device_observation": True})
+    curr_res = next(r for r in res_large.results if r.metric == "battery_current_now")
+    assert curr_res.state == RuntimeState.ERROR.value
+    assert curr_res.verified is False
+
+
+def test_p07_probe_failure_semantics_e2e(tmp_path):
+    """P-07: Verify that failed attempted probes return state ERROR across all dimensions."""
+    import unittest.mock
+    from scripts.device_characterization.adb_collector import ADBCollector
+    from src.monitoring.characterization.collectors import (
+        DeviceIdentityCollector,
+        AndroidCapabilityCollector,
+        MemoryTelemetryCollector,
+        CPUTelemetryCollector,
+        GPUTelemetryCollector,
+        BatteryTelemetryCollector,
+        RuntimeState,
+    )
+
+    adb = ADBCollector(device_id="FAILURE_DEVICE_01")
+
+    # Force all probes to fail
+    def mock_failing_adb_cmd(args):
+        cmd_str = " ".join(args)
+        return 1, "", f"Command failed: {cmd_str}"
+
+    with unittest.mock.patch.object(adb, "_adb_cmd", side_effect=mock_failing_adb_cmd):
+        with unittest.mock.patch.object(adb, "read_file", return_value=(False, "Read error")):
+            _, props = adb.collect_raw_evidence_and_observations(tmp_path)
+
+            # DeviceIdentity: getprop & meminfo failed
+            id_collector = DeviceIdentityCollector()
+            dev_id = id_collector.collect(props)
+            mfr_res = next(r for r in dev_id.observed if r.metric == "manufacturer")
+            ram_res = next(r for r in dev_id.observed if r.metric == "total_ram_mb")
+            assert mfr_res.state == RuntimeState.ERROR.value
+            assert ram_res.state == RuntimeState.ERROR.value
+
+            # AndroidCapability: getprop failed
+            android_collector = AndroidCapabilityCollector()
+            android_cap = android_collector.collect(props)
+            api_res = next(r for r in android_cap.results if r.metric == "api_level")
+            assert api_res.state == RuntimeState.ERROR.value
+
+            # Memory: meminfo failed
+            mem_collector = MemoryTelemetryCollector()
+            mem_cap = mem_collector.collect(props)
+            avail_res = next(r for r in mem_cap.results if r.metric == "available_memory_mb")
+            assert avail_res.state == RuntimeState.ERROR.value
+
+            # CPU: cpufreq failed
+            cpu_collector = CPUTelemetryCollector()
+            cpu_cap = cpu_collector.collect(props)
+            freq_res = next(r for r in cpu_cap.results if r.metric == "cpu_scaling_cur_freq")
+            assert freq_res.state == RuntimeState.ERROR.value
+
+            # GPU: kgsl failed
+            gpu_collector = GPUTelemetryCollector()
+            gpu_cap = gpu_collector.collect(props)
+            gpu_clk_res = next(r for r in gpu_cap.results if r.metric == "gpu_clock_hz")
+            assert gpu_clk_res.state == RuntimeState.ERROR.value
+
+            # Battery: dumpsys battery failed
+            bat_collector = BatteryTelemetryCollector()
+            bat_cap = bat_collector.collect(props)
+            bat_lvl_res = next(r for r in bat_cap.results if r.metric == "battery_level_percent")
+            assert bat_lvl_res.state == RuntimeState.ERROR.value
+

@@ -71,15 +71,27 @@ class DeviceIdentityCollector:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         observed_results: List[CapabilityResult] = []
 
+        probe_err_prop = props.get("probe_error_getprop")
+        probe_err_mem = props.get("probe_error_meminfo")
+
         # Manufacturer
         obs_mfr = props.get("manufacturer") or props.get("ro.product.manufacturer")
-        state_mfr, ver_mfr, ev_mfr = _determine_state_and_verification(
-            props, "manufacturer" if "manufacturer" in props else "ro.product.manufacturer"
-        )
         if "manufacturer" not in props and "ro.product.manufacturer" not in props:
-            state_mfr = RuntimeState.NOT_TESTED.value
-            ver_mfr = False
-            ev_mfr = None
+            if probe_err_prop:
+                state_mfr = RuntimeState.ERROR.value
+                ver_mfr = False
+                err_mfr = probe_err_prop
+                ev_mfr = "evidence/commands.log#probe_error_getprop"
+            else:
+                state_mfr = RuntimeState.NOT_TESTED.value
+                ver_mfr = False
+                err_mfr = None
+                ev_mfr = None
+        else:
+            state_mfr, ver_mfr, ev_mfr = _determine_state_and_verification(
+                props, "manufacturer" if "manufacturer" in props else "ro.product.manufacturer"
+            )
+            err_mfr = None
 
         observed_results.append(CapabilityResult(
             metric="manufacturer",
@@ -91,15 +103,27 @@ class DeviceIdentityCollector:
             verification_method="device_observation",
             observed_at=now if ver_mfr else None,
             evidence_ref=ev_mfr,
+            error_message=err_mfr,
         ))
 
         # Model
         obs_model = props.get("model") or props.get("ro.product.model")
-        state_model = RuntimeState.AVAILABLE.value if obs_model else (
-            RuntimeState.UNAVAILABLE.value if ("model" in props or "ro.product.model" in props) else RuntimeState.NOT_TESTED.value
-        )
-        ver_model = bool(props.get("is_real_device_observation") and obs_model)
-        ev_model = "evidence/getprop_evidence.txt#ro.product.model" if ver_model else None
+        if "model" not in props and "ro.product.model" not in props:
+            if probe_err_prop:
+                state_model = RuntimeState.ERROR.value
+                ver_model = False
+                err_model = probe_err_prop
+                ev_model = "evidence/commands.log#probe_error_getprop"
+            else:
+                state_model = RuntimeState.NOT_TESTED.value
+                ver_model = False
+                err_model = None
+                ev_model = None
+        else:
+            state_model = RuntimeState.AVAILABLE.value if obs_model else RuntimeState.UNAVAILABLE.value
+            ver_model = bool(props.get("is_real_device_observation") and obs_model)
+            err_model = None
+            ev_model = "evidence/getprop_evidence.txt#ro.product.model" if ver_model else None
 
         observed_results.append(CapabilityResult(
             metric="model",
@@ -111,13 +135,27 @@ class DeviceIdentityCollector:
             verification_method="device_observation",
             observed_at=now if ver_model else None,
             evidence_ref=ev_model,
+            error_message=err_model,
         ))
 
         # Total RAM
         total_ram_mb = props.get("total_ram_mb")
-        state_ram = RuntimeState.AVAILABLE.value if total_ram_mb is not None else (
-            RuntimeState.UNAVAILABLE.value if "total_ram_mb" in props else RuntimeState.NOT_TESTED.value
-        )
+        if "total_ram_mb" not in props:
+            if probe_err_mem:
+                state_ram = RuntimeState.ERROR.value
+                ver_ram = False
+                err_ram = probe_err_mem
+                ev_ram = "evidence/commands.log#probe_error_meminfo"
+            else:
+                state_ram = RuntimeState.NOT_TESTED.value
+                ver_ram = False
+                err_ram = None
+                ev_ram = None
+        else:
+            state_ram = RuntimeState.AVAILABLE.value if total_ram_mb is not None else RuntimeState.UNAVAILABLE.value
+            ver_ram = bool(props.get("is_real_device_observation") and total_ram_mb is not None)
+            err_ram = None
+            ev_ram = "evidence/meminfo_evidence.txt#total_ram_mb" if ver_ram else None
         ver_ram = bool(props.get("is_real_device_observation") and total_ram_mb is not None)
         ev_ram = "evidence/meminfo_evidence.txt#total_ram_mb" if ver_ram else None
 
@@ -269,11 +307,23 @@ class AndroidCapabilityCollector:
         is_real = bool(props.get("is_real_device_observation", False))
         results: List[CapabilityResult] = []
 
+        probe_err_prop = props.get("probe_error_getprop")
         api_level = props.get("api_level")
-        state_api = RuntimeState.AVAILABLE.value if api_level is not None else (
-            RuntimeState.UNAVAILABLE.value if "api_level" in props else RuntimeState.NOT_TESTED.value
-        )
-        ver_api = is_real and api_level is not None
+        if "api_level" not in props:
+            if probe_err_prop:
+                state_api = RuntimeState.ERROR.value
+                err_api = probe_err_prop
+                ev_api = "evidence/commands.log#probe_error_getprop"
+            else:
+                state_api = RuntimeState.NOT_TESTED.value
+                err_api = None
+                ev_api = None
+        else:
+            state_api = RuntimeState.AVAILABLE.value if api_level is not None else RuntimeState.UNAVAILABLE.value
+            err_api = None
+            ev_api = "evidence/getprop_evidence.txt#ro.build.version.sdk" if (is_real and state_api == RuntimeState.AVAILABLE.value) else None
+
+        ver_api = is_real and state_api == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
             metric="api_level",
             state=state_api,
@@ -283,13 +333,25 @@ class AndroidCapabilityCollector:
             verified=ver_api,
             verification_method="device_observation",
             observed_at=now if ver_api else None,
-            evidence_ref="evidence/getprop_evidence.txt#ro.build.version.sdk" if ver_api else None,
+            evidence_ref=ev_api,
+            error_message=err_api,
         ))
 
         rel_version = props.get("release_version")
-        state_rel = RuntimeState.AVAILABLE.value if rel_version else (
-            RuntimeState.UNAVAILABLE.value if "release_version" in props else RuntimeState.NOT_TESTED.value
-        )
+        if "release_version" not in props:
+            if probe_err_prop:
+                state_rel = RuntimeState.ERROR.value
+                err_rel = probe_err_prop
+                ev_rel = "evidence/commands.log#probe_error_getprop"
+            else:
+                state_rel = RuntimeState.NOT_TESTED.value
+                err_rel = None
+                ev_rel = None
+        else:
+            state_rel = RuntimeState.AVAILABLE.value if rel_version else RuntimeState.UNAVAILABLE.value
+            err_rel = None
+            ev_rel = "evidence/getprop_evidence.txt#ro.build.version.release" if (is_real and state_rel == RuntimeState.AVAILABLE.value) else None
+
         ver_rel = is_real and bool(rel_version)
         results.append(CapabilityResult(
             metric="release_version",
@@ -300,7 +362,8 @@ class AndroidCapabilityCollector:
             verified=ver_rel,
             verification_method="device_observation",
             observed_at=now if ver_rel else None,
-            evidence_ref="evidence/getprop_evidence.txt#ro.build.version.release" if ver_rel else None,
+            evidence_ref=ev_rel,
+            error_message=err_rel,
         ))
 
         services = ["PowerManager", "HardwarePropertiesManager", "CameraManager", "ActivityManager", "BatteryManager"]
@@ -485,14 +548,15 @@ class BatteryTelemetryCollector:
             error_message=err_temp,
         ))
 
-        # Battery current now (mA / uA) — R-09 explicit handling
+        # Battery current now (mA / uA) — R-09 explicit unit safety
+        probe_err_curr = props.get("probe_error_battery_current") or probe_err_bat
         if "battery_current_now" not in props and "current_now_ua" not in props and "current_now_ma" not in props:
-            if probe_err_bat:
+            if probe_err_curr:
                 state_curr = RuntimeState.ERROR.value
                 val_curr = None
                 ver_curr = False
-                err_curr = probe_err_bat
-                notes_curr = f"Battery probe failed: {probe_err_bat}"
+                err_curr = probe_err_curr
+                notes_curr = f"Battery current probe failed: {probe_err_curr}"
                 ev_curr = "evidence/commands.log#probe_error_battery"
             else:
                 state_curr = RuntimeState.NOT_TESTED.value
@@ -505,42 +569,77 @@ class BatteryTelemetryCollector:
             curr_raw = props.get("battery_current_now") if "battery_current_now" in props else props.get("current_now_ma")
             curr_ua = props.get("current_now_ua")
             sentinel = props.get("current_now_is_sentinel", False)
+            explicit_unit = props.get("battery_current_unit") or ("uA" if curr_ua is not None else ("mA" if props.get("current_now_ma") is not None else None))
             err_curr = None
 
-            if sentinel or (curr_raw is None and curr_ua is None):
+            if sentinel or (curr_raw is None and curr_ua is None and not probe_err_curr):
                 state_curr = RuntimeState.UNAVAILABLE.value
                 val_curr = None
                 ver_curr = False
                 notes_curr = "Current property is unsupported or sentinel value returned."
                 ev_curr = None
+            elif probe_err_curr:
+                state_curr = RuntimeState.ERROR.value
+                val_curr = None
+                ver_curr = False
+                err_curr = probe_err_curr
+                notes_curr = f"Battery current probe failed: {probe_err_curr}"
+                ev_curr = "evidence/commands.log#probe_error_battery"
             else:
                 raw_val = curr_raw if curr_raw is not None else curr_ua
-                # Unit conversion check: if absolute raw value > 10,000, convert uA -> mA
-                if abs(raw_val) > 10000:
-                    converted_ma = float(raw_val) / 1000.0
-                else:
-                    converted_ma = float(raw_val)
 
-                if abs(converted_ma) > 10000:
+                # 1. Parse validation: check if raw_val is non-numeric / malformed
+                try:
+                    num_val = float(raw_val)
+                except (ValueError, TypeError):
                     state_curr = RuntimeState.ERROR.value
                     val_curr = None
                     ver_curr = False
-                    err_curr = f"Implausible battery current value: {raw_val} (converted: {converted_ma} mA)"
-                    notes_curr = f"Implausible battery current value: {raw_val}"
-                    ev_curr = None
-                elif converted_ma == 0.0:
-                    # R-09: Zero current cannot be verified as valid physical measurement
-                    state_curr = RuntimeState.AVAILABLE.value
-                    val_curr = 0.0
-                    ver_curr = False  # CANNOT BE VERIFIED
-                    notes_curr = "Observed battery current reading is 0. Flagged as potential driver sentinel zero (unverified)."
-                    ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now"
-                else:
-                    state_curr = RuntimeState.AVAILABLE.value
-                    val_curr = converted_ma
-                    ver_curr = is_real
-                    notes_curr = f"Raw current reading: {raw_val}, converted to {converted_ma} mA."
-                    ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if ver_curr else None
+                    err_curr = f"Malformed battery current value: '{raw_val}'"
+                    notes_curr = f"Battery current value '{raw_val}' cannot be parsed as numeric."
+                    ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if is_real else None
+                    num_val = None
+
+                if num_val is not None:
+                    # R-09: Check unit explicitly — DO NOT infer purely from numeric magnitude cutoff!
+                    if explicit_unit in ("mA", "milliamperes", "milliamps"):
+                        converted_ma = num_val
+                        unit_known = True
+                    elif explicit_unit in ("uA", "µA", "microamperes", "microamps"):
+                        converted_ma = num_val / 1000.0
+                        unit_known = True
+                    else:
+                        # Ambiguous unit (not explicitly established from evidence)
+                        converted_ma = num_val
+                        unit_known = False
+
+                    if abs(converted_ma) > 10000 and unit_known:
+                        state_curr = RuntimeState.ERROR.value
+                        val_curr = None
+                        ver_curr = False
+                        err_curr = f"Implausible battery current value: {raw_val} (converted: {converted_ma} mA)"
+                        notes_curr = f"Implausible battery current value: {raw_val}"
+                        ev_curr = None
+                    elif not unit_known:
+                        # R-09: Never mark battery current VERIFIED when unit cannot be established from evidence!
+                        state_curr = RuntimeState.AVAILABLE.value
+                        val_curr = converted_ma
+                        ver_curr = False  # MANDATORY: UNVERIFIED
+                        notes_curr = f"Battery current unit cannot be conclusively established from raw value {raw_val} without explicit unit metadata (unverified)."
+                        ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if is_real else None
+                    elif converted_ma == 0.0:
+                        # R-09: Zero current with known unit cannot be verified as valid physical measurement
+                        state_curr = RuntimeState.AVAILABLE.value
+                        val_curr = 0.0
+                        ver_curr = False  # UNVERIFIED
+                        notes_curr = "Observed battery current reading is 0. Flagged as potential driver sentinel zero (unverified)."
+                        ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if is_real else None
+                    else:
+                        state_curr = RuntimeState.AVAILABLE.value
+                        val_curr = converted_ma
+                        ver_curr = is_real
+                        notes_curr = f"Raw current reading: {raw_val} ({explicit_unit}), converted to {converted_ma} mA."
+                        ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if ver_curr else None
 
         results.append(CapabilityResult(
             metric="battery_current_now",

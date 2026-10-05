@@ -115,7 +115,9 @@ def validate_characterization_record(
                 actual_manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
                 record_manifest_sha = record.get("manifest_sha256")
                 
-                if record_manifest_sha and record_manifest_sha != actual_manifest_sha:
+                if not record_manifest_sha and (adb_connected or verified_refs):
+                    errors.append("Missing required 'manifest_sha256' in characterization record (P-05 requirement)")
+                elif record_manifest_sha and record_manifest_sha != actual_manifest_sha:
                     errors.append(
                         f"Manifest SHA-256 mismatch: record manifest_sha256 '{record_manifest_sha}' "
                         f"does not match actual manifest.json SHA-256 '{actual_manifest_sha}' (P-05 tampering error)"

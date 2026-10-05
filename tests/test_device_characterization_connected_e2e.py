@@ -209,8 +209,10 @@ def test_p01_connected_run_does_not_mutate_matrix(temp_output_dir):
             "created_at": "2026-10-05T12:00:00Z"
         })
         manifest_file = ev_dir / "manifest.json"
-        manifest_file.write_text(json.dumps(manifest_entries, indent=2), encoding="utf-8")
+        manifest_bytes = json.dumps(manifest_entries, indent=2).encode("utf-8")
+        manifest_file.write_bytes(manifest_bytes)
         files.append(manifest_file)
+        mock_adb_props["manifest_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
         return files, mock_adb_props
 
     with patch("scripts.device_characterization.adb_collector.ADBCollector.get_connection_status", return_value="CONNECTED"):
@@ -308,55 +310,86 @@ def test_p03_unmocked_collector_e2e_pipeline(tmp_path):
         elif "boot_id" in cmd_str:
             return 0, "synthetic_boot_123\n", ""
         elif "run-as" in cmd_str:
-            return 0, '{"service_PowerManager": true, "gpu_renderer": "Adreno 610"}', ""
+            app_json = json.dumps({
+                "run_id": "android_run_9999",
+                "observed_at": "2026-10-05T12:00:00Z",
+                "device_identity": [
+                    {"metric": "manufacturer", "value": "OPPO", "state": "AVAILABLE", "report_status": "VERIFIED"},
+                    {"metric": "model", "value": "OPPO A5 2020", "state": "AVAILABLE", "report_status": "VERIFIED"},
+                    {"metric": "soc_model", "value": "SM6125", "state": "AVAILABLE", "report_status": "VERIFIED"}
+                ],
+                "battery_telemetry": [
+                    {"metric": "battery_level_percent", "value": 85, "state": "AVAILABLE", "report_status": "VERIFIED"},
+                    {"metric": "battery_voltage", "value": 4150, "unit": "mV", "state": "AVAILABLE", "report_status": "VERIFIED"},
+                    {"metric": "battery_temperature", "value": 29.5, "unit": "degC", "state": "AVAILABLE", "report_status": "VERIFIED"},
+                    {"metric": "is_charging", "value": False, "state": "AVAILABLE", "report_status": "VERIFIED"}
+                ],
+                "memory_telemetry": [
+                    {"metric": "total_ram_mb", "value": 3072, "unit": "MB", "state": "AVAILABLE", "report_status": "VERIFIED"},
+                    {"metric": "available_memory_mb", "value": 1500, "unit": "MB", "state": "AVAILABLE", "report_status": "VERIFIED"}
+                ],
+                "thermal_capability": {
+                    "metric": "thermal_status_api",
+                    "value": 0,
+                    "state": "AVAILABLE",
+                    "report_status": "VERIFIED"
+                },
+                "camera_telemetry": [
+                    {"metric": "camera_count", "value": 4, "state": "AVAILABLE", "report_status": "VERIFIED"},
+                    {"metric": "camera_0_hardware_level", "value": 1, "state": "AVAILABLE", "report_status": "VERIFIED"}
+                ]
+            })
+            return 0, app_json, ""
         return 0, "ok\n", ""
 
-    with patch.object(adb, "_adb_cmd", side_effect=mock_adb_cmd):
-        with patch("scripts.device_characterization.run_characterization.ADBCollector", return_value=adb):
-            with patch.object(adb, "get_connection_status", return_value="CONNECTED"):
-                today = datetime.datetime.utcnow().strftime("%Y%m%d")
-                run_id = f"run_{today}_150000"
-                config_file = Path("configs/device_characterization.yaml")
+        with patch.object(adb, "_adb_cmd", side_effect=mock_adb_cmd):
+            with patch("scripts.device_characterization.run_characterization.ADBCollector", return_value=adb):
+                with patch.object(adb, "get_connection_status", return_value="CONNECTED"):
+                    today = datetime.datetime.utcnow().strftime("%Y%m%d")
+                    run_id = f"run_{today}_150000"
+                    config_file = Path("configs/device_characterization.yaml")
 
-                out_dir, run_dict = run_characterization(
-                    config_file,
-                    run_id=run_id,
-                    overwrite=True,
-                    results_dir=tmp_path,
-                )
+                    out_dir, run_dict = run_characterization(
+                        config_file,
+                        run_id=run_id,
+                        overwrite=True,
+                        results_dir=tmp_path,
+                    )
 
-                # Verify characterization.json output
-                char_json = out_dir / "characterization.json"
-                assert char_json.exists()
+                    # Verify characterization.json output
+                    char_json = out_dir / "characterization.json"
+                    assert char_json.exists()
 
-                with open(char_json, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                    with open(char_json, "r", encoding="utf-8") as f:
+                        data = json.load(f)
 
-                # Verify app_output_status
-                assert data.get("app_output_status") == "APP_OUTPUT_COLLECTED"
+                    # Verify app_output_status and nested app telemetry integration
+                    assert data.get("app_output_status") == "APP_OUTPUT_COLLECTED"
+                    assert "app_telemetry" in data
+                    assert data["app_telemetry"]["run_id"] == "android_run_9999"
 
-                # Search CPU frequency and GPU clock in telemetry
-                telemetry = data.get("telemetry", [])
-                cpu_telemetry = next((t for t in telemetry if t["dimension"] == "cpu"), None)
-                gpu_telemetry = next((t for t in telemetry if t["dimension"] == "gpu"), None)
+                    # Search CPU frequency and GPU clock in telemetry
+                    telemetry = data.get("telemetry", [])
+                    cpu_telemetry = next((t for t in telemetry if t["dimension"] == "cpu"), None)
+                    gpu_telemetry = next((t for t in telemetry if t["dimension"] == "gpu"), None)
 
-                assert cpu_telemetry is not None
-                assert gpu_telemetry is not None
+                    assert cpu_telemetry is not None
+                    assert gpu_telemetry is not None
 
-                cpu_freq_res = next((r for r in cpu_telemetry["results"] if r["metric"] == "cpu_scaling_cur_freq"), None)
-                gpu_clock_res = next((r for r in gpu_telemetry["results"] if r["metric"] == "gpu_clock_hz"), None)
+                    cpu_freq_res = next((r for r in cpu_telemetry["results"] if r["metric"] == "cpu_scaling_cur_freq"), None)
+                    gpu_clock_res = next((r for r in gpu_telemetry["results"] if r["metric"] == "gpu_clock_hz"), None)
 
-                assert cpu_freq_res is not None
-                assert cpu_freq_res["value"] == 1804800
-                assert cpu_freq_res["state"] == "AVAILABLE"
-                assert cpu_freq_res["verified"] is True
-                assert cpu_freq_res["evidence_ref"] == "evidence/cpufreq_evidence.txt#scaling_cur_freq"
+                    assert cpu_freq_res is not None
+                    assert cpu_freq_res["value"] == 1804800
+                    assert cpu_freq_res["state"] == "AVAILABLE"
+                    assert cpu_freq_res["verified"] is True
+                    assert cpu_freq_res["evidence_ref"] == "evidence/cpufreq_evidence.txt#scaling_cur_freq"
 
-                assert gpu_clock_res is not None
-                assert gpu_clock_res["value"] == 600000000
-                assert gpu_clock_res["state"] == "AVAILABLE"
-                assert gpu_clock_res["verified"] is True
-                assert gpu_clock_res["evidence_ref"] == "evidence/gpu_evidence.txt#gpuclk"
+                    assert gpu_clock_res is not None
+                    assert gpu_clock_res["value"] == 600000000
+                    assert gpu_clock_res["state"] == "AVAILABLE"
+                    assert gpu_clock_res["verified"] is True
+                    assert gpu_clock_res["evidence_ref"] == "evidence/gpu_evidence.txt#gpuclk"
 
 
 def test_p04_all_soc_fallback_paths_and_evidence_refs(tmp_path):
@@ -535,29 +568,29 @@ def test_r09_battery_current_semantics():
     from src.monitoring.characterization.collectors import BatteryTelemetryCollector
 
     # Case 1: Valid positive current in mA
-    props1 = {"is_real_device_observation": True, "battery_current_now": 250}
+    props1 = {"is_real_device_observation": True, "battery_current_now": 250, "battery_current_unit": "mA"}
     res1 = next(r for r in BatteryTelemetryCollector().collect(props1).results if r.metric == "battery_current_now")
     assert res1.state == "AVAILABLE"
     assert res1.value == 250.0
     assert res1.verified is True
 
     # Case 2: Zero current -> NOT marked VERIFIED
-    props2 = {"is_real_device_observation": True, "battery_current_now": 0}
+    props2 = {"is_real_device_observation": True, "battery_current_now": 0, "battery_current_unit": "mA"}
     res2 = next(r for r in BatteryTelemetryCollector().collect(props2).results if r.metric == "battery_current_now")
     assert res2.state == "AVAILABLE"
     assert res2.value == 0.0
     assert res2.verified is False  # Cannot be verified!
     assert res2.report_status == "AVAILABLE"
 
-    # Case 3: Unit conversion (uA -> mA for raw values > 10,000)
-    props3 = {"is_real_device_observation": True, "battery_current_now": 350000}
+    # Case 3: Unit conversion (uA -> mA for explicit uA unit)
+    props3 = {"is_real_device_observation": True, "battery_current_now": 350000, "battery_current_unit": "uA"}
     res3 = next(r for r in BatteryTelemetryCollector().collect(props3).results if r.metric == "battery_current_now")
     assert res3.state == "AVAILABLE"
     assert res3.value == 350.0  # Converted to mA
     assert res3.verified is True
 
     # Case 4: Implausible current (> 10,000 mA) -> state ERROR
-    props4 = {"is_real_device_observation": False, "battery_current_now": 99999999}
+    props4 = {"is_real_device_observation": False, "battery_current_now": 99999999, "battery_current_unit": "mA"}
     res4 = next(r for r in BatteryTelemetryCollector().collect(props4).results if r.metric == "battery_current_now")
     assert res4.state == "ERROR"
     assert "Implausible battery current" in res4.error_message

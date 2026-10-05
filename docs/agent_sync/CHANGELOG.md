@@ -2726,3 +2726,51 @@ Starting main commit: `8448967`
 - Push status: pending commit & push
 
 
+---
+
+## 2026-10-05 — Antigravity
+
+### Task
+Step 10D — Correction Round 4 (Final Blocking Corrections After Independent Claude Review)
+Branch: `antigravity/step-10d-final-correction-round4`
+Starting commit: `6673058`
+
+### Changes
+- `scripts/device_characterization/adb_collector.py`:
+  - P-03: Added `_normalize_app_output` helper to process nested Android Kotlin app JSON sections (`device_identity`, `memory_telemetry`, `battery_telemetry`, `thermal_capability`, `camera_telemetry`) produced by `CharacterizationRunner.kt`.
+- `src/monitoring/characterization/collectors.py`:
+  - R-09: Removed magnitude cutoff unit inference. Battery current without explicit unit metadata is marked unverified (`verified=False`). Handled explicit `"mA"` vs `"uA"` units, malformed values (`"abc"` → `state=ERROR`), and zero current (`verified=False`).
+  - P-07: Standardized probe failure states to return `ERROR` (with error message & `commands.log` evidence refs) across `getprop`, `meminfo`, `cpufreq`, `gpu`, `battery`, `camera`, `thermal` probes.
+- `src/monitoring/characterization/report_generator.py`:
+  - P-05: Enforced `manifest_sha256` presence and hash matching in `validate_characterization_record`.
+- `tests/test_device_characterization_connected_e2e.py` & `test_device_characterization_report.py`:
+  - P-03: Rewrote `test_p03_unmocked_collector_e2e_pipeline` using the actual nested JSON schema produced by `CharacterizationRunner.kt`.
+  - R-09: Added explicit unit safety tests (explicit mA, explicit uA, ambiguous 5000 unverified check, zero current with known unit, missing current, malformed `"abc"` error, implausibly large current error).
+  - P-07: Added `test_p07_probe_failure_semantics_e2e` to verify `ERROR` state across all failed probe dimensions.
+
+### Research decisions
+- **R-09 Unit Safety**: Unannotated battery current values cannot be verified without explicit evidence-backed unit metadata.
+- **P-03 App Output Schema**: Android app output is consumed from the structured nested sections produced by `CharacterizationRunner.kt`.
+- **Methodological Boundaries**: RQs, GC-03, C1-C4, R0-R3, r*, D-01..D-16 remain 100% frozen.
+
+### Verification
+- Full pytest suite executed TWICE: 291 passed in both runs (0 failed).
+- `git status` clean after both test passes: 0 untracked test output folders in `research/results/device_characterization/`.
+- Gradle Wrapper: Standard Gradle 8.5 wrapper intact (`./gradlew --version` executable launcher).
+- Synthetic-test status: `VERIFIED ISOLATED (tmp_path)`.
+- Real-device status: `REAL OPPO A5 2020 CHARACTERIZATION: NOT PERFORMED`.
+
+### Uncertain items
+- Physical OPPO A5 2020 characterization must occur ONLY after independent Claude Code review approves this correction round.
+
+### Remaining work
+- Commit changes to branch `antigravity/step-10d-final-correction-round4`.
+- Await independent Claude Code review.
+
+### Git
+- Branch: `antigravity/step-10d-final-correction-round4`
+- Starting commit: `6673058`
+- Push status: uncommitted
+
+
+

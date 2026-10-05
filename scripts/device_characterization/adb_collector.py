@@ -319,6 +319,46 @@ class ADBCollector:
             })
             return "APP_OUTPUT_ERROR", None
 
+    def _normalize_app_output(self, app_parsed: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalizes the nested JSON schema produced by CharacterizationRunner.kt."""
+        norm: Dict[str, Any] = {}
+        if not isinstance(app_parsed, dict):
+            return norm
+
+        for section_name in ["device_identity", "memory_telemetry", "battery_telemetry", "camera_telemetry"]:
+            section = app_parsed.get(section_name)
+            if isinstance(section, list):
+                for item in section:
+                    if isinstance(item, dict) and "metric" in item:
+                        m = item["metric"]
+                        v = item.get("value")
+                        unit = item.get("unit")
+                        norm[m] = v
+                        if unit:
+                            norm[f"{m}_unit"] = unit
+                        norm[f"{m}_app_item"] = item
+            elif isinstance(section, dict):
+                for m, v in section.items():
+                    norm[m] = v
+
+        thermal = app_parsed.get("thermal_capability")
+        if isinstance(thermal, dict):
+            if "metric" in thermal:
+                norm[thermal["metric"]] = thermal.get("value")
+            for k, v in thermal.items():
+                if k not in norm:
+                    norm[k] = v
+        elif isinstance(thermal, list):
+            for item in thermal:
+                if isinstance(item, dict) and "metric" in item:
+                    norm[item["metric"]] = item.get("value")
+
+        for k, v in app_parsed.items():
+            if k not in norm and k not in ["run_id", "observed_at"]:
+                norm[k] = v
+
+        return norm
+
     def collect_raw_evidence_and_observations(self, output_dir: Path) -> Tuple[List[Path], Dict[str, Any]]:
         """Collects raw evidence text files, writes observed_props.json & manifest.json."""
         ev_dir = output_dir / "evidence"
@@ -480,8 +520,10 @@ class ADBCollector:
         observed_props["app_output_status"] = app_status
         if app_status == "APP_OUTPUT_COLLECTED" and app_parsed:
             files_saved.append(ev_dir / "android_app_evidence.json")
-            # Update observed props with app-collected observations
-            for k, v in app_parsed.items():
+            # Normalize nested Android app JSON schema produced by CharacterizationRunner.kt
+            norm_app = self._normalize_app_output(app_parsed)
+            observed_props["app_telemetry"] = app_parsed
+            for k, v in norm_app.items():
                 if k not in observed_props or observed_props[k] is None:
                     observed_props[k] = v
 
