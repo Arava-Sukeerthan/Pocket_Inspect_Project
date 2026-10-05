@@ -24,7 +24,9 @@ EXP_CFG = ROOT / "configs" / "experiment_protocol.yaml"
 RP_CFG = ROOT / "configs" / "research_protocol.yaml"
 
 IDS = [f"D-{i:02d}" for i in range(1, 17)]
-STATUSES = ("RESOLVED", "PRE-DATA-COLLECTION FREEZE", "PILOT-DEPENDENT", "DEFERRED", "NOT APPLICABLE")
+STATUSES = ("RESOLVED", "PRE-DATA-COLLECTION FREEZE", "PILOT-DEPENDENT", "DEVICE-VERIFICATION DEPENDENT", "DEFERRED",
+            "NOT APPLICABLE")
+CATEGORY_KEYS = ("frozen_now", "pilot_dependent", "device_verification_dependent", "requires_future_approval")
 SUMMARY_COLUMNS = ["Decision ID", "Decision", "Current status", "Resolution", "Rationale", "Evidence/source",
                    "Depends on measurement?", "Freeze point", "Impact on experiment"]
 TRACE_COLUMNS = ["decision_id", "decision", "related_RQ", "related_hypothesis", "related_protocol_section", "status",
@@ -32,7 +34,7 @@ TRACE_COLUMNS = ["decision_id", "decision", "related_RQ", "related_hypothesis", 
 RQ1 = ("Can confidence-aware downstream verification recover inspection accuracy lost when a resource-constrained "
        "smartphone dynamically downgrades its inference configuration under changing device conditions?")
 # Decimal numbers allowed in the register, each with its required context.
-ALLOWED_DECIMALS = {"0.05": "PROPOSAL", "0.80": "PROPOSAL", "0.5": "argmax", "1.96": "Bland–Altman"}
+ALLOWED_DECIMALS = {"0.05": "α", "0.80": "power", "0.5": "argmax", "1.96": "Bland–Altman"}
 MEASURED_VALUE = re.compile(
     r"\d+(\.\d+)?\s*(ms\b|seconds?\b|fps\b|FPS\b|mJ\b|J\b|mWh\b|Wh\b|mW\b|W\b|°\s*C|%|MB\b|kB\b|GHz\b|mAh\b)"
     r"|(accuracy|recall|precision|F1|latency|energy|temperature|threshold|τ)\w*\s*(=|≈|~)\s*\d"
@@ -97,8 +99,16 @@ class TestDecisionRegister(unittest.TestCase):
             self.assertRegex(r["related_RQ"], r"RQ[1-6]")
             self.assertRegex(r["related_hypothesis"], r"H[1-5]")
 
-    # pre-data freeze configuration contains no fake values and only frozen rules
+    # pre-data freeze configuration: four categories; the only numbers are the approved alpha and power
     def test_freeze_config_has_no_values(self):
+        self.assertEqual(self.freeze["freeze_categories"],
+                         ["FROZEN NOW", "PILOT-DEPENDENT", "DEVICE-VERIFICATION DEPENDENT", "REQUIRES FUTURE APPROVAL"])
+        for key in CATEGORY_KEYS:
+            self.assertIn(key, self.freeze)
+        self.assertNotIn("frozen", self.freeze)
+        self.assertNotIn("not_frozen", self.freeze)
+        numbers = []
+
         def walk(node, path=""):
             if isinstance(node, dict):
                 for k, v in node.items():
@@ -106,61 +116,118 @@ class TestDecisionRegister(unittest.TestCase):
             elif isinstance(node, list):
                 for v in node:
                     walk(v, path)
-            else:
-                if not isinstance(node, bool):
-                    self.assertNotIsInstance(node, (int, float), path)
-                if isinstance(node, str):
-                    self.assertIsNone(re.search(r"\d+\.\d+|\d+\s*(%|ms|J|W|°C)", node), (path, node))
-        walk(self.freeze["frozen"])
-        walk(self.freeze["not_frozen"])
-        for did, entry in self.freeze["not_frozen"].items():
-            self.assertIn(entry["status"], ("PILOT-DEPENDENT", "PRE-DATA-COLLECTION FREEZE"), did)
-            self.assertNotIn("value", entry, did)
-        not_frozen_ids = {k.split("_")[0] for k in self.freeze["not_frozen"]}
-        for key in self.freeze["frozen"]:
+            elif isinstance(node, (int, float)) and not isinstance(node, bool):
+                numbers.append((path, node))
+            elif isinstance(node, str):
+                self.assertIsNone(re.search(r"\d+\.\d+|\d+\s*(%|ms|J|W|°C)", node), (path, node))
+        for key in CATEGORY_KEYS:
+            walk(self.freeze[key], key)
+        self.assertEqual(numbers, [("frozen_now.D-02.alpha", 0.05), ("frozen_now.D-03.target_power", 0.8)])
+        for key in ("pilot_dependent", "device_verification_dependent", "requires_future_approval"):
+            for did, entry in self.freeze[key].items():
+                self.assertNotIn("value", entry, did)
+        for key in self.freeze["frozen_now"]:
             did = key.split("_")[0]
-            status = self.summary_rows[did][2]
-            if key == did:
-                # a whole decision is frozen only if it is RESOLVED
-                self.assertTrue(status.startswith("RESOLVED"), did)
-            else:
-                # a frozen component of a decision whose remainder is open must list that remainder
-                self.assertTrue(status.startswith("RESOLVED") or did in not_frozen_ids, key)
-        text = _text(FREEZE)
-        self.assertNotIn("0.05", text)
-        self.assertNotIn("0.80", text)
+            self.assertIn(did, IDS, key)
 
-    # no fabricated measurements / telemetry; numbers only as labelled proposals or method constants
+    # D-02 / D-03: approved alpha, Holm, power; sample size not fabricated
+    def test_alpha_and_power(self):
+        d02 = self.freeze["frozen_now"]["D-02"]
+        self.assertEqual(d02["alpha"], 0.05)
+        self.assertEqual(d02["sidedness"], "two-sided")
+        self.assertEqual(d02["multiple_comparison"], "Holm")
+        self.assertEqual(d02["family"], ["H1", "H2", "H3", "H4", "H5"])
+        self.assertIn("new pre-data-collection decision", d02["approval"])
+        text = _section(self.reg, "### D-02")
+        self.assertIn("This is a **newly approved pre-data-collection decision**. It is not an earlier project decision",
+                      text)
+        d03 = self.freeze["frozen_now"]["D-03"]
+        self.assertEqual(d03["target_power"], 0.80)
+        self.assertEqual(d03["sample_size"], "PILOT-DEPENDENT")
+        self.assertFalse(d03["runs_treated_as_independent"])
+        self.assertIn("D-03_sample_size", self.freeze["pilot_dependent"])
+        d03_text = _section(self.reg, "### D-03")
+        self.assertIn("| Required item count | **PILOT-DEPENDENT.**", d03_text)
+        self.assertIn("No count is stated before the pilot.", d03_text)
+        self.assertIsNone(re.search(r"\bn(_\w+)?\s*=\s*\d", self.reg))
+        recon = self.reg.split("## 5. Statistical Plan Reconciliation", 1)[1].split("\n## ", 1)[0]
+        for item in ("α = 0.05;", "two-sided tests;", "Holm correction over H1–H5;", "target power 0.80;",
+                     "sample size PILOT-DEPENDENT (D-03);", "repeated observations clustered at item level (D-14);"):
+            self.assertIn(item, recon)
+
+    # no fabricated measurements / telemetry; numbers only as approved values or method constants
     def test_no_fabricated_numbers(self):
         self.assertIsNone(MEASURED_VALUE.search(self.reg), MEASURED_VALUE.search(self.reg))
         for line in self.reg.splitlines():
             for dec in re.findall(r"(?<![\w.])\d+\.\d+(?![\w.])", line):
                 self.assertIn(dec, ALLOWED_DECIMALS, line[:80])
                 self.assertIn(ALLOWED_DECIMALS[dec], line, line[:80])
+        self.assertNotIn("PROPOSAL", self.reg)
         self.assertIn("**NO NUMERICAL VALUE IS JUSTIFIED BEFORE PILOT CHARACTERIZATION.**", self.reg)
         self.assertIn("No numerical value in this register is a measurement.", self.reg)
-        d02 = _section(self.reg, "### D-02")
-        self.assertIn("**PROPOSAL** (methodological proposal, not an existing project decision)", d02)
-        self.assertIn("**Binding only after researcher approval at FP-0.**", d02)
+        # the Step 10A record is untouched; the freeze is recorded in Step 10C-DR files
         self.assertEqual(self.rp["statistics"]["significance_level"], "to_be_preregistered")
+
+    # D-06: risk-controlled procedure, not C1 equivalence; no threshold value; test set unused
+    def test_threshold_rule(self):
+        d06 = self.freeze["frozen_now"]["D-06"]
+        self.assertFalse(d06["uses_test_set"])
+        self.assertFalse(d06["anchored_to_C1_equivalence"])
+        self.assertEqual(d06["confidence"], "configuration_specific_temperature_scaling")
+        self.assertIn("D-06_risk_target", self.freeze["requires_future_approval"])
+        text = _section(self.reg, "### D-06")
+        self.assertIn("The earlier rule (the smallest threshold whose accepted predictions are statistically as accurate "
+                      "as C1) is **withdrawn**.", text)
+        self.assertIn("**The numerical value of r* is UNSET (REQUIRES FUTURE APPROVAL).**", text)
+        self.assertIn("**The final test set is never used for threshold selection.**", text)
+        self.assertIn("**No numerical confidence threshold is stated in this register.**", text)
+        self.assertIsNone(re.search(r"(r\*|τ\w*|threshold)\s*(=|≤|≥|<|>)\s*\d", self.reg))
+        self.assertNotIn("≤ r₁", text)
+
+    # D-12: inference and verification latency separate
+    def test_latency_separation(self):
+        d12 = self.freeze["frozen_now"]["D-12"]
+        self.assertEqual(d12["separate_quantities"], ["inference_latency", "verification_latency", "total_decision_time"])
+        self.assertFalse(d12["verification_forced_into_C1_inference_latency"])
+        self.assertTrue(d12["verification_overhead_reported_separately"])
+        self.assertFalse(d12["total_decision_budget_in_primary_design"])
+        text = _section(self.reg, "### D-12")
+        self.assertIn("**Verification is never forced to fit inside the C1 inference latency.**", text)
+        for q in ("| A. Inference latency |", "| B. Verification latency |", "| C. Total per-item decision time |"):
+            self.assertIn(q, text)
+        props = __import__("json").loads(_text(EXP / "log_schema.json"))["properties"]
+        self.assertIn("inference_latency", props)
+        self.assertIn("verification_latency", props)
+
+    # D-10: thermal API availability not assumed; no fabricated mapping
+    def test_thermal_not_assumed(self):
+        rule = self.freeze["frozen_now"]["D-10_rule"]
+        self.assertFalse(rule["thermal_platform_api_assumed"])
+        self.assertIn("D-10_thermal_source", self.freeze["device_verification_dependent"])
+        self.assertIn("D-10_thermal_status_mapping", self.freeze["requires_future_approval"])
+        text = _section(self.reg, "### D-10")
+        self.assertIn("**Platform thermal-status API availability is NOT assumed.**", text)
+        self.assertIn("**No thermal mapping is inserted in this register.**", text)
+        self.assertIsNone(re.search(r"(NONE|LIGHT|MODERATE|SEVERE)\s*→\s*\d", self.reg))
+        self.assertTrue(self.summary_rows["D-10"][2].startswith("DEVICE-VERIFICATION DEPENDENT"))
 
     # no C1-C4 identities, no R0-R3 thresholds fabricated
     def test_no_ladder_or_threshold_fabrication(self):
-        self.assertEqual(self.freeze["frozen"]["D-04"]["ladder_identities"], "TO BE EMPIRICALLY DETERMINED")
+        self.assertEqual(self.freeze["frozen_now"]["D-04"]["ladder_identities"], "TO BE EMPIRICALLY DETERMINED")
         self.assertIn("**C1–C4 identities: TO BE EMPIRICALLY DETERMINED.**", self.reg)
         for fam in ("EfficientNet", "ConvNeXt", "MobileNet", "ResNet", "YOLO", "ViT"):
             self.assertNotIn(fam, self.reg)
-        self.assertEqual(self.freeze["not_frozen"]["D-10_thresholds"]["status"], "PILOT-DEPENDENT")
+        self.assertIn("D-10_thresholds", self.freeze["pilot_dependent"])
         self.assertIsNone(re.search(r"\bR[0-3]\b[^|\n]{0,40}(=|≥|>|<|≤)\s*\d", self.reg))
-        self.assertEqual(self.freeze["frozen"]["D-10_rule"]["excluded_from_state"], ["latency", "accuracy", "confidence"])
+        self.assertEqual(self.freeze["frozen_now"]["D-10_rule"]["excluded_from_state"], ["latency", "accuracy", "confidence"])
 
     # test-set tuning prohibited; item-level split enforced
     def test_test_isolation_and_item_split(self):
-        self.assertFalse(self.freeze["frozen"]["D-06"]["uses_test_set"])
+        self.assertFalse(self.freeze["frozen_now"]["D-06"]["uses_test_set"])
         d06 = _section(self.reg, "### D-06")
         self.assertIn("The test manifest is never loaded by fitting code.", d06)
         self.assertIn("No fusion rule is chosen on test data.", _section(self.reg, "### D-08"))
-        split = self.freeze["frozen"]["D-09_procedure"]
+        split = self.freeze["frozen_now"]["D-09_procedure"]
         self.assertEqual(split["unit"], "physical_item")
         self.assertIn("no_item_in_two_splits", split["leakage_checks"])
         self.assertIn("all_views_same_split", split["leakage_checks"])
@@ -168,7 +235,7 @@ class TestDecisionRegister(unittest.TestCase):
 
     # repeated runs are not independent; McNemar validity stated; refinement recorded
     def test_repeated_runs(self):
-        d14 = self.freeze["frozen"]["D-14"]
+        d14 = self.freeze["frozen_now"]["D-14"]
         self.assertFalse(d14["runs_treated_as_independent"])
         self.assertEqual(d14["unit_accuracy"], "item_aggregated_across_runs")
         self.assertEqual(d14["ci"], "item_cluster_bootstrap")
@@ -192,8 +259,8 @@ class TestDecisionRegister(unittest.TestCase):
         a1 = next(ln for ln in d07.splitlines() if ln.startswith("| A1"))
         self.assertIn("**No: Real-IAD has no physical recapture**", a1)
         self.assertIn("Yes, as simulation", next(ln for ln in d07.splitlines() if ln.startswith("| A2")))
-        self.assertEqual(self.freeze["frozen"]["D-16"]["experimental_platforms"], ["OPPO A5 2020 (3 GB RAM variant)"])
-        self.assertEqual(self.freeze["frozen"]["D-16"]["multi_device_validation"], "future_work_not_in_scope")
+        self.assertEqual(self.freeze["frozen_now"]["D-16"]["experimental_platforms"], ["OPPO A5 2020 (3 GB RAM variant)"])
+        self.assertEqual(self.freeze["frozen_now"]["D-16"]["multi_device_validation"], "future_work_not_in_scope")
         self.assertIn("which is not the research contribution", self.reg)
         self.assertNotRegex(self.reg.lower(), r"(validated|demonstrated) (across|on) (multiple|several|other) (devices|phones|smartphones)")
         self.assertEqual(self.exp["platform"]["additional_devices"], [])
@@ -204,7 +271,7 @@ class TestDecisionRegister(unittest.TestCase):
         self.assertFalse(self.exp["ablation_variants"]["B5-F"]["primary_baseline"])
         self.assertEqual(self.exp["recovery"]["formula"], "(B5 - B3) / (B1 - B3)")
         self.assertEqual(self.rp["primary_rq"], RQ1)
-        d15 = self.freeze["frozen"]["D-15"]
+        d15 = self.freeze["frozen_now"]["D-15"]
         self.assertEqual(d15["primary_recovery_metric"], "item_level_defect_recall")
         self.assertEqual(d15["h2_support_requires"], ["recall_recovery", "precision_non_inferiority_B5_vs_B3"])
         text = _section(self.reg, "### D-15")
@@ -214,24 +281,38 @@ class TestDecisionRegister(unittest.TestCase):
         self.assertEqual(self.freeze["unchanged"],
                          ["GC-03", "RQ1", "B1", "B2", "B3", "B4", "B5", "B5-F_ablation", "recovery_metric"])
 
-    # energy validation, network policy
+    # energy: external reference preferred, fallback, no fabricated agreement threshold; network policy
     def test_energy_and_network(self):
-        d16 = self.freeze["frozen"]["D-16"]
+        d16 = self.freeze["frozen_now"]["D-16"]
         self.assertTrue(d16["external_energy_validation_required"])
-        self.assertEqual(d16["energy_tolerance"], "energy_sesoi_from_D-01")
+        self.assertEqual(d16["energy_reference_preferred"], "battery_side_external_reference")
+        self.assertEqual(len(d16["energy_fallback_levels"]), 3)
+        self.assertFalse(d16["absolute_energy_forced"])
+        self.assertFalse(d16["software_counters_ground_truth"])
+        self.assertNotIn("energy_tolerance", d16)
+        self.assertEqual(self.freeze["requires_future_approval"]["D-16_agreement_threshold"]["status"],
+                         "PRE-DATA-COLLECTION DECISION REQUIRED")
         self.assertEqual(d16["network"], "fully_offline_airplane_mode_wifi_bluetooth_data_off")
         self.assertEqual(d16["usb_during_battery_runs"], "disconnected")
         self.assertEqual(d16["inference"], "on_device_only")
         text = _section(self.reg, "### D-16")
-        self.assertIn("**No numeric tolerance is invented**", text)
-        self.assertIn("**USB is disconnected during battery-powered runs**", text)
+        self.assertIn("No numeric tolerance is invented.", text)
+        self.assertIn("**PRE-DATA-COLLECTION DECISION REQUIRED: the agreement threshold.**", text)
+        self.assertIn("**No absolute energy is reported.**", text)
+        self.assertIn("**Absolute energy is never forced**", text)
+        self.assertIn("**USB is disconnected during battery-powered runs.**", text)
+        self.assertIn("The OPPO A5 2020 (3 GB) is the **only current experimental device**.", text)
 
     # unresolved decisions clearly marked; blockers listed
     def test_unresolved_marked(self):
         for did, cells in self.summary_rows.items():
-            if cells[2].startswith(("PILOT-DEPENDENT", "PRE-DATA-COLLECTION FREEZE")):
-                in_freeze = any(k.split("_")[0] == did for k in self.freeze["not_frozen"])
-                self.assertTrue(in_freeze, did)
+            if cells[2].startswith(("PILOT-DEPENDENT", "PRE-DATA-COLLECTION FREEZE", "DEVICE-VERIFICATION DEPENDENT")):
+                open_keys = [k for cat in CATEGORY_KEYS[1:] for k in self.freeze[cat]]
+                self.assertTrue(any(k.split("_")[0] == did for k in open_keys), did)
+        section = self.reg.split("## 3a. Freeze Classification", 1)[1].split("\n## ", 1)[0]
+        for cat in ("**FROZEN NOW**", "**PILOT-DEPENDENT**", "**DEVICE-VERIFICATION DEPENDENT**",
+                    "**REQUIRES FUTURE APPROVAL**"):
+            self.assertIn(f"| {cat}", section)
         self.assertIn("## 6. Remaining Blockers Before Step 10D", self.reg)
         self.assertIn("**No experiments, measurements, model benchmarking, dataset collection, or empirical results "
                       "were produced.**", self.reg)
