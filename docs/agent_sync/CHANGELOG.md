@@ -1965,3 +1965,98 @@ Step 10B final scientific refinement (PR #15). Four boundaries are made explicit
 - Branch: `claude/step-10b-dataset-device-model` (commit after `6316407`).
 - Commit: see `git log -- research/datasets/verification_checklist.md`.
 - Push status: pushed; PR #15 updated; not merged.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10C: generalizable resource-aware experimental protocol for GC-03. **Protocol design only.** No experiments, measurements, model benchmarking, dataset collection or empirical results were produced.
+
+### Research positioning
+- **The contribution is the methodology.** It is an adaptive, resource-aware Edge-AI visual-inspection methodology with confidence-aware downstream verification for resource-constrained and legacy smartphones.
+- **The device is the platform, not the contribution.** The **OPPO A5 2020, 3 GB RAM variant**, confirmed by the researcher, is the experimental platform.
+- The device-generalization principle is recorded verbatim.
+- Three levels are kept separate: general methodology, experimental device, and device-specific measurements.
+- Results are classified A–D: device-specific, methodological, generalization evidence, unvalidated generalization.
+
+### Changes
+- **`research/experiments/` (new protocol documents):**
+  - `experimental_protocol.md`: the master protocol, covering:
+    - positioning and the device-independent architecture;
+    - experiment families E0–E3 and Stages 1 and 2;
+    - baselines;
+    - recovery metric and its SESOI procedure;
+    - repetition and control;
+    - statistical mapping with four recorded refinement issues;
+    - H1–H5 and F1–F6, plus outcome categories (no benefit, partial, trade-off, negative, not testable);
+    - matrix reduction, the Stage 2 capture protocol, logging and reproducibility, gates, and decisions D-01 to D-16.
+  - `generalization_framework.md`, `resource_states.md`, `model_selection_protocol.md`, `confidence_verification_protocol.md` and `measurement_protocol.md`.
+  - `experimental_matrix.csv` (30 rows).
+  - `log_schema.json` (JSON Schema; REQUIRED, OPTIONAL or CONDITIONALLY_AVAILABLE per field; no values).
+  - `README.md` pointer.
+- **`configs/experiment_protocol.yaml` (new).** Declarative protocol record.
+- **Gate G1 closed** in the Step 10B records, with the pre-confirmation wording kept as an audit trail:
+  - `research/datasets/verification_checklist.md`: G1 row;
+  - `research/datasets/device_requirements.md`: Step 10C update note;
+  - `configs/dataset_device_model.yaml`: device and G1 entries;
+  - `research/datasets/dataset_device_model_matrix.csv`: Device column.
+- **Tests.**
+  - `tests/test_experiment_protocol.py` (new): 17 tests, mutation-checked (planted fabricated latency, a 4 GB claim and an OPPO-specific threshold in the general section are each caught).
+  - `tests/test_dataset_device_model.py`:
+    - device and G1 assertions now pin the confirmed state, strictly: only the 3 GB OPPO A5 2020; capabilities unverified; G2–G4 open;
+    - the fabricated-value scan excludes only the exact device-label strings;
+    - `research/experiments/` is allow-listed for the named Step 10C documents.
+  - `tests/test_research_protocol.py`: the same `research/experiments/` allow-list.
+
+### Methodological decisions (PROVISIONAL where marked)
+- **R0–R3.**
+  - Rule-based maximum-severity classification over the thermal, battery, memory and compute dimensions (PROVISIONAL).
+  - Only device-state signals feed the estimator; outcomes such as latency and accuracy are excluded.
+  - Thresholds: platform-defined levels first, otherwise change points or quantiles from the E0 pilot. They are frozen with a hash before confirmatory runs.
+  - Hysteresis bands come from signal noise, and dwell time exceeds the measured switch cost. Escalation may skip levels; de-escalation is one level at a time.
+- **Natural vs controlled pressure.** Natural state is exploratory only. Controlled pressure candidates are P-load, P-thermal, P-memory and P-battery; none is selected (D-10).
+- **Feedback.** Baselines share the controlled pressure schedule, not the realised R-trajectory, which is reported as a mediator.
+- **C1–C4.** Seven-step empirical selection, with failure handling for fewer than four admissible rungs. Identities are TO BE EMPIRICALLY DETERMINED.
+- **Runtime policy.**
+  - The R → C mapping comes from E1 admissibility criteria; R0→C1 … R3→C4 is a candidate only.
+  - Downgrade may skip rungs; upgrade is one rung at a time.
+  - Configurations switch only between items, with a switch cap; model residency under 3 GB RAM is D-12.
+- **Confidence.**
+  - Per-configuration temperature scaling fitted on on-device outputs. Raw softmax is logged separately.
+  - Item-level splits: train / validation / calibration-T / calibration-τ / test.
+  - Thresholds come from one frozen rule; the test manifest is never loaded by fitting code.
+- **Verification.**
+  - Stage 1 actions: A0, A2 (simulated from Real-IAD stored views), A3 (if the state permits) and A4. A1 is not available in Stage 1.
+  - Stage 2 (custom capture; PROTOCOL ONLY — NOT YET COLLECTED) adds actual A1 and A2.
+- **Recovery.** M = item-level defect recall at matched coverage, with F1 as secondary.
+  - The ratio is undefined or uninformative unless the CI of M(B1) − M(B3) lies above the SESOI.
+  - SESOI = the larger of the requirement-based value and the pilot's smallest detectable difference (value: PRE-DATA-COLLECTION DECISION REQUIRED).
+- **Statistics.** The Step 10A tests are preserved. Refinement issues are recorded, not applied: repeated runs vs McNemar (D-13), item vs view clustering, a precision co-requirement (D-14), and KS cell sizes.
+
+### Unresolved decisions
+D-01 to D-16 (`experimental_protocol.md` §14). They include:
+- SESOI, α and power;
+- the primary cost metric and the minimum inspection requirement;
+- the threshold rule, verification priority and cap;
+- split proportions, the classifier and hysteresis rules, and pressure mechanisms;
+- the time budget and model residency;
+- McNemar handling and the precision co-requirement;
+- energy-validation criteria;
+- whether to add further devices.
+
+### Gate status
+- G1: **CLOSED / VERIFIED** (researcher confirmation; device capabilities still REQUIRE DEVICE VERIFICATION).
+- G2: OPEN.
+- G3: OPEN (protocol specified; dataset not collected).
+- G4: OPEN (methodology defined; empirical selection not performed).
+
+### Verification
+- `python -m pytest -q`: **236 passed** (219 existing + 17 new).
+- Step 10A artefacts unchanged (pinned hashes); `papers.csv` unchanged.
+- No experiment, measurement, benchmark, download, training or implementation.
+
+### Git
+- Branch: `claude/step-10c-generalizable-experimental-protocol`. It is based on the Step 10B branch head `ac7fda6`, because PR #15 is not yet merged, so this PR is stacked on #15.
+- Commit: see `git log -- research/experiments/experimental_protocol.md`.
+- Push status: pushed; PR opened against `main`; not merged.

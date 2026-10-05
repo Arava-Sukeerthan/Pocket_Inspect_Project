@@ -33,6 +33,11 @@ MATRIX_COLUMNS = [
     "Notes",
 ]
 STATUSES = ("VERIFIED", "SUPPORTED", "PROVISIONAL", "REQUIRES_VERIFICATION")
+STEP_10C_PROTOCOL_DOCS = {
+    "experimental_protocol.md", "resource_states.md", "model_selection_protocol.md",
+    "confidence_verification_protocol.md", "measurement_protocol.md", "generalization_framework.md",
+    "experimental_matrix.csv", "log_schema.json",
+}
 # SHA-256 of the Step 10A artefacts as merged in PR #14 (main 544fe17).
 STEP_10A_HASHES = {
     "research/gap_analysis/research_gap.md": "ca1e6feb9b38e33d21f420011d8fa8e2098cd212dc66003f4f18ae169b5ebb54",
@@ -54,6 +59,18 @@ PERFORMANCE_VALUE = re.compile(
     r"|\bM parameters\b|°\s*C)"
     r"|(accuracy|recall|precision|F1|mAP|AUROC|ECE|latency)\s*(=|:|of|≈|~)\s*\d"
 )
+
+
+# The confirmed device's RAM-variant label (Step 10C, G1) is a device specification, not a model
+# performance value; only these exact strings are removed before scanning for fabricated values.
+DEVICE_LABELS = ("OPPO A5 2020 (3 GB RAM variant)", "OPPO A5 2020, 3 GB RAM variant", "OPPO A5 2020, 3 GB",
+                 "The 4 GB and 6 GB variants", "excluded_variants: [4 GB, 6 GB]")
+
+
+def _without_device_labels(text):
+    for label in DEVICE_LABELS:
+        text = text.replace(label, "")
+    return text
 
 
 def _text(path):
@@ -110,12 +127,18 @@ class TestDatasetDeviceModel(unittest.TestCase):
         self.assertIn("| Any dataset licence | REQUIRES_VERIFICATION (none verified) |", self.selection)
 
     # 3. no smartphone claimed available
+    # Step 10C: G1 closed by researcher confirmation; only that device is recorded and none of
+    # its capabilities is claimed verified.
     def test_no_device_claimed(self):
-        self.assertIsNone(self.cfg["device"]["selected"])
-        self.assertEqual(self.cfg["device"]["available_devices_known"], [])
-        self.assertIn("**No smartphone is selected and none is claimed to be available.**", self.device)
+        self.assertEqual(self.cfg["device"]["selected"], "OPPO A5 2020 (3 GB RAM variant)")
+        self.assertEqual(self.cfg["device"]["selected_by"], "researcher")
+        self.assertEqual(self.cfg["device"]["available_devices_known"], ["OPPO A5 2020 (3 GB RAM variant)"])
+        self.assertEqual(self.cfg["device"]["capabilities_verified"], [])
+        self.assertIn("**No smartphone is selected and none is claimed to be available.** _(Step 10B status, "
+                      "superseded by the update above.)_", self.device)
         for r in self.rows:
-            self.assertEqual(r["Device"], "ACTUAL DEVICE - REQUIRES RESEARCHER CONFIRMATION", r["Dataset"])
+            self.assertEqual(r["Device"], "OPPO A5 2020 (3 GB RAM variant) - confirmed (G1); capabilities REQUIRE "
+                                          "DEVICE VERIFICATION", r["Dataset"])
         shortlist = _section(self.device, "## 2. Candidate Device Classes (shortlist)")
         self.assertNotRegex(shortlist, r"\|\s*(VERIFIED|SUPPORTED)\s*\|")
 
@@ -135,6 +158,7 @@ class TestDatasetDeviceModel(unittest.TestCase):
             self.assertIn(f"| {field} |", ladder)
         self.assertEqual(ladder.count("REQUIRES EMPIRICAL BENCHMARKING"), 4)
         for name, text in list(self.docs.items()) + [("matrix", _text(MATRIX)), ("config", _text(CFG))]:
+            text = _without_device_labels(text)
             self.assertIsNone(PERFORMANCE_VALUE.search(text), (name, PERFORMANCE_VALUE.search(text)))
         for r in self.rows:
             for c in ("C1", "C2", "C3", "C4"):
@@ -245,8 +269,11 @@ class TestDatasetDeviceModel(unittest.TestCase):
                              capture_output=True, text=True).stdout.split()
         for rel in out:
             self.assertNotIn(Path(rel).suffix.lower(), data_ext, rel)
-        for folder in ("results", "experiments", "figures", "tables", "manuscript_data"):
+        for folder in ("results", "figures", "tables", "manuscript_data"):
             self.assertEqual(sorted(p.name for p in (ROOT / "research" / folder).iterdir()), ["README.md"], folder)
+        # research/experiments holds only the README and the Step 10C protocol documents (no runs, no results)
+        self.assertLessEqual({p.name for p in (ROOT / "research" / "experiments").iterdir()} - {"README.md"},
+                             STEP_10C_PROTOCOL_DOCS)
         for folder in ("experiments", "mobile", "models", "backend"):
             self.assertEqual(sorted(p.name for p in (ROOT / folder).iterdir()), ["README.md"], folder)
         for module in ("acquisition", "adaptation", "inference", "inspection", "monitoring", "quality", "uncertainty"):
@@ -277,10 +304,17 @@ class TestStep10BBoundaries(unittest.TestCase):
             cls.cfg = yaml.safe_load(f)
 
     def test_no_smartphone_falsely_available(self):
+        # Step 10C: only the researcher-confirmed 3 GB OPPO A5 2020 is recorded; the Step 10B
+        # pre-confirmation status is kept as audit trail; capabilities remain unverified.
         self.assertIn("**ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION.**", self.device)
-        self.assertEqual(self.cfg["device"]["actual_device_status"], "ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION")
-        self.assertFalse(self.cfg["device"]["repository_evidence_of_available_device"])
-        self.assertIsNone(self.cfg["device"]["selected"])
+        self.assertIn("**Step 10C update (2026-10-05): gate G1 CLOSED.**", self.device)
+        self.assertEqual(self.cfg["device"]["previous_actual_device_status"],
+                         "ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION")
+        self.assertTrue(self.cfg["device"]["actual_device_status"].startswith("CONFIRMED — OPPO A5 2020 (3 GB RAM variant)"))
+        self.assertIn("capabilities REQUIRE DEVICE VERIFICATION", self.cfg["device"]["actual_device_status"])
+        self.assertTrue(self.cfg["device"]["repository_evidence_of_available_device"])
+        self.assertEqual(self.cfg["device"]["excluded_variants"], ["4 GB", "6 GB"])
+        self.assertEqual(self.cfg["device"]["selected"], "OPPO A5 2020 (3 GB RAM variant)")
         self.assertTrue(self.cfg["device"]["candidate_classes_are_requirement_classes_only"])
         self.assertIn("**These are requirement classes only, not device selections.**", self.device)
         lowered = self.device.lower()
@@ -334,7 +368,7 @@ class TestStep10BBoundaries(unittest.TestCase):
     def test_no_fabricated_model_performance(self):
         for name, text in (("ladder", self.ladder), ("matrix", _text(MATRIX)), ("config", _text(CFG)),
                            ("selection", self.selection), ("device", self.device)):
-            self.assertIsNone(PERFORMANCE_VALUE.search(text), name)
+            self.assertIsNone(PERFORMANCE_VALUE.search(_without_device_labels(text)), name)
         for r in self.rows.values():
             for c in ("C1", "C2", "C3", "C4"):
                 self.assertNotRegex(re.sub(r"\bC[1-4]\b", "", r[c]), r"\d", (r["Dataset"], c))
@@ -344,6 +378,13 @@ class TestStep10BBoundaries(unittest.TestCase):
                            ("G3", "custom smartphone capture protocol confirmed"),
                            ("G4", "C1–C4 empirical selection criteria confirmed")):
             line = next(ln for ln in self.checklist.splitlines() if ln.startswith(f"| {gate} — {name} |"))
+            if gate == "G1":
+                # Step 10C: closed only with recorded researcher evidence
+                self.assertTrue(line.rstrip().endswith("| CLOSED / VERIFIED |"), gate)
+                self.assertIn("the researcher confirmed the OPPO A5 2020, 3 GB RAM variant", line)
+                self.assertEqual(self.cfg["gates"][gate]["status"], "CLOSED_VERIFIED")
+                self.assertIn("OPPO A5 2020, 3 GB", self.cfg["gates"][gate]["evidence"])
+                continue
             self.assertTrue(line.rstrip().endswith("| OPEN / REQUIRES VERIFICATION |"), gate)
             self.assertEqual(self.cfg["gates"][gate]["status"], "OPEN_REQUIRES_VERIFICATION")
 

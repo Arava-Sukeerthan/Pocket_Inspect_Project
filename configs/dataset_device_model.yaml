@@ -21,10 +21,15 @@ datasets:
   downloaded: []
 
 device:
-  selected: null
-  actual_device_status: "ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION"
-  repository_evidence_of_available_device: false
-  available_devices_known: []
+  selected: "OPPO A5 2020 (3 GB RAM variant)"
+  selected_by: researcher
+  selection_date: "2026-10-05"
+  actual_device_status: "CONFIRMED — OPPO A5 2020 (3 GB RAM variant); capabilities REQUIRE DEVICE VERIFICATION"
+  previous_actual_device_status: "ACTUAL DEVICE — REQUIRES RESEARCHER CONFIRMATION"
+  repository_evidence_of_available_device: true
+  excluded_variants: [4 GB, 6 GB]
+  capabilities_verified: []
+  available_devices_known: ["OPPO A5 2020 (3 GB RAM variant)"]
   candidate_classes_are_requirement_classes_only: true
   candidate_classes: [D1_pixel_class, D2_midrange_snapdragon_class, D3_low_cost_legacy_class]
   min_api_level_thermal_status: 29
@@ -70,7 +75,7 @@ multi_view:
   status: PROVISIONAL
 
 gates:
-  G1: {name: actual smartphone confirmed, status: OPEN_REQUIRES_VERIFICATION}
+  G1: {name: actual smartphone confirmed, status: CLOSED_VERIFIED, evidence: "researcher confirmation 2026-10-05: OPPO A5 2020, 3 GB RAM variant"}
   G2: {name: Real-IAD multi-view interpretation confirmed, status: OPEN_REQUIRES_VERIFICATION}
   G3: {name: custom smartphone capture protocol confirmed, status: OPEN_REQUIRES_VERIFICATION}
   G4: {name: C1-C4 empirical selection criteria confirmed, status: OPEN_REQUIRES_VERIFICATION}

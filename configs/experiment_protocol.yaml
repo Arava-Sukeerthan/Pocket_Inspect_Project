@@ -1,0 +1,100 @@
+# Step 10C: generalizable resource-aware experimental protocol (GC-03).
+#
+# Declarative protocol record. No experiment, measurement, benchmark, dataset
+# collection or result exists. Values are derived later by frozen rules or are
+# marked to_be_measured / requires_device_verification / decision_required.
+# Documents: research/experiments/*.md, experimental_matrix.csv, log_schema.json
+
+step: "10C"
+status: protocol_design_only
+
+positioning:
+  contribution: "Adaptive resource-aware Edge-AI visual inspection methodology for resource-constrained and legacy smartphones"
+  experimental_platform_is_contribution: false
+  generalization_principle: "The OPPO A5 2020 serves as the primary experimental platform rather than defining the scope of the proposed methodology. The methodology is intended for resource-constrained and legacy smartphones more generally. Device-specific results are reported as evidence obtained on the selected platform, while claims of generalization beyond the evaluated device are limited to what the experimental design supports."
+  result_classes: [DEVICE_SPECIFIC_RESULT, METHODOLOGICAL_RESULT, GENERALIZATION_EVIDENCE, UNVALIDATED_GENERALIZATION]
+
+platform:
+  manufacturer: OPPO
+  model: OPPO A5 2020
+  ram_variant: 3 GB
+  excluded_variants: [4 GB, 6 GB]
+  confirmed_by: researcher
+  confirmation_date: "2026-10-05"
+  specification_source: researcher-provided manufacturer specification (not measured)
+  specification:
+    storage: 64 GB
+    soc: Qualcomm Snapdragon 665
+    gpu: Adreno 610
+    cpu: octa-core, up to 2.0 GHz
+    ram_type: LPDDR4X
+    process: 11 nm
+    battery: 5000 mAh
+    rear_primary_camera: 12 MP
+    rear_ultrawide_camera: 8 MP
+    android_launch_version: Android 9 / ColorOS
+  installed_android_version: requires_device_verification
+  capabilities_verified: []
+  measurements: []
+  additional_devices: []
+
+methodology:
+  pipeline: [resource_monitor, resource_state_estimator, adaptive_model_selection, inspection, calibrated_confidence, verification]
+  resource_states: [R0, R1, R2, R3]
+  state_classifier: rule_based_maximum_severity   # PROVISIONAL; decision D-09
+  thresholds: to_be_derived_from_E0_and_frozen
+  hysteresis: to_be_derived_from_E0_and_frozen
+  minimum_dwell_time: to_be_derived_from_E0_and_frozen
+  pressure_mechanisms_candidates: [P-load, P-thermal, P-memory, P-battery]
+  pressure_mechanism_selected: null                 # decision D-10
+  configuration_ladder: [C1, C2, C3, C4]
+  ladder_identities: to_be_empirically_determined
+  ladder_selection_steps: [candidate_availability, same_task, offline_deployment, probability_output, resource_cost_ordering, minimum_inspection_requirement, empirical_confirmation]
+  r_to_c_mapping: to_be_derived_from_E1_and_frozen
+  candidate_default_mapping: {R0: C1, R1: C2, R2: C3, R3: C4}   # candidate only
+  downgrade: immediate_may_skip_rungs
+  upgrade: one_rung_after_dwell
+  confidence_primary: per_configuration_temperature_scaling
+  confidence_secondary: split_conformal_if_feasible
+  thresholds_confidence: to_be_computed_by_frozen_rule
+  verification_actions:
+    A0: {name: accept, stage1: allowed, stage2: allowed}
+    A1: {name: same-view recapture, stage1: not_available, stage2: allowed}
+    A2: {name: additional view, stage1: controlled_additional_view_simulation, stage2: allowed}
+    A3: {name: stronger model, stage1: allowed_if_state_permits, stage2: allowed_if_state_permits}
+    A4: {name: human review, stage1: allowed, stage2: allowed}
+
+baselines:
+  B1: {name: Static best model, resource_adaptation: false, confidence_verification: false}
+  B2: {name: Static lightweight model, resource_adaptation: false, confidence_verification: false}
+  B3: {name: Resource adaptation only, resource_adaptation: true, confidence_verification: false}
+  B4: {name: Confidence verification only, resource_adaptation: false, confidence_verification: true}
+  B5: {name: Resource adaptation + confidence verification, resource_adaptation: true, confidence_verification: true}
+ablation_variants:
+  B5-F: {parent: B5, verification_policy: fixed_global_threshold, primary_baseline: false}
+
+recovery:
+  formula: "(B5 - B3) / (B1 - B3)"
+  metric: item_level_defect_recall
+  secondary_metric: F1
+  denominator_rule: "undefined/uninformative unless the CI of M(B1) - M(B3) lies entirely above the SESOI"
+  sesoi: pre_data_collection_decision_required
+
+stages:
+  stage1: {dataset: Real-IAD, status: provisional, additional_view: controlled_simulation, smartphone_recapture: false}
+  stage2: {dataset: custom smartphone capture, status: protocol_only_not_collected, exists: false}
+
+experiments: [E0, E1, E2, E3]
+repeated_runs: to_be_determined_by_pilot
+sample_size: to_be_determined_by_pilot
+energy_external_validation_required: true
+thermal_measurement_separate_from_thermal_state: true
+
+gates:
+  G1: {status: CLOSED_VERIFIED, evidence: "researcher confirmation 2026-10-05: OPPO A5 2020, 3 GB"}
+  G2: {status: OPEN_REQUIRES_VERIFICATION}
+  G3: {status: OPEN_REQUIRES_VERIFICATION, protocol_specified: true, dataset_collected: false}
+  G4: {status: OPEN_REQUIRES_VERIFICATION, methodology_defined: true, empirical_selection_done: false}
+
+decisions_required: [D-01, D-02, D-03, D-04, D-05, D-06, D-07, D-08, D-09, D-10, D-11, D-12, D-13, D-14, D-15, D-16]
+results: []
