@@ -321,67 +321,98 @@ class ADBCollector:
             })
             return "APP_OUTPUT_ERROR", None
 
-    def _normalize_app_output(self, app_parsed: Dict[str, Any]) -> Dict[str, Any]:
-        """Normalizes the nested JSON schema produced by CharacterizationRunner.kt."""
-        norm: Dict[str, Any] = {}
-        if not isinstance(app_parsed, dict):
-            return norm
+    # App metrics (CharacterizationRunner.kt) that the host collectors consume.
+    # Any other app metric stays only in the raw app evidence file.
+    APP_METRICS = (
+        "manufacturer",
+        "model",
+        "soc_model",
+        "total_ram_mb",
+        "available_memory_mb",
+        "battery_level_percent",
+        "battery_voltage",
+        "battery_temperature",
+        "thermal_status_api",
+        "camera_count",
+        "camera_0_hardware_level",
+        "camera_probe",
+    )
 
-        for section_name in ["device_identity", "memory_telemetry", "battery_telemetry", "camera_telemetry"]:
+    def _normalize_app_output(self, app_parsed: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """Normalizes the nested JSON schema produced by CharacterizationRunner.kt.
+
+        Returns one record per known app metric: {"state", "value", "unit", "error_message"}.
+        The app's own state is preserved (AVAILABLE, API_UNSUPPORTED, UNAVAILABLE, ERROR);
+        a metric is never treated as available just because it is present.
+        """
+        records: Dict[str, Dict[str, Any]] = {}
+        if not isinstance(app_parsed, dict):
+            return records
+
+        items: List[Any] = []
+        for section_name in ("device_identity", "memory_telemetry", "battery_telemetry",
+                             "thermal_capability", "camera_telemetry"):
             section = app_parsed.get(section_name)
             if isinstance(section, list):
-                for item in section:
-                    if isinstance(item, dict) and "metric" in item:
-                        m = item["metric"]
-                        v = item.get("value")
-                        unit = item.get("unit")
-                        norm[m] = v
-                        norm[f"{m}_is_app_derived"] = True
-                        if unit:
-                            norm[f"{m}_unit"] = unit
-                        norm[f"{m}_app_item"] = item
-
-                        if m == "camera_0_hardware_level":
-                            if "camera_0" not in norm:
-                                norm["camera_0"] = {}
-                            if isinstance(norm["camera_0"], dict):
-                                norm["camera_0"]["hardware_level"] = v
-                            norm["camera_0_hardware_level_is_app_derived"] = True
+                items.extend(section)
             elif isinstance(section, dict):
-                for m, v in section.items():
-                    norm[m] = v
-                    norm[f"{m}_is_app_derived"] = True
+                # ThermalTelemetryCollector.collect() returns a single CapabilityResult
+                items.append(section)
 
-        thermal = app_parsed.get("thermal_capability")
-        if isinstance(thermal, dict):
-            if "metric" in thermal:
-                m = thermal["metric"]
-                v = thermal.get("value")
-                norm[m] = v
-                norm[f"{m}_is_app_derived"] = True
-                norm[f"{m}_app_item"] = thermal
-                if m == "thermal_status_api":
-                    norm["thermal_status_api_available"] = True
-            for k, v in thermal.items():
-                if k not in norm:
-                    norm[k] = v
-                    norm[f"{k}_is_app_derived"] = True
-        elif isinstance(thermal, list):
-            for item in thermal:
-                if isinstance(item, dict) and "metric" in item:
-                    m = item["metric"]
-                    v = item.get("value")
-                    norm[m] = v
-                    norm[f"{m}_is_app_derived"] = True
-                    norm[f"{m}_app_item"] = item
-                    if m == "thermal_status_api":
-                        norm["thermal_status_api_available"] = True
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            metric = item.get("metric")
+            if metric not in self.APP_METRICS:
+                continue
+            record = {
+                "state": item.get("state"),
+                "value": item.get("value"),
+                "unit": item.get("unit"),
+                "error_message": item.get("error_message"),
+            }
+            # Several items can share a metric (e.g. soc_model is emitted once per SDK branch);
+            # an AVAILABLE record takes precedence over a non-AVAILABLE one.
+            if metric in records and records[metric]["state"] == "AVAILABLE" and record["state"] != "AVAILABLE":
+                continue
+            records[metric] = record
+        return records
 
-        for k, v in app_parsed.items():
-            if k not in norm and k not in ["run_id", "observed_at"]:
-                norm[k] = v
+    @staticmethod
+    def _merge_app_observations(observed_props: Dict[str, Any], app_records: Dict[str, Dict[str, Any]]) -> None:
+        """Merges app records into observed_props with source-correct provenance.
 
-        return norm
+        - Host value present: the host value wins and no app flag is set.
+        - Host value absent and the app reports AVAILABLE with a value: the app value is
+          used and `<metric>_is_app_derived` is set, so collectors cite android_app_evidence.json.
+        - Any non-AVAILABLE app state is recorded in `app_metric_states` and never becomes a value.
+        """
+        app_states: Dict[str, Dict[str, Any]] = {}
+        for metric, rec in app_records.items():
+            state = rec.get("state")
+            if state != "AVAILABLE":
+                app_states[metric] = {"state": state, "error_message": rec.get("error_message")}
+                continue
+
+            if metric == "thermal_status_api":
+                # The app's AVAILABLE result is the only observation of this API.
+                if observed_props.get("thermal_status_api_available") is None:
+                    observed_props["thermal_status_api_available"] = True
+                    observed_props["thermal_status_api_is_app_derived"] = True
+                continue
+
+            value = rec.get("value")
+            if value is None or observed_props.get(metric) is not None:
+                continue
+            observed_props[metric] = value
+            observed_props[f"{metric}_is_app_derived"] = True
+            if rec.get("unit"):
+                observed_props[f"{metric}_unit"] = rec["unit"]
+            if metric == "soc_model":
+                observed_props["source_soc_prop"] = "Build.SOC_MODEL (android app)"
+
+        if app_states:
+            observed_props["app_metric_states"] = app_states
 
     def collect_raw_evidence_and_observations(self, output_dir: Path) -> Tuple[List[Path], Dict[str, Any]]:
         """Collects raw evidence text files, writes observed_props.json & manifest.json."""
@@ -545,11 +576,8 @@ class ADBCollector:
         if app_status == "APP_OUTPUT_COLLECTED" and app_parsed:
             files_saved.append(ev_dir / "android_app_evidence.json")
             # Normalize nested Android app JSON schema produced by CharacterizationRunner.kt
-            norm_app = self._normalize_app_output(app_parsed)
             observed_props["app_telemetry"] = app_parsed
-            for k, v in norm_app.items():
-                if k not in observed_props or observed_props[k] is None:
-                    observed_props[k] = v
+            self._merge_app_observations(observed_props, self._normalize_app_output(app_parsed))
 
         # 13. Boot ID
         observed_props["boot_id"] = self.get_boot_id()

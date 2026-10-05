@@ -407,9 +407,9 @@ def test_p03_unmocked_collector_e2e_pipeline(tmp_path):
                 assert cam0_hw["evidence_ref"] == "evidence/android_app_evidence.json#camera_0_hardware_level"
 
                 # Verify failure assertion: ensure app telemetry reached characterization.json
-                assert any(r.get("evidence_ref", "").startswith("evidence/android_app_evidence.json") for t in telemetry for r in t.get("results", [])) or \
-                       thermal_cap.get("thermal_status_api", {}).get("evidence_ref", "").startswith("evidence/android_app_evidence.json") or \
-                       any(r.get("evidence_ref", "").startswith("evidence/android_app_evidence.json") for c in camera_caps for r in c.get("results", []))
+                assert any((r.get("evidence_ref") or "").startswith("evidence/android_app_evidence.json") for t in telemetry for r in t.get("results", [])) or \
+                       (thermal_cap.get("thermal_status_api", {}).get("evidence_ref") or "").startswith("evidence/android_app_evidence.json") or \
+                       any((r.get("evidence_ref") or "").startswith("evidence/android_app_evidence.json") for c in camera_caps for r in c.get("results", []))
 
 
 def test_f02_app_evidence_provenance_fallback(tmp_path):
@@ -848,3 +848,262 @@ def test_r11_atomic_write_and_run_status(tmp_path):
     assert (out_dir / "README.md").exists()
     assert not (out_dir / "characterization.json.tmp").exists()
     assert not (out_dir / "README.md.tmp").exists()
+
+
+# ---------------------------------------------------------------------------
+# Correction Round 6 (P5-01 .. P5-05): real production path
+#   synthetic ADB transport -> real parsers -> _normalize_app_output() /
+#   _merge_app_observations() -> real collectors -> report generator
+#   (schema, evidence-file and manifest SHA-256 validation) -> characterization.json
+# Only ADBCollector._adb_cmd (the transport) and the connection state are patched.
+# ---------------------------------------------------------------------------
+
+_HOST_GETPROP = (
+    "[ro.product.manufacturer]: [OPPO]\n[ro.product.model]: [CPH1931]\n"
+    "[ro.build.version.sdk]: [29]\n[ro.build.version.release]: [10]\n[ro.board.platform]: [trinket]\n"
+)
+
+
+def _app_item(metric, state="AVAILABLE", value=None, unit=None, error_message=None):
+    # Mirrors CharacterizationRunner.kt / Gson: null fields are omitted.
+    item = {"metric": metric, "state": state, "report_status": "VERIFIED" if state == "AVAILABLE" else "NOT YET VERIFIED",
+            "source": "android_api", "verified": False, "verification_method": "unverified"}
+    if value is not None:
+        item["value"] = value
+    if unit is not None:
+        item["unit"] = unit
+    if error_message is not None:
+        item["error_message"] = error_message
+    return item
+
+
+def _app_json(identity=None, memory=None, battery=None, thermal=None, camera=None):
+    return json.dumps({
+        "run_id": "android_run_round6",
+        "observed_at": "2026-10-05T12:00:00Z",
+        "device_identity": identity or [],
+        "memory_telemetry": memory or [],
+        "thermal_capability": thermal if thermal is not None else _app_item("thermal_status_api", "AVAILABLE", 0),
+        "battery_telemetry": battery or [],
+        "camera_telemetry": camera or [],
+    })
+
+
+def _run_synthetic(tmp_path, app_json, fail=()):
+    """Runs the real characterization pipeline against a synthetic ADB transport.
+
+    `fail` lists substrings of ADB commands that exit 1 (an attempted probe that fails).
+    """
+    adb = ADBCollector(device_id="SYNTHETIC_ROUND6")
+
+    def transport(args):
+        cmd = " ".join(args)
+        if any(f in cmd for f in fail):
+            return 1, "", f"synthetic failure: {cmd}"
+        if cmd == "shell getprop":
+            return 0, _HOST_GETPROP, ""
+        if "/proc/meminfo" in cmd:
+            return 0, "MemTotal:        2900000 kB\nMemAvailable:    1000000 kB\n", ""
+        if "/proc/cpuinfo" in cmd:
+            return 0, "processor : 0\nprocessor : 1\nHardware : Qualcomm\n", ""
+        if "/proc/stat" in cmd:
+            return 0, "cpu 1 2 3\n", ""
+        if "scaling_cur_freq" in cmd:
+            return 0, "1804800\n", ""
+        if "gpuclk" in cmd:
+            return 0, "600000000\n", ""
+        if "dumpsys battery" in cmd:
+            return 0, "  level: 80\n  voltage: 4100\n  temperature: 300\n  status: 3\n", ""
+        if "thermal_zone0/type" in cmd:
+            return 0, "battery\n", ""
+        if "thermal_zone0/temp" in cmd:
+            return 0, "30000\n", ""
+        if "dumpsys" in cmd:
+            return 0, "ok\n", ""
+        if "atrace" in cmd:
+            return 0, "gfx - Graphics\n", ""
+        if "airplane_mode_on" in cmd:
+            return 0, "1\n", ""
+        if "boot_id" in cmd:
+            return 0, "synthetic_boot_round6\n", ""
+        if "run-as" in cmd:
+            return 0, app_json, ""
+        return 1, "", "No such file or directory"
+
+    run_id = f"run_{datetime.datetime.utcnow().strftime('%Y%m%d')}_160000"
+    with patch.object(adb, "_adb_cmd", side_effect=transport):
+        with patch("scripts.device_characterization.run_characterization.ADBCollector", return_value=adb):
+            with patch.object(adb, "get_connection_status", return_value="CONNECTED"):
+                out_dir, _ = run_characterization(
+                    Path("configs/device_characterization.yaml"), run_id=run_id, overwrite=True, results_dir=tmp_path,
+                )
+    data = json.loads((out_dir / "characterization.json").read_text(encoding="utf-8"))
+    observed = json.loads((out_dir / "evidence" / "observed_props.json").read_text(encoding="utf-8"))
+    return out_dir, data, observed
+
+
+def _all_results(data):
+    out = {}
+    for r in data["device_identity"]["observed"]:
+        out[r["metric"]] = r
+    out["variant_check"] = data["device_identity"]["variant_check"]
+    for t in data["telemetry"]:
+        for r in t["results"]:
+            out[r["metric"]] = r
+    for k, r in data["thermal"].items():
+        if isinstance(r, dict) and "metric" in r:
+            out[r["metric"]] = r
+    for cam in data["camera"]:
+        for r in cam["results"]:
+            out[f"camera_{cam['camera_id']}_{r['metric']}"] = r
+    return out
+
+
+_DIFFERING_APP = dict(
+    identity=[_app_item("manufacturer", value="APP_MFR"), _app_item("model", value="APP_MODEL")],
+    memory=[_app_item("total_ram_mb", value=2800, unit="MB"), _app_item("available_memory_mb", value=1100, unit="MB")],
+    battery=[_app_item("battery_level_percent", value=77, unit="percent"), _app_item("battery_voltage", value=3999, unit="mV")],
+)
+
+
+def test_p501_host_value_keeps_host_evidence_when_app_differs(tmp_path):
+    """P5-01: host and app disagree; the host value wins and cites host evidence."""
+    out_dir, data, observed = _run_synthetic(tmp_path, _app_json(**_DIFFERING_APP))
+    res = _all_results(data)
+
+    expected = {
+        "total_ram_mb": (2832, "evidence/meminfo_evidence.txt#total_ram_mb"),
+        "available_memory_mb": (976, "evidence/meminfo_evidence.txt#available_memory_mb"),
+        "battery_level_percent": (80, "evidence/battery_dumpsys_evidence.txt#battery_level_percent"),
+        "battery_voltage": (4100.0, "evidence/battery_dumpsys_evidence.txt#battery_voltage"),
+        "model": ("CPH1931", "evidence/getprop_evidence.txt#ro.product.model"),
+    }
+    for metric, (value, ref) in expected.items():
+        assert res[metric]["value"] == value, metric
+        assert res[metric]["verified"] is True, metric
+        assert res[metric]["evidence_ref"] == ref, metric
+    assert res["variant_check"]["evidence_ref"] == "evidence/meminfo_evidence.txt#ram_variant_check"
+
+    # No app-derived flag for a metric whose host value was selected
+    for metric in ("total_ram_mb", "available_memory_mb", "battery_level_percent", "battery_voltage", "model", "manufacturer"):
+        assert f"{metric}_is_app_derived" not in observed, metric
+
+    # The cited host evidence really contains the reported value
+    meminfo = (out_dir / "evidence" / "meminfo_evidence.txt").read_text(encoding="utf-8")
+    assert "2900000 kB" in meminfo
+    battery = (out_dir / "evidence" / "battery_dumpsys_evidence.txt").read_text(encoding="utf-8")
+    assert "level: 80" in battery and "voltage: 4100" in battery
+
+
+def test_p501_app_fallback_cites_app_evidence_when_host_probes_fail(tmp_path):
+    """P5-01: host battery and memory probes fail; the app value is used and cites the app file."""
+    out_dir, data, observed = _run_synthetic(
+        tmp_path, _app_json(**_DIFFERING_APP), fail=("/proc/meminfo", "dumpsys battery"),
+    )
+    res = _all_results(data)
+
+    expected = {
+        "total_ram_mb": 2800,
+        "available_memory_mb": 1100,
+        "battery_level_percent": 77,
+        "battery_voltage": 3999.0,
+    }
+    app_evidence = json.loads((out_dir / "evidence" / "android_app_evidence.json").read_text(encoding="utf-8"))
+    app_values = {i["metric"]: i["value"] for sec in ("memory_telemetry", "battery_telemetry") for i in app_evidence[sec]}
+    for metric, value in expected.items():
+        assert res[metric]["value"] == value, metric
+        assert res[metric]["evidence_ref"] == f"evidence/android_app_evidence.json#{metric}", metric
+        assert app_values[metric] == value, metric  # the cited evidence holds the reported value
+        assert observed[f"{metric}_is_app_derived"] is True
+    assert res["variant_check"]["evidence_ref"] == "evidence/android_app_evidence.json#total_ram_mb"
+
+    # Host probes the app does not cover keep their failure state
+    assert res["battery_temperature"]["state"] == "ERROR"
+    assert res["battery_temperature"]["evidence_ref"] == "evidence/commands.log#probe_error_battery"
+    # Host identity was observed, so it keeps host evidence
+    assert res["model"]["evidence_ref"] == "evidence/getprop_evidence.txt#ro.product.model"
+
+
+def test_p501_host_failure_without_app_value_keeps_failure_state(tmp_path):
+    """P5-01 rule D: host probe fails and the app supplies nothing -> host ERROR, no app evidence."""
+    _, data, observed = _run_synthetic(tmp_path, _app_json(), fail=("/proc/meminfo",))
+    res = _all_results(data)
+    assert res["total_ram_mb"]["state"] == "ERROR"
+    assert res["total_ram_mb"]["evidence_ref"] == "evidence/commands.log#probe_error_meminfo"
+    assert "total_ram_mb_is_app_derived" not in observed
+
+
+@pytest.mark.parametrize("app_state", ["API_UNSUPPORTED", "UNAVAILABLE", "ERROR"])
+def test_p502_app_thermal_status_state_is_preserved(tmp_path, app_state):
+    """P5-02: a non-AVAILABLE app thermal_status_api state is never upgraded to AVAILABLE/VERIFIED."""
+    err = "PowerManager error" if app_state == "ERROR" else None
+    thermal = _app_item("thermal_status_api", app_state, error_message=err)
+    _, data, observed = _run_synthetic(tmp_path, _app_json(thermal=thermal))
+    res = data["thermal"]["thermal_status_api"]
+    assert res["state"] == app_state
+    assert res["report_status"] != "VERIFIED"
+    assert res["verified"] is False
+    assert res["value"] is None
+    assert res["evidence_ref"] == "evidence/android_app_evidence.json#thermal_status_api"
+    if app_state == "ERROR":
+        assert res["error_message"] == "PowerManager error"
+    assert "thermal_status_api_available" not in observed
+
+
+def test_p502_app_thermal_status_available_is_used(tmp_path):
+    """P5-02: an AVAILABLE app thermal_status_api result still reaches the report, citing the app."""
+    _, data, _ = _run_synthetic(tmp_path, _app_json())
+    res = data["thermal"]["thermal_status_api"]
+    assert res["state"] == "AVAILABLE"
+    assert res["verified"] is True
+    assert res["evidence_ref"] == "evidence/android_app_evidence.json#thermal_status_api"
+
+
+def test_p503_app_camera_error_is_preserved(tmp_path):
+    """P5-03: the app's camera_probe ERROR (CameraAccessException) becomes ERROR, not NOT_TESTED."""
+    camera = [_app_item("camera_probe", "ERROR", error_message="CameraAccessException: CAMERA_DISABLED")]
+    _, data, _ = _run_synthetic(tmp_path, _app_json(camera=camera))
+    hw = _all_results(data)["camera_0_hardware_level"]
+    assert hw["state"] == "ERROR"
+    assert "CameraAccessException" in hw["error_message"]
+    assert hw["evidence_ref"] == "evidence/android_app_evidence.json#camera_probe"
+    assert hw["verified"] is False
+
+
+def test_p504_no_nested_app_fields_leak_into_observed_props(tmp_path):
+    """P5-04: generic keys of nested app items never become top-level observed_props keys."""
+    _, _, observed = _run_synthetic(tmp_path, _app_json(**_DIFFERING_APP))
+    for key in ("state", "value", "verified", "metric", "report_status", "source", "unit",
+                "verification_method", "error_message", "device_identity", "memory_telemetry",
+                "battery_telemetry", "thermal_capability", "camera_telemetry", "run_id", "observed_at"):
+        assert key not in observed, key
+    assert not any(k.endswith("_app_item") for k in observed)
+    # The raw app output stays available under its own key
+    assert observed["app_telemetry"]["run_id"] == "android_run_round6"
+
+
+@pytest.mark.parametrize(
+    "fail, expected",
+    [
+        ((), "COMPLETE"),
+        (("shell getprop",), "FAILED"),
+        (("/proc/meminfo",), "FAILED"),
+        (("scaling_cur_freq",), "COMPLETE"),  # not a mandatory probe: ERROR result, run stays COMPLETE
+    ],
+)
+def test_p505_run_status_from_mandatory_probes(tmp_path, fail, expected):
+    """P5-05: FAILED only when a mandatory probe (configs run_status_rules) fails."""
+    _, data, _ = _run_synthetic(tmp_path, _app_json(), fail=fail)
+    assert data["run_status"] == expected
+
+
+def test_p505_mandatory_probes_defined_in_config():
+    import yaml
+    cfg = yaml.safe_load(Path("configs/device_characterization.yaml").read_text(encoding="utf-8"))
+    assert cfg["run_status_rules"]["mandatory_probes"] == ["getprop", "meminfo"]
+
+
+def test_p505_dry_run_status(tmp_path):
+    with patch("scripts.device_characterization.adb_collector.ADBCollector.get_connection_status", return_value="NO_DEVICE"):
+        _, run_dict = run_characterization(Path("configs/device_characterization.yaml"), dry_run=True, results_dir=tmp_path)
+    assert run_dict["run_status"] == "DRY_RUN"

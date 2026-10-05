@@ -63,6 +63,22 @@ def _hash_file(path: Path) -> str:
     return "unknown_hash"
 
 
+DEFAULT_MANDATORY_PROBES = ("getprop", "meminfo")
+
+
+def _determine_run_status(adb_connected: bool, props: Dict[str, Any], cfg: Dict[str, Any]) -> str:
+    """P5-05: DRY_RUN without a device; FAILED if a mandatory probe failed; otherwise COMPLETE.
+
+    Mandatory probes are read from `run_status_rules.mandatory_probes` in the config.
+    """
+    if not adb_connected:
+        return "DRY_RUN"
+    mandatory = (cfg.get("run_status_rules") or {}).get("mandatory_probes") or DEFAULT_MANDATORY_PROBES
+    if any(props.get(f"probe_error_{probe}") for probe in mandatory):
+        return "FAILED"
+    return "COMPLETE"
+
+
 def run_characterization(
     config_path: Path,
     run_id: Optional[str] = None,
@@ -181,7 +197,7 @@ def run_characterization(
         },
         app_output_status=props.get("app_output_status"),
         manifest_sha256=props.get("manifest_sha256"),
-        run_status="FAILED" if (adb_connected and (props.get("probe_error_getprop") or props.get("probe_error_meminfo"))) else ("COMPLETE" if adb_connected else "DRY_RUN"),
+        run_status=_determine_run_status(adb_connected, props, cfg),
     )
 
     run_dict = run.to_dict()

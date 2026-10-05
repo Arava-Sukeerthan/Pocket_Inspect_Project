@@ -52,6 +52,19 @@ probes:
   cpufreq_sysfs_pattern: "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq"
   thermal_sysfs_pattern: "/sys/class/thermal/thermal_zone%d"
 
+# Run status rules (P5-05). Mandatory probes are the host probes behind the two items the
+# protocol requires of every run: the device identity (protocol §2, observed identity) and the
+# 3 GB variant check (protocol §2 variant check, §9 sign-off criterion 2).
+# A connected run in which any mandatory probe failed is persisted with run_status FAILED;
+# a connected run without such a failure is COMPLETE; a dry run is DRY_RUN.
+# ABORTED is listed in the schema but the protocol defines no abort workflow, so the software
+# never writes it: an interrupted run raises before characterization.json is written, which
+# leaves no result file that could be mistaken for a complete run.
+run_status_rules:
+  mandatory_probes:
+    - getprop   # device identity: manufacturer, model, API level, release (protocol §2)
+    - meminfo   # total RAM for the 3 GB variant check (protocol §2, §9)
+
 output:
   results_directory: "research/results/device_characterization"
   schema_path: "research/experiments/device_characterization_schema.json"

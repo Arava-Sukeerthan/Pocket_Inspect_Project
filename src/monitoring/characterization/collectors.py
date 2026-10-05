@@ -56,6 +56,22 @@ def _determine_state_and_verification(
     return state, verified, evidence_ref
 
 
+def _is_app_derived(props: Dict[str, Any], metric: str) -> bool:
+    """True only when the final value of `metric` was supplied by the Android app (P5-01)."""
+    return props.get(f"{metric}_is_app_derived") is True
+
+
+def _app_metric_state(props: Dict[str, Any], metric: str) -> Optional[Dict[str, Any]]:
+    """Non-AVAILABLE state reported by the Android app for `metric`, if any (P5-02 / P5-03)."""
+    states = props.get("app_metric_states")
+    if isinstance(states, dict) and isinstance(states.get(metric), dict):
+        return states[metric]
+    return None
+
+
+APP_EVIDENCE = "evidence/android_app_evidence.json"
+
+
 class DeviceIdentityCollector:
     """Collector 1: DeviceIdentityCollector.
     Checks device unit ID, known specifications, observed identity properties,
@@ -91,6 +107,8 @@ class DeviceIdentityCollector:
             state_mfr, ver_mfr, ev_mfr = _determine_state_and_verification(
                 props, "manufacturer" if "manufacturer" in props else "ro.product.manufacturer"
             )
+            if ver_mfr and _is_app_derived(props, "manufacturer"):
+                ev_mfr = f"{APP_EVIDENCE}#manufacturer"
             err_mfr = None
 
         observed_results.append(CapabilityResult(
@@ -123,7 +141,12 @@ class DeviceIdentityCollector:
             state_model = RuntimeState.AVAILABLE.value if obs_model else RuntimeState.UNAVAILABLE.value
             ver_model = bool(props.get("is_real_device_observation") and obs_model)
             err_model = None
-            ev_model = "evidence/getprop_evidence.txt#ro.product.model" if ver_model else None
+            if not ver_model:
+                ev_model = None
+            elif _is_app_derived(props, "model"):
+                ev_model = f"{APP_EVIDENCE}#model"
+            else:
+                ev_model = "evidence/getprop_evidence.txt#ro.product.model"
 
         observed_results.append(CapabilityResult(
             metric="model",
@@ -155,8 +178,8 @@ class DeviceIdentityCollector:
             state_ram = RuntimeState.AVAILABLE.value if total_ram_mb is not None else RuntimeState.UNAVAILABLE.value
             ver_ram = bool(props.get("is_real_device_observation") and total_ram_mb is not None)
             err_ram = None
-            if "total_ram_mb_app_item" in props or ("total_ram_mb" in props and "probe_error_meminfo" in props):
-                ev_ram = "evidence/android_app_evidence.json#total_ram_mb" if ver_ram else None
+            if _is_app_derived(props, "total_ram_mb"):
+                ev_ram = f"{APP_EVIDENCE}#total_ram_mb" if ver_ram else None
             else:
                 ev_ram = "evidence/meminfo_evidence.txt#total_ram_mb" if ver_ram else None
 
@@ -183,7 +206,9 @@ class DeviceIdentityCollector:
         ver_soc = bool(props.get("is_real_device_observation") and obs_soc)
         
         if ver_soc and obs_soc:
-            if source_soc_prop == "ro.soc.model":
+            if _is_app_derived(props, "soc_model"):
+                ev_soc = f"{APP_EVIDENCE}#soc_model"
+            elif source_soc_prop == "ro.soc.model":
                 ev_soc = "evidence/getprop_evidence.txt#ro.soc.model"
             elif source_soc_prop == "ro.board.platform":
                 ev_soc = "evidence/getprop_evidence.txt#ro.board.platform"
@@ -242,7 +267,7 @@ class DeviceIdentityCollector:
                     verified=ver_v,
                     verification_method="observed_ram_range_verification",
                     observed_at=now if ver_v else None,
-                    evidence_ref=("evidence/android_app_evidence.json#total_ram_mb" if ("total_ram_mb_app_item" in props or props.get("total_ram_mb_is_app_derived") or "probe_error_meminfo" in props) else "evidence/meminfo_evidence.txt#ram_variant_check") if ver_v else None,
+                    evidence_ref=(f"{APP_EVIDENCE}#total_ram_mb" if _is_app_derived(props, "total_ram_mb") else "evidence/meminfo_evidence.txt#ram_variant_check") if ver_v else None,
                     notes="Observed RAM matches the required 3 GB experimental platform variant.",
                 )
             else:
@@ -438,7 +463,7 @@ class BatteryTelemetryCollector:
                 state_lvl = RuntimeState.AVAILABLE.value
                 err_lvl = None
                 val_lvl = int(raw_lvl)
-                if "battery_level_percent_app_item" in props or props.get("battery_level_percent_is_app_derived") or ("probe_error_battery" in props and "battery_level_percent" in props):
+                if _is_app_derived(props, "battery_level_percent"):
                     ev_lvl = "evidence/android_app_evidence.json#battery_level_percent" if (is_real and state_lvl == RuntimeState.AVAILABLE.value) else None
                 else:
                     ev_lvl = "evidence/battery_dumpsys_evidence.txt#battery_level_percent" if (is_real and state_lvl == RuntimeState.AVAILABLE.value) else None
@@ -486,7 +511,7 @@ class BatteryTelemetryCollector:
                 state_volt = RuntimeState.AVAILABLE.value
                 err_volt = None
                 val_volt = float(raw_volt)
-                if "battery_voltage_app_item" in props or props.get("battery_voltage_is_app_derived") or ("probe_error_battery" in props and "battery_voltage" in props):
+                if _is_app_derived(props, "battery_voltage"):
                     ev_volt = "evidence/android_app_evidence.json#battery_voltage" if (is_real and state_volt == RuntimeState.AVAILABLE.value) else None
                 else:
                     ev_volt = "evidence/battery_dumpsys_evidence.txt#battery_voltage" if (is_real and state_volt == RuntimeState.AVAILABLE.value) else None
@@ -534,7 +559,7 @@ class BatteryTelemetryCollector:
                 state_temp = RuntimeState.AVAILABLE.value
                 err_temp = None
                 val_temp = float(raw_temp)
-                if "battery_temperature_app_item" in props or props.get("battery_temperature_is_app_derived") or ("probe_error_battery" in props and "battery_temperature" in props):
+                if _is_app_derived(props, "battery_temperature"):
                     ev_temp = "evidence/android_app_evidence.json#battery_temperature" if (is_real and state_temp == RuntimeState.AVAILABLE.value) else None
                 else:
                     ev_temp = "evidence/battery_dumpsys_evidence.txt#battery_temperature" if (is_real and state_temp == RuntimeState.AVAILABLE.value) else None
@@ -750,7 +775,7 @@ class MemoryTelemetryCollector:
             state_avail = RuntimeState.AVAILABLE.value if avail_mb is not None else RuntimeState.UNAVAILABLE.value
             val_avail = avail_mb if state_avail == RuntimeState.AVAILABLE.value else None
             err_avail = None
-            if "available_memory_mb_app_item" in props or props.get("available_memory_mb_is_app_derived") or ("probe_error_meminfo" in props and "available_memory_mb" in props):
+            if _is_app_derived(props, "available_memory_mb"):
                 ev_avail = "evidence/android_app_evidence.json#available_memory_mb" if (is_real and state_avail == RuntimeState.AVAILABLE.value) else None
             else:
                 ev_avail = "evidence/meminfo_evidence.txt#available_memory_mb" if (is_real and state_avail == RuntimeState.AVAILABLE.value) else None
@@ -1159,9 +1184,20 @@ class ThermalTelemetryCollector:
                 status_api_state = RuntimeState.NOT_TESTED.value
                 status_api_val = None
 
+        # P5-02: a non-AVAILABLE state reported by the app is preserved, never upgraded.
+        err_status_api = None
+        app_status_api = _app_metric_state(props, "thermal_status_api")
+        app_state_value = app_status_api.get("state") if app_status_api else None
+        if app_state_value in {s.value for s in RuntimeState} and app_state_value != RuntimeState.AVAILABLE.value:
+            status_api_state = app_state_value
+            status_api_val = None
+            err_status_api = app_status_api.get("error_message")
+
         ver_status_api = is_real and status_api_state == RuntimeState.AVAILABLE.value
-        if props.get("thermal_status_api_is_app_derived") or "thermal_status_api_app_item" in props:
-            ev_status_api = "evidence/android_app_evidence.json#thermal_status_api" if ver_status_api else None
+        if app_status_api and status_api_state == app_state_value:
+            ev_status_api = f"{APP_EVIDENCE}#thermal_status_api" if is_real else None
+        elif _is_app_derived(props, "thermal_status_api"):
+            ev_status_api = f"{APP_EVIDENCE}#thermal_status_api" if ver_status_api else None
         else:
             ev_status_api = "evidence/thermal_evidence.json#status_api" if ver_status_api else None
 
@@ -1176,6 +1212,7 @@ class ThermalTelemetryCollector:
             verification_method="power_manager_thermal_status_check",
             observed_at=now if ver_status_api else None,
             evidence_ref=ev_status_api,
+            error_message=err_status_api,
         )
 
         # Thermal headroom API (API >= 30)
@@ -1360,7 +1397,21 @@ class CameraCapabilityCollector:
             if hw_level is None and f"camera_{cid}_hardware_level" in props:
                 hw_level = props[f"camera_{cid}_hardware_level"]
 
-            if hw_level is None:
+            app_hw = _app_metric_state(props, f"camera_{cid}_hardware_level")
+            app_cam_probe = _app_metric_state(props, "camera_probe") if cid == "0" else None
+            if hw_level is None and app_hw and app_hw.get("state") in {s.value for s in RuntimeState}:
+                # P5-03: preserve the app's non-AVAILABLE state for this camera metric
+                state_hw = app_hw["state"]
+                val_hw = None
+                err_hw = app_hw.get("error_message")
+                ev_hw = f"{APP_EVIDENCE}#camera_{cid}_hardware_level" if is_real else None
+            elif hw_level is None and app_cam_probe and app_cam_probe.get("state") == RuntimeState.ERROR.value:
+                # P5-03: the app's camera probe failed as a whole (e.g. CameraAccessException)
+                state_hw = RuntimeState.ERROR.value
+                val_hw = None
+                err_hw = app_cam_probe.get("error_message") or "Android app camera probe failed"
+                ev_hw = f"{APP_EVIDENCE}#camera_probe" if is_real else None
+            elif hw_level is None:
                 if probe_err_cam:
                     state_hw = RuntimeState.ERROR.value
                     val_hw = None
@@ -1375,8 +1426,8 @@ class CameraCapabilityCollector:
                 state_hw = RuntimeState.AVAILABLE.value if hw_level is not None else RuntimeState.UNAVAILABLE.value
                 val_hw = hw_level if state_hw == RuntimeState.AVAILABLE.value else None
                 err_hw = None
-                if props.get(f"camera_{cid}_hardware_level_is_app_derived") or f"camera_{cid}_hardware_level_app_item" in props or (cid == "0" and props.get("camera_0_hardware_level_is_app_derived")):
-                    ev_hw = f"evidence/android_app_evidence.json#camera_{cid}_hardware_level" if (is_real and state_hw == RuntimeState.AVAILABLE.value) else None
+                if _is_app_derived(props, f"camera_{cid}_hardware_level"):
+                    ev_hw = f"{APP_EVIDENCE}#camera_{cid}_hardware_level" if (is_real and state_hw == RuntimeState.AVAILABLE.value) else None
                 else:
                     ev_hw = f"evidence/camera_{cid}_evidence.json#hardware_level" if (is_real and state_hw == RuntimeState.AVAILABLE.value) else None
 
