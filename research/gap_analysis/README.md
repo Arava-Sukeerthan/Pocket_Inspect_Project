@@ -35,6 +35,8 @@ The evaluated combinations, analysis populations, derived attributes and candida
 - [`gc03_evidence_closure.md`](gc03_evidence_closure.md) (Step 9.9B): targeted evidence closure for GC-03 only. It records full-text reads of PMC11435656 and ActiveInspect, the P001/P007 access attempts, searches S46–S57 and the GC-03 answers to gate questions Q2, Q8 and Q10. Configuration: `configs/gc03_evidence_closure.yaml`. It does not select, rank or finalise a gap.
 - **Step 9.9C reconciliation and approval gate.** Phase A and 9.9B are reconciled. [`research_gap_approval.md`](research_gap_approval.md) is the GC-03 approval document; its decision reads "DECISION: PENDING EXPLICIT RESEARCHER APPROVAL". `configs/gap_selection.yaml` records `selection_status: researcher_approval_required` and `selected_candidate: null`. `research_gap.md` does not exist.
 
+- **Step 10A approved gap.** The researcher approved GC-03 (2026-10-05). [`research_gap.md`](research_gap.md) is the official source of truth for the approved gap. RQs, objectives, hypotheses, variables and the experimental framework are in [`../research_questions/`](../research_questions/). The Step 9.7–9.9C files above are kept as the pre-approval record. `configs/gap_selection.yaml` records `selection_status: researcher_approved` and `selected_candidate: GC-03`, and `research_gap_approval.md` §14 records the decision (the pending wording is kept as audit context). The validators enforce the approval lifecycle: `research_gap.md` must not exist while approval is pending, and must exist with the approved wording once approved.
+
 The earlier hard-coded prototype combinations (GAP-001 to GAP-006) are retired. They remain only as the fallback used when no configuration file is present.
 
 ---

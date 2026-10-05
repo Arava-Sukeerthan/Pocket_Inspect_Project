@@ -164,9 +164,12 @@ class TestCommittedEvaluation(unittest.TestCase):
             self.assertEqual(sorted(r["criterion"] for r in v.matrix() if r["candidate_id"] == cid), sorted(dims))
         self.assertNotIn("rank", " ".join(v.config.keys()).lower())
 
-    # 4. no final research gap exists
+    # 4. no final research gap exists outside the approval lifecycle: research_gap.md is
+    # allowed only in a consistent researcher_approved state (Step 10A)
     def test_no_final_research_gap_exists(self):
-        self.assertFalse((GAP_DIR / "research_gap.md").exists())
+        sel = yaml.safe_load((ROOT / "configs" / "gap_selection.yaml").read_text(encoding="utf-8"))
+        approved = sel["selection"]["selection_status"] == "researcher_approved"
+        self.assertEqual((GAP_DIR / "research_gap.md").exists(), approved)
         self.assertEqual(_validator().check_forbidden_files(), [])
         doc = (GAP_DIR / "candidate_gap_evaluation.md").read_text(encoding="utf-8")
         last = [ln.strip() for ln in doc.splitlines() if ln.strip()][-1]

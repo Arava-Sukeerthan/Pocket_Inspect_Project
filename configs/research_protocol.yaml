@@ -1,0 +1,96 @@
+# Step 10A: formal research specification for the approved gap GC-03.
+#
+# Declarative identifiers and statuses only. This file contains NO numerical
+# thresholds, effect sizes, device limits or results: every quantity that will
+# later need a number is recorded as `to_be_calibrated` and must be fixed (and
+# justified) during experiment design, before any data are collected.
+#
+# Documents: research/gap_analysis/research_gap.md and
+# research/research_questions/*.md. Traceability:
+# research/research_questions/traceability_matrix.csv.
+
+step: "10A"
+status: "Research specification — no implementation, no experiments, no measurements"
+
+approved_gap:
+  id: GC-03
+  wording: "Within the reviewed literature corpus, there is limited evidence of an integrated resource-aware smartphone visual-inspection system in which device-state-driven runtime adaptation is coupled with confidence-aware downstream verification, particularly for recovering inspection performance under resource-induced model/configuration degradation."
+  approval_status: researcher_approved
+  approved_by: researcher
+  approval_date: "2026-10-05"
+  approval_statement: "Approve GC-03 as the final research gap."
+  approval_record: research/gap_analysis/research_gap_approval.md
+  selection_config: configs/gap_selection.yaml
+  official_document: research/gap_analysis/research_gap.md
+
+primary_rq: "Can confidence-aware downstream verification recover inspection accuracy lost when a resource-constrained smartphone dynamically downgrades its inference configuration under changing device conditions?"
+
+research_questions: [RQ1, RQ2, RQ3, RQ4, RQ5, RQ6]
+objectives: [O1, O2, O3, O4, O5, O6, O7, O8]
+hypotheses: [H1, H2, H3, H4, H5]
+hypothesis_status: "TO BE TESTED"
+contribution_status: "CANDIDATE CONTRIBUTION — TO BE VALIDATED EXPERIMENTALLY"
+
+# Qualitative resource states. Trigger thresholds, hysteresis bands and dwell
+# times are deliberately unset.
+resource_states:
+  R0: {name: nominal, thresholds: to_be_calibrated}
+  R1: {name: moderate resource pressure, thresholds: to_be_calibrated}
+  R2: {name: high resource pressure, thresholds: to_be_calibrated}
+  R3: {name: critical resource pressure, thresholds: to_be_calibrated}
+transition_policy:
+  hysteresis: to_be_calibrated
+  minimum_dwell_time: to_be_calibrated
+  telemetry_sampling_period: to_be_calibrated
+
+# Conceptual configuration ladder. No architecture, resolution or precision is
+# chosen here (Step 10B).
+configuration_ladder:
+  C1: {role: highest-accuracy configuration, model: null}
+  C2: {role: medium configuration, model: null}
+  C3: {role: lightweight configuration, model: null}
+  C4: {role: emergency / lowest-resource configuration, model: null}
+model_selection_step: "10B"
+
+verification_actions:
+  A0: accept prediction
+  A1: recapture same view
+  A2: acquire additional view
+  A3: escalate to stronger model
+  A4: request human review
+verification_thresholds: to_be_calibrated
+primary_verification_action: to_be_preregistered
+
+baselines:
+  B1: {name: Static best model, resource_adaptation: false, confidence_verification: false}
+  B2: {name: Static lightweight model, resource_adaptation: false, confidence_verification: false}
+  B3: {name: Resource adaptation only, resource_adaptation: true, confidence_verification: false}
+  B4: {name: Confidence verification only, resource_adaptation: false, confidence_verification: true}
+  B5: {name: Resource adaptation + confidence verification, resource_adaptation: true, confidence_verification: true}
+# Ablation variant of B5 (not a sixth baseline): same as B5 but with a single
+# fixed, configuration- and state-independent confidence threshold.
+ablation_variants:
+  B5-F: {parent: B5, verification_policy: fixed_global_threshold}
+
+# Planned experiment families (Proposed idea; not run).
+experiments:
+  E1: "Forced-configuration characterisation sweep: every configuration C1-C4 under every induced resource state R0-R3, verification disabled."
+  E2: "Policy-driven episodes: baselines B1-B5 under identical scripted resource-pressure schedules on identical item sequences."
+  E3: "Verification-policy ablation: B5 versus B5-F under the E2 schedules."
+
+statistics:
+  significance_level: to_be_preregistered
+  multiple_comparison_correction: Holm
+  smallest_effect_size_of_interest: to_be_preregistered
+  bootstrap_resamples: to_be_preregistered
+  repeated_runs_per_condition: to_be_preregistered
+
+prohibited_in_step_10A:
+  - implementation
+  - mobile application code
+  - model training
+  - dataset download
+  - experiments
+  - measurements
+  - final model selection
+  - results

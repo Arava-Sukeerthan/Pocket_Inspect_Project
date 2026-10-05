@@ -121,14 +121,21 @@ selection_gate:
     Q9: [satisfied, "Recall at fixed review rate, referral/recapture rates, calibration error, latency and resource use are quantitative."]
     Q10: [partially_satisfied, "Step 9.9B: Moderate. Additional literature could overturn the candidate if a single study demonstrates smartphone-based optical inspection, device-state-driven runtime configuration changes, and confidence-triggered downstream recapture or escalation in one system. P001, AIVD, and Choi 2026 remain particularly important unresolved evidence. Limitations kept: P001, AIVD and Choi 2026 full texts unresolved; database access substituted rather than direct; English-only; one results page per search; remaining Unknown burden; ActiveInspect confidence-gating interpretation remains an operational-definition issue. Not absolute proof."]
 
-# Researcher-controlled selection state. Must remain null until the researcher
-# explicitly approves a candidate (Step 9.9C: approval required, not given).
+# Researcher-controlled selection state (approval lifecycle, enforced by
+# approval_state_errors in src/literature/gap_evaluation.py):
+#   STATE 1 researcher_approval_required: selected_candidate null; research_gap.md must not exist.
+#   STATE 2 researcher_approved: selected_candidate set; research_gap.md must exist with the
+#           approved wording; research_gap_approval.md §14 must record the approval.
+# History: Step 9.9 Phase A to 9.9C were in STATE 1 (approval required, not given;
+# last at commit 72a828b). Step 10A: the researcher approved GC-03 (STATE 2).
 selection:
-  selection_status: researcher_approval_required
-  selected_candidate: null
-  approved_by: null
-  approval_date: null
-  research_gap_file_created: false
+  selection_status: researcher_approved
+  selected_candidate: GC-03
+  approved_by: researcher
+  approval_date: "2026-10-05"
+  approval_statement: "Approve GC-03 as the final research gap."
+  previous_status: researcher_approval_required
+  research_gap_file_created: true
 
 # Candidate research questions (NOT final PocketInspect RQs).
 rq_status: "Candidate research question (not final)"
@@ -283,6 +290,9 @@ guards:
   required_closing_sentence: "Step 9.9 Phase A is complete. Final research-gap selection requires explicit researcher approval and is not automatically performed by this workflow."
   forbidden_files:
     - research/gap_analysis/research_gap.md
+  # research_gap.md is governed by the approval lifecycle rather than forbidden outright.
+  lifecycle_governed_files:
+    - research/gap_analysis/research_gap.md
   forbidden_keys: [score, rank, ranking, weight, winner, priority]
 
 # ---------------------------------------------------------------------------
@@ -310,12 +320,15 @@ evidence_closure:
   GC-01: {status: not_performed}
   GC-02: {status: not_performed}
 
-# Approval-ready material for GC-03. Not a selection. The researcher decision
-# is recorded only in research_gap_approval.md §14 by the researcher.
+# Approval-ready material for GC-03 (Step 9.9C). The researcher decision is
+# recorded in research_gap_approval.md §14. Step 10A: approved.
 approval_ready:
   GC-03:
-    status: approval_ready_candidate
-    selected: false
+    status: researcher_approved
+    previous_status: approval_ready_candidate
+    selected: true
+    approval_date: "2026-10-05"
+    official_document: research/gap_analysis/research_gap.md
     candidate_gap: "Within the reviewed literature corpus, there is limited evidence of an integrated resource-aware smartphone visual-inspection system in which device-state-driven runtime adaptation is coupled with confidence-aware downstream verification, particularly for recovering inspection performance under resource-induced model/configuration degradation."
     evaluated_wording_source: "configs/gap_evaluation.yaml candidates.GC-03 (Step 9.8 narrowed wording; all evidence rows refer to it)"
     primary_rq_id: GC-03-RQ1
@@ -329,4 +342,5 @@ approval_ready:
       B5: "Resource adaptation + confidence verification"
     experiment_status: planning_artifact_only
     dataset_statement: "The reviewed dataset candidates appear technically suitable for visual-defect inspection experiments, but access, licensing, smartphone suitability, and multi-view/recapture suitability require dataset-specific verification."
-    researcher_decision: "DECISION: PENDING EXPLICIT RESEARCHER APPROVAL"
+    researcher_decision: "DECISION: GC-03 APPROVED AS THE FINAL RESEARCH GAP"
+    previous_researcher_decision: "DECISION: PENDING EXPLICIT RESEARCHER APPROVAL"

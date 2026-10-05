@@ -21,7 +21,8 @@ guard-rails:
 * no ranking, selection or novelty language appears;
 * the researcher-approved operational definitions (Decisions A-C) are applied,
   confirmed partial counterexamples stay partial, and locked evidence levels
-  are not upgraded.
+  are not upgraded;
+* ``research_gap.md`` follows the approval lifecycle (``approval_state_errors``).
 """
 import csv
 import hashlib
@@ -136,6 +137,115 @@ def sha256_of(path: Path) -> str:
         for chunk in iter(lambda: f.read(65536), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+# --------------------------------------------------------------------------
+# Research-gap approval lifecycle (Step 10A).
+#
+# STATE 1  selection_status = researcher_approval_required, no candidate:
+#          research_gap.md MUST NOT exist.
+# STATE 2  selection_status = researcher_approved, candidate approved:
+#          research_gap.md MUST exist and carry the approved wording, and
+#          research_gap_approval.md §14 MUST record the explicit approval.
+# Any other combination is an inconsistent state and is rejected.
+# --------------------------------------------------------------------------
+RESEARCH_GAP_FILE = "research/gap_analysis/research_gap.md"
+APPROVAL_DOCUMENT = "research/gap_analysis/research_gap_approval.md"
+SELECTION_CONFIG = "configs/gap_selection.yaml"
+STATE_PENDING = "researcher_approval_required"
+STATE_APPROVED = "researcher_approved"
+DECISION_HEADING = "## 14. Researcher Decision"
+
+
+def approved_decision(candidate_id: str) -> str:
+    """The exact §14 decision line that records approval of ``candidate_id``."""
+    return f"DECISION: {candidate_id} APPROVED AS THE FINAL RESEARCH GAP"
+
+
+def _decision_lines(approval_text: str) -> List[str]:
+    if DECISION_HEADING not in approval_text:
+        return []
+    section = approval_text.split(DECISION_HEADING, 1)[1].split("\n## ", 1)[0]
+    return [ln.strip() for ln in section.splitlines() if ln.strip().startswith("DECISION:")]
+
+
+def _gap_statement(gap_text: str) -> Optional[str]:
+    """The blockquoted statement of §1 of research_gap.md (one line, '> ...')."""
+    if "## 1. Research Gap" not in gap_text:
+        return None
+    section = gap_text.split("## 1. Research Gap", 1)[1].split("\n## ", 1)[0]
+    quotes = [ln[2:].strip() for ln in section.splitlines() if ln.startswith("> ")]
+    return quotes[0] if len(quotes) == 1 else None
+
+
+def approval_state_errors(project_root: Path, selection_config: dict) -> List[str]:
+    """Return the errors of the research-gap approval lifecycle (empty = consistent)."""
+    root = Path(project_root)
+    sel = selection_config.get("selection") or {}
+    ready = selection_config.get("approval_ready") or {}
+    status = sel.get("selection_status")
+    gap_path, doc_path = root / RESEARCH_GAP_FILE, root / APPROVAL_DOCUMENT
+    errors: List[str] = []
+    if status == STATE_PENDING:
+        if sel.get("selected_candidate") is not None or sel.get("approved_by") is not None:
+            errors.append("pending state: a candidate is selected or approved")
+        if sel.get("research_gap_file_created"):
+            errors.append("pending state: research_gap_file_created must be false")
+        if gap_path.exists():
+            errors.append(f"pending state: {RESEARCH_GAP_FILE} exists")
+        if doc_path.exists():
+            for line in _decision_lines(doc_path.read_text(encoding="utf-8")):
+                if " APPROVED AS THE FINAL RESEARCH GAP" in line:
+                    errors.append("pending state: approval document records an approval")
+        return errors
+    if status != STATE_APPROVED:
+        return [f"unknown selection_status {status!r}"]
+
+    cid = sel.get("selected_candidate")
+    entry = ready.get(cid) if cid else None
+    if cid is None:
+        errors.append("approved state: selected_candidate is null")
+    elif cid not in selection_config.get("candidate_ids", []):
+        errors.append(f"approved state: unknown candidate {cid!r}")
+    elif not isinstance(entry, dict):
+        errors.append(f"approved state: {cid} is not an approval-ready candidate")
+    if not sel.get("approved_by") or not sel.get("approval_date"):
+        errors.append("approved state: approved_by and approval_date are required")
+    if not sel.get("research_gap_file_created"):
+        errors.append("approved state: research_gap_file_created must be true")
+    if isinstance(entry, dict):
+        if entry.get("status") != STATE_APPROVED or entry.get("selected") is not True:
+            errors.append(f"approved state: approval_ready.{cid} not marked approved/selected")
+        if entry.get("researcher_decision") != approved_decision(cid):
+            errors.append(f"approved state: approval_ready.{cid}.researcher_decision inconsistent")
+        if sel.get("approval_date") and entry.get("approval_date") not in (None, sel.get("approval_date")):
+            errors.append(f"approved state: approval_ready.{cid}.approval_date inconsistent")
+    if not gap_path.exists():
+        errors.append(f"approved state: {RESEARCH_GAP_FILE} missing")
+    elif isinstance(entry, dict):
+        if _gap_statement(gap_path.read_text(encoding="utf-8")) != entry.get("candidate_gap"):
+            errors.append(f"approved state: {RESEARCH_GAP_FILE} wording differs from the approved wording")
+    if not doc_path.exists():
+        errors.append(f"approved state: {APPROVAL_DOCUMENT} missing")
+    elif cid:
+        doc = doc_path.read_text(encoding="utf-8")
+        if _decision_lines(doc) != [approved_decision(cid)]:
+            errors.append("approved state: approval document §14 does not record the explicit approval")
+        statement = sel.get("approval_statement")
+        if not statement or statement not in doc:
+            errors.append("approved state: approval statement not recorded in the approval document")
+    return errors
+
+
+def lifecycle_errors(project_root: Path) -> List[str]:
+    """Lifecycle errors for a project root. Without a selection config the
+    project is treated as STATE 1, so research_gap.md must not exist."""
+    root = Path(project_root)
+    cfg_path = root / SELECTION_CONFIG
+    if not cfg_path.exists():
+        return [f"{RESEARCH_GAP_FILE} exists without an approval lifecycle"] if (root / RESEARCH_GAP_FILE).exists() else []
+    with open(cfg_path, "r", encoding="utf-8") as f:
+        return approval_state_errors(root, yaml.safe_load(f) or {})
 
 
 def _read_csv(path: Path) -> List[Dict[str, str]]:
@@ -430,7 +540,15 @@ class GapEvaluationValidator:
         return errors
 
     def check_forbidden_files(self) -> List[str]:
-        return [f"{p} exists" for p in self.guards["forbidden_files"] if (self.root / p).exists()]
+        """Forbidden files must not exist. Files listed under ``lifecycle_governed_files``
+        (research_gap.md) are instead governed by the approval lifecycle: allowed only in
+        a consistent approved state, rejected in every other state."""
+        governed = set(self.guards.get("lifecycle_governed_files", []))
+        errors = [f"{p} exists" for p in self.guards["forbidden_files"]
+                  if p not in governed and (self.root / p).exists()]
+        if governed:
+            errors += lifecycle_errors(self.root)
+        return errors
 
     # ------------------------------------------------------------------- all
     def validate(self) -> List[str]:

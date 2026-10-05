@@ -22,6 +22,7 @@ Each file has one purpose. Do not mix them.
 | `research/gap_analysis/gap_matrix.csv` | Evidence-based gap comparison |
 | `research/gap_analysis/gap_candidates.md` | Candidate gaps requiring researcher review |
 | `research/gap_analysis/research_gap.md` | Final approved research gap, created **only** after researcher approval |
+| `research/research_questions/` | Formal RQs, objectives, hypotheses, variables, experimental framework and traceability matrix for the approved gap (Step 10A) |
 | `docs/agent_sync/CHANGELOG.md` | Agent-to-agent synchronization and change history (this file) |
 
 ## Entry template
@@ -1702,3 +1703,132 @@ This is not implementation, not a literature survey and not a selection. GC-03 i
 - Commits reconciled: `d8894d9` (Step 9.9 Phase A) and `f9187fd` (Step 9.9B).
 - Commit: see `git log -- research/gap_analysis/research_gap_approval.md`.
 - Push status: pushed to the branch; not merged; `main` not modified.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10A: formal research specification for GC-03. This covers research questions, objectives, hypotheses, variables, resource states, the configuration ladder, verification actions, baselines, falsification criteria and the contribution boundary. **No implementation.**
+
+### Changes
+- **`research/gap_analysis/research_gap.md` (new).** The official source of truth for the approved gap. It has the 9 required sections: gap, literature boundary, primary RQ, scope, motivation, candidate contribution, limitations, approval status, and traceability to Steps 9.7–9.9C. The wording is corpus-bounded.
+- **`research/research_questions/` (new directory):**
+  - `research_questions.md`: RQ1 (primary, verbatim) and RQ2–RQ6, with a review of each candidate question. Four were revised:
+    - RQ2 now also covers resource consumption;
+    - RQ3 is restated as a recovery proportion, removing its overlap with RQ1;
+    - RQ4 separates between-configuration effects from within-configuration, across-state effects;
+    - RQ5 and RQ6 state their units and reference baselines.
+  - `objectives.md`: O1–O8, mapped both ways to the RQs.
+  - `hypotheses.md`: H1–H5, each with null, alternative, IVs, DVs, direction, falsification, statistical comparison and practical-significance criterion. All are "STATUS: TO BE TESTED". It also adds secondary comparison H2.b, B5 vs the fixed-threshold ablation B5-F.
+  - `variables_and_factors.md`: independent, dependent and control variables, mediators and moderators, with measurement variables distinguished from decision variables.
+  - `experimental_framework.md`: R0–R3, C1–C4, A0–A4, B1–B5 (+ the B5-F ablation), planned experiment families E1–E3, falsification criteria F1–F6, and the contribution boundary.
+  - `traceability_matrix.csv`: 30 rows (gap, RQs, objectives, hypotheses, falsification criteria, planned experiments, candidate contribution) with the 12 required columns.
+- **`configs/research_protocol.yaml` (new).** Declarative IDs and statuses only. Every threshold, significance level and effect size is `to_be_calibrated` or `to_be_preregistered`.
+- **`tests/test_research_protocol.py` (new).** 15 tests covering the 17 required checks.
+- **Pointers added:**
+  - `research/gap_analysis/README.md`;
+  - `docs/research_questions/README.md` (the old example RQs are marked superseded);
+  - a sources-of-truth row in this file's header.
+
+### Research decisions
+- **GC-03 approval recorded.** The researcher approved GC-03 as the final research gap in the Step 10A task instruction (2026-10-05). Before this step, the repository recorded the decision as pending (`research_gap_approval.md` §14, commit `72a828b`). The approval is recorded in `research_gap.md` §8 and in `configs/research_protocol.yaml`.
+- **The automated gate is not satisfied.** `can_select()` remains False, because several GC-03 gate questions are `partially_satisfied`. The approval is a researcher judgement that keeps the limitations; it does not turn them into satisfied criteria.
+- **Recovery is defined relative to the measured loss.** ρ = [M(B5) − M(B3)] / [M(B1) − M(B3)], and H2 is untestable if H1 is not supported. Human-review referrals (A4) are reported with coverage and are never counted silently as correct.
+- **Distinct from a fixed threshold.** The mechanism uses configuration-specific thresholds and state-dependent action sets. The B5-F ablation (one fixed global threshold) tests this difference (H2.b) without adding a sixth baseline.
+- **Statistical vs practical significance.** Holm-corrected tests decide statistical significance. Practical significance means the confidence interval lies beyond a pre-registered SESOI, and equivalence (TOST) is used for "no meaningful difference". No value is fixed.
+- **Baseline framework B1–B5 preserved.**
+
+### Verification
+- `python -m pytest -q`: **9 failed, 178 passed** (172 pre-existing + 15 new; all 15 new pass).
+  - All 9 failures are pre-existing Step 9.7–9.9C guard tests that assert `research_gap.md` does not exist:
+    - `test_gap_analysis` (1), `test_gap_evaluation` (2) and `test_gap_selection` (2);
+    - `test_gap_selection_reconciliation` (2) and `test_gc03_evidence_closure` (2).
+  - With `research_gap.md` temporarily removed, all 172 pre-existing tests pass.
+- `python scripts/manage_literature.py validate`: 54 records, VALID.
+- `papers.csv` SHA-256 is `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521`, unchanged.
+- No implementation, mobile code, model, dataset download, experiment, measurement or result. `src/` modules, `mobile/`, `experiments/`, `models/`, `backend/` and `research/{datasets,results,figures,tables,manuscript_data,experiments}` are unchanged.
+
+### Uncertain items
+- **The guard-rail conflict needs a researcher decision.** Steps 9.8, 9.9 Phase A, 9.9B and 9.9C forbid `research_gap.md` (validators in `src/literature/gap_evaluation.py` and `gap_selection.py`; configs `gap_evaluation.yaml` and `gap_selection.yaml`; the tests listed above).
+  - An attempt to make those validators accept the file when approval is recorded was blocked by the agent's permission policy, which classed it as weakening tests. Those files, the tests, `research_gap_approval.md` §14 and `configs/gap_selection.yaml` `selection` were therefore left unchanged.
+  - The researcher must decide how the pre-approval guard-rails should treat the approved state, for example by allowing `research_gap.md` only when approval is recorded in `research_gap_approval.md` §14 and `gap_selection.yaml`.
+- The approval was taken from the task instruction, not from a prior repository record.
+
+### Remaining work
+- Resolve the guard-rail conflict above, then update `research_gap_approval.md` §14 and `configs/gap_selection.yaml` `selection` to the approved state.
+- Step 10B (model/configuration candidates) has not been started.
+
+### Git
+- Branch: `claude/step-10a-research-protocol` (from `origin/main` `72a828b`, after PR #13 was merged).
+- Commit: see `git log -- research/gap_analysis/research_gap.md`.
+- Push status: pushed to the branch; not merged; `main` not modified.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10A repository-state reconciliation. The GC-03 approval state is made internally consistent, and the pre-approval guard-rails are replaced by an approval-lifecycle state machine. This resolves the guard-rail conflict listed under "Uncertain items" in the previous 2026-10-05 Claude Code entry (Step 10A). **No Step 10B work and no implementation.**
+
+### Changes
+- **`configs/gap_selection.yaml`:**
+  - `selection`: `selection_status: researcher_approved`; `selected_candidate: GC-03`; `approved_by: researcher`; `approval_date: 2026-10-05`; `approval_statement: "Approve GC-03 as the final research gap."`; `research_gap_file_created: true`. The previous status is kept as `previous_status`.
+  - `approval_ready.GC-03`: `status: researcher_approved` (previous status kept); `selected: true`; `researcher_decision` set to the approved decision (previous decision kept).
+  - `guards.lifecycle_governed_files`: `research_gap.md`.
+- **`configs/gap_evaluation.yaml`:** `guards.lifecycle_governed_files`: `research_gap.md`.
+- **`configs/research_protocol.yaml`:** approval metadata aligned with `gap_selection.yaml`.
+- **`research/gap_analysis/research_gap_approval.md`:**
+  - §14 now reads "DECISION: GC-03 APPROVED AS THE FINAL RESEARCH GAP", followed by an approval table.
+  - §1 status now reads approved.
+  - A Step 10A note was added at the top.
+  - The pending wording is kept as an audit trail (commit `72a828b`). §2–§13 are unchanged.
+- **`research/gap_analysis/research_gap.md` §8:** approval source and state records. The gap wording is unchanged.
+- **`src/literature/gap_evaluation.py`:** new `approval_state_errors()` and `lifecycle_errors()`, enforcing two valid states:
+  - **STATE 1** (`researcher_approval_required`, no candidate): `research_gap.md` must not exist.
+  - **STATE 2** (`researcher_approved`, approval-ready candidate): `research_gap.md` must exist and its §1 statement must equal the approved wording; §14 must hold exactly one decision line, the approval; the approval statement must be recorded; and the approver, date, file flag and `approval_ready` entry must be consistent.
+  - Every other combination is rejected, including an unknown status.
+  - `check_forbidden_files` applies the state machine to lifecycle-governed files. All other forbidden files are still forbidden outright.
+- **`src/literature/gap_selection.py`:** `check_selection_state` now uses the state machine. `can_select()` is unchanged and stays False, because the GC-03 gate items remain partially satisfied.
+- **`research/research_questions/hypotheses.md`:**
+  - Recovery = (B5 − B3) / (B1 − B3) is retained.
+  - The edge case is documented: a zero or practically negligible denominator makes the ratio undefined or uninformative, and it is not evidence of recovery. "Negligible" is tied to the pre-registered SESOI; no number is set.
+- **`research/research_questions/variables_and_factors.md`:**
+  - Three resource-variable layers are now distinguished: measured telemetry; experimental resource condition R0–R3 (the manipulated factor); and adaptation decision C1–C4.
+  - Telemetry is no longer listed as independently manipulated.
+- **`research/research_questions/traceability_matrix.csv`:** independent-variable cells changed to match. Telemetry is listed as a manipulation check, not as independent factors.
+- **`research/gap_analysis/README.md`:** Step 10A bullet updated.
+- **Tests.** None deleted or skipped.
+  - State assertions in `test_gap_analysis`, `test_gap_evaluation`, `test_gap_selection`, `test_gap_selection_reconciliation` and `test_gc03_evidence_closure` now follow the lifecycle.
+  - New `TestApprovalLifecycle` (9 tests) checks that the consistent approved and pending states are accepted, and rejects:
+    - approved status with a null candidate;
+    - approved status with `research_gap.md` missing;
+    - approved status with the approval document still pending;
+    - pending status with `research_gap.md` present;
+    - a candidate other than GC-03;
+    - changed gap wording;
+    - 8 inconsistent-metadata variants.
+  - `test_research_protocol.py`: 3 new tests (recovery edge case, variable layers, B5-F as ablation), plus cross-checks of the approval state.
+
+### Research decisions
+- The researcher's explicit approval ("Approve GC-03 as the final research gap.") is recorded as the approval event.
+- GC-01 and GC-02 remain unapproved candidate gaps. No ranking was introduced.
+- The scientific content of Step 10A is unchanged, apart from the two required clarifications (recovery edge case and variable layers).
+
+### Verification
+- `python -m pytest -q`: 9 failed, 178 passed before the correction; **199 passed, 0 failed** after it.
+- `GapSelectionValidator.validate()`, `GapEvaluationValidator.validate()` and `lifecycle_errors()` all return no errors.
+- `python scripts/manage_literature.py validate`: VALID.
+- `papers.csv` SHA-256 `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521`, unchanged.
+- No Step 10B work, implementation, dataset download, experiment or measurement.
+
+### Uncertain items
+- Step 9.x historical artefacts (`final_gap_selection.md`, `final_gap_selection_matrix.csv`, `configs/gc03_evidence_closure.yaml`) still describe GC-03 as "not selected". They are kept unchanged as the pre-approval record and are superseded by `research_gap.md` §8.
+
+### Remaining work
+- Researcher review of PR #14. Step 10B has not been started.
+
+### Git
+- Branch: `claude/step-10a-research-protocol` (second Step 10A commit, after `6b48469`).
+- Commit: see `git log -- src/literature/gap_evaluation.py`.
+- Push status: pushed; PR #14 updated; not merged.

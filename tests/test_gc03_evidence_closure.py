@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from src.literature.gap_evaluation import GapEvaluationValidator
+from src.literature.gap_evaluation import GapEvaluationValidator, lifecycle_errors
 
 ROOT = Path(__file__).resolve().parent.parent
 PAPERS = ROOT / "research" / "literature" / "papers.csv"
@@ -148,10 +148,12 @@ class TestGC03EvidenceClosure(unittest.TestCase):
             section = self.doc.split(heading, 1)[1].split("\n## ", 1)[0]
             self.assertIn(f"**Result: `{answers[q]['result']}`", section, q)
 
-    # 10, 13. no final research gap; research_gap.md does not exist
+    # 10, 13. Step 9.9B itself selected no gap and created no research_gap.md (its config
+    # is the historical record); the file now exists only through the Step 10A approval
+    # lifecycle, which must be consistent.
     def test_no_research_gap_file(self):
-        self.assertFalse((GAP_DIR / "research_gap.md").exists())
         self.assertFalse(self.cfg["selection"]["research_gap_file_created"])
+        self.assertEqual(lifecycle_errors(ROOT), [])
         self.assertTrue(self.doc.rstrip().endswith(CLOSING))
 
     # 11. no ranking; 12. no candidate selection
