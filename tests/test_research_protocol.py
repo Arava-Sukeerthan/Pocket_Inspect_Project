@@ -345,7 +345,9 @@ class TestResearchProtocol(unittest.TestCase):
         step_10c_docs = {"experimental_protocol.md", "resource_states.md", "model_selection_protocol.md",
                          "confidence_verification_protocol.md", "measurement_protocol.md",
                          "generalization_framework.md", "experimental_matrix.csv", "log_schema.json",
-        "pre_data_collection_decision_register.md", "decision_traceability.csv"}
+        "pre_data_collection_decision_register.md", "decision_traceability.csv",
+        "device_characterization_protocol.md", "device_capability_matrix.md",
+        "device_characterization_schema.json"}
         self.assertLessEqual({p.name for p in (ROOT / "research" / "experiments").iterdir()} - {"README.md"},
                              step_10c_docs)
         # research/datasets holds only the README and the Step 10B design documents (no data)
