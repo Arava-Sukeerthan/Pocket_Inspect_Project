@@ -4,6 +4,10 @@
 
 **Boundary.** None of the papers found here was added to [`research/literature/papers.csv`](../literature/papers.csv). That file is frozen at 54 records, SHA-256 `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521`. Every paper assessed is recorded in [`counterexample_candidates.csv`](counterexample_candidates.csv).
 
+## Note on the Step 9.8 methodology correction
+
+These searches were designed and run against the **Step 9.7 wording** of GC-01, GC-02 and GC-03. The researcher-approved correction then narrowed the wording, confirmed four partial counterexamples, and formalised Decisions A–C (see [`candidate_gap_evaluation.md`](candidate_gap_evaluation.md) §3.4). No new search was run for the correction, and none of the entries below has been altered. Classifications given in the entries refer to the coding at search time, with one exception: `resource_awareness` for 2608.14727, TinyGLASS, 2309.00022 and 2505.07119 was later recoded under Decision A in `counterexample_candidates.csv`.
+
 ## Conventions
 
 - **Date.** All searches ran on 2026-10-05.
@@ -467,5 +471,7 @@
 | GC-01 | S01–S08, S17 | None | arXiv 2608.14727 (edge cascade); PMC11435656 (edge confidence-triggered offloading) | Electronics 15(17):3915 |
 | GC-02 | S09–S17 | None | arXiv 2603.16451 TinyGLASS (energy reported; no thermal; not a smartphone) | Electronics 15(17):3915; FOMO/Edge Impulse paper; P007 (from Step 9.7) |
 | GC-03 | S18–S27 | None | ActiveInspect (Sensors 26(15):4932); PMC11435656; arXiv 2608.14727 | arXiv 2608.21967; P001 |
+
+The four partial counterexamples above were confirmed by the researcher in the Step 9.8 methodology correction and remain partial.
 
 "None" for full counterexamples describes these searches only. It is not a claim about the literature as a whole.

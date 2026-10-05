@@ -19,6 +19,10 @@ from src.literature.gap_evaluation import (
     EVALUATION_SECTIONS,
     SEARCH_LOG_REQUIRED_FIELDS,
     GapEvaluationValidator,
+    code_adaptive_inference,
+    code_confidence_gating,
+    code_platform,
+    code_resource_awareness,
     sha256_of,
 )
 
@@ -29,6 +33,18 @@ LITERATURE_DIR = ROOT / "research" / "literature"
 GAP_DIR = ROOT / "research" / "gap_analysis"
 FROZEN_SHA = "c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521"
 CANDIDATES = ["GC-01", "GC-02", "GC-03"]
+GC01_WORDING = ("Limited evidence of resource-driven runtime adaptation for visual inspection specifically on "
+                "resource-constrained smartphones within the reviewed corpus.")
+GC02_WORDING = ("Limited direct joint evaluation of energy and thermal behavior for resource-adaptive visual "
+                "inspection on resource-constrained smartphones within the reviewed corpus.")
+GC03_WORDING = ("Limited evidence of an integrated resource-aware smartphone visual-inspection system that combines "
+                "runtime adaptation with confidence-aware downstream verification within the reviewed corpus.")
+CONFIRMED_PARTIALS = {
+    "arXiv:2603.16451": ["GC-02"],
+    "PMC11435656": ["GC-01", "GC-03"],
+    "doi:10.3390/s26154932": ["GC-03"],
+    "arXiv:2608.14727": ["GC-01", "GC-03"],
+}
 
 
 def _validator():
@@ -108,13 +124,31 @@ class TestCommittedEvaluation(unittest.TestCase):
         for gid in ("GC-04", "GC-05", "GC-06", "GC-07", "GC-08", "GC-09"):
             self.assertNotIn(gid, doc)
 
-    def test_candidate_wording_matches_step_9_7(self):
+    # Narrowed wording (Step 9.8 methodology correction)
+    def test_gc01_exact_narrowed_wording(self):
+        self.assertEqual(_validator().config["candidates"]["GC-01"], GC01_WORDING)
+
+    def test_gc02_exact_narrowed_wording(self):
+        self.assertEqual(_validator().config["candidates"]["GC-02"], GC02_WORDING)
+
+    def test_gc03_exact_narrowed_wording(self):
+        self.assertEqual(_validator().config["candidates"]["GC-03"], GC03_WORDING)
+
+    def test_narrowed_wording_used_in_outputs(self):
+        v = _validator()
+        for row in v.counterexamples():
+            self.assertEqual(row["candidate_gap"], v.config["candidates"][row["candidate_id"]])
+        doc = v.path("evaluation").read_text(encoding="utf-8")
+        for wording in (GC01_WORDING, GC02_WORDING, GC03_WORDING):
+            self.assertIn(f"**Candidate.** {wording}", doc)
+
+    def test_step_9_7_wording_preserved_for_traceability(self):
         gap_config = yaml.safe_load((ROOT / "configs" / "gap_analysis.yaml").read_text(encoding="utf-8"))
         step97 = {c["id"]: c["title"] for c in gap_config["candidates"] if c["id"] in CANDIDATES}
-        eval_candidates = _validator().config["candidates"]
+        recorded = _validator().config["step_9_7_wording"]
+        normalise = lambda text: text.replace("behavior", "behaviour")
         for cid in CANDIDATES:
-            normalise = lambda s: s.replace("behavior", "behaviour")
-            self.assertEqual(normalise(eval_candidates[cid]), normalise(step97[cid]))
+            self.assertEqual(normalise(recorded[cid]), normalise(step97[cid]))
 
     # 3. no candidate is ranked
     def test_no_candidate_is_ranked(self):
@@ -201,11 +235,16 @@ class TestCommittedEvaluation(unittest.TestCase):
             "We recommend GC-02 as the strongest candidate.",
             "The final research gap is GC-01.",
             "This has never been studied.",
+            "GC-01 is the preferred candidate.",
+            "This is the recommended gap.",
+            "GC-03 is the final gap.",
+            "PocketInspect would be the first system to do this.",
         ):
             self.assertTrue(v.forbidden_language(sentence), sentence)
         for sentence in (
             "No candidate is ranked.",
             "No final research gap is selected.",
+            "No final gap is created.",
             "No complete match was found in the analyzed core corpus.",
         ):
             self.assertEqual(v.forbidden_language(sentence), [], sentence)
@@ -349,6 +388,118 @@ class TestValidatorRejectsViolations(unittest.TestCase):
             v = sb.validator()
             self.assertIn(title, v.externals_absent_from_corpus())
             self.assertTrue(v.check_frozen_corpus())
+
+
+def _row(pid, cid):
+    return next(r for r in _validator().counterexamples()
+                if r["paper_id_or_external_id"] == pid and r["candidate_id"] == cid)
+
+
+class TestOperationalDefinitions(unittest.TestCase):
+    """Decisions A-C of the Step 9.8 controlled methodology correction."""
+
+    # 1. content-driven cascade -> adaptive_inference Yes
+    def test_content_driven_cascade_is_adaptive_inference(self):
+        self.assertEqual(code_adaptive_inference(True), "Yes")
+        for cid in ("GC-01", "GC-03"):
+            self.assertEqual(_row("arXiv:2608.14727", cid)["adaptive_inference"], "Yes")
+
+    # 2. content-driven cascade alone -> resource_awareness not automatically Yes
+    def test_content_driven_cascade_is_not_automatically_resource_aware(self):
+        self.assertEqual(code_resource_awareness(False), "No")
+        self.assertEqual(code_resource_awareness(None), "Unknown")
+        self.assertEqual(code_resource_awareness(True), "Yes")
+        for cid in ("GC-01", "GC-02", "GC-03"):
+            self.assertNotEqual(_row("arXiv:2608.14727", cid)["resource_awareness"], "Yes")
+        # confidence-driven adaptation with resource role not established stays Unknown
+        for cid in ("GC-01", "GC-03"):
+            row = _row("PMC11435656", cid)
+            self.assertEqual(row["adaptive_inference"], "Yes")
+            self.assertEqual(row["resource_awareness"], "Unknown")
+        defs = _validator().config["operational_definitions"]["A_content_driven_cascades"]
+        self.assertIn("only when device/resource state", defs["resource_awareness"])
+
+    # 3. learned view selection alone -> confidence_gating not automatically Yes
+    def test_learned_view_selection_alone_is_not_confidence_gating(self):
+        self.assertEqual(code_confidence_gating(True, False), "No")
+        self.assertEqual(code_confidence_gating(True, None), "Unknown")
+        self.assertEqual(code_confidence_gating(False, None), "No")
+        self.assertNotEqual(_row("doi:10.3390/s26154932", "GC-03")["confidence_gating"], "Yes")
+        self.assertEqual(_row("doi:10.3390/s26154932", "GC-03")["confidence_gating"], "Unknown")
+
+    # 4. confidence-triggered view selection -> confidence_gating Yes
+    def test_confidence_triggered_view_selection_is_confidence_gating(self):
+        self.assertEqual(code_confidence_gating(True, True), "Yes")
+        self.assertEqual(_row("PMC11435656", "GC-03")["confidence_gating"], "Yes")
+
+    # 5. in-sensor processing -> edge Yes
+    def test_in_sensor_processing_is_edge(self):
+        self.assertEqual(code_platform("in_sensor")["edge_device"], "Yes")
+        self.assertIn("edge_device Yes", _row("arXiv:2603.16451", "GC-02")["notes"])
+
+    # 6. in-sensor processing -> smartphone No
+    def test_in_sensor_processing_is_not_smartphone(self):
+        self.assertEqual(code_platform("in_sensor")["smartphone"], "No")
+        self.assertEqual(code_platform("smartphone")["smartphone"], "Yes")
+        self.assertEqual(code_platform("unknown")["smartphone"], "Unknown")
+        self.assertEqual(_row("arXiv:2603.16451", "GC-02")["smartphone"], "No")
+        with self.assertRaises(ValueError):
+            code_platform("phone_as_product")
+
+    def test_decisions_documented_in_config_and_evaluation(self):
+        v = _validator()
+        self.assertEqual(sorted(v.config["operational_definitions"]),
+                         ["A_content_driven_cascades", "B_learned_view_selection", "C_in_sensor_processors"])
+        doc = v.path("evaluation").read_text(encoding="utf-8")
+        for heading in ("Decision A: content-driven cascades", "Decision B: learned view-selection policies",
+                        "Decision C: in-sensor processors"):
+            self.assertIn(heading, doc)
+
+
+class TestConfirmedPartialCounterexamples(unittest.TestCase):
+
+    # 7. all four counterexamples remain partial
+    def test_four_confirmed_counterexamples_remain_partial(self):
+        v = _validator()
+        self.assertEqual(sorted(v.config["confirmed_partial_counterexamples"]), sorted(CONFIRMED_PARTIALS))
+        for pid, cids in CONFIRMED_PARTIALS.items():
+            for cid in cids:
+                self.assertEqual(_row(pid, cid)["counterexample_strength"], "partial", f"{pid} {cid}")
+        self.assertFalse([r for r in v.counterexamples() if r["counterexample_strength"] == "full"])
+        self.assertEqual(v.check_corrections(), [])
+
+    def test_evidence_levels_not_upgraded(self):
+        v = _validator()
+        for pid, level in v.config["locked_evidence_levels"].items():
+            rows = [r for r in v.counterexamples() if r["paper_id_or_external_id"] == pid]
+            self.assertTrue(rows, pid)
+            for r in rows:
+                self.assertEqual(r["evidence_level"], level, pid)
+
+    def test_tinyglass_established_fields(self):
+        row = _row("arXiv:2603.16451", "GC-02")
+        self.assertEqual((row["visual_inspection"], row["energy_evaluation"], row["thermal_evaluation"],
+                          row["smartphone"]), ("Yes", "Yes", "No", "No"))
+
+    def test_rejects_upgrade_to_full(self):
+        with _Sandbox() as sb:
+            def mutate(fields, rows):
+                for r in rows:
+                    if r["paper_id_or_external_id"] == "arXiv:2603.16451":
+                        r["counterexample_strength"] = "full"
+                return fields, rows
+            sb.rewrite_csv("research/gap_analysis/counterexample_candidates.csv", mutate)
+            self.assertTrue(any("must stay partial" in e for e in sb.validator().check_corrections()))
+
+    def test_rejects_evidence_level_upgrade(self):
+        with _Sandbox() as sb:
+            def mutate(fields, rows):
+                for r in rows:
+                    if r["paper_id_or_external_id"] == "Electronics 15(17):3915":
+                        r["evidence_level"] = "verified_full_text"
+                return fields, rows
+            sb.rewrite_csv("research/gap_analysis/counterexample_candidates.csv", mutate)
+            self.assertTrue(any("locked" in e for e in sb.validator().check_corrections()))
 
 
 if __name__ == "__main__":

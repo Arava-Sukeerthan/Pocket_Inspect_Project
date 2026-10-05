@@ -30,6 +30,7 @@ The evaluated combinations, analysis populations, derived attributes and candida
   - [`targeted_search_log.md`](targeted_search_log.md): the targeted disproof searches, with counts and limitations.
   - [`candidate_gap_matrix.csv`](candidate_gap_matrix.csv): qualitative candidate × criterion assessments (14 criteria; no scores).
   - [`candidate_gap_evaluation.md`](candidate_gap_evaluation.md): the written evaluation. It does not rank or select a candidate.
+  - Step 9.8 methodology correction (researcher-approved): narrowed GC-01/GC-02/GC-03 wording, operational Decisions A–C (content-driven cascades; learned view selection; in-sensor processors) and four confirmed partial counterexamples, all recorded in `configs/gap_evaluation.yaml` and §3.4 of the evaluation. The Step 9.7 files keep the original wording as the historical record.
 
 The earlier hard-coded prototype combinations (GAP-001 to GAP-006) are retired. They remain only as the fallback used when no configuration file is present.
 

@@ -18,7 +18,10 @@ guard-rails:
 * ``Unknown`` is never silently converted to ``No``;
 * every claim carries an evidence level;
 * every search records its limitations;
-* no ranking, selection or novelty language appears.
+* no ranking, selection or novelty language appears;
+* the researcher-approved operational definitions (Decisions A-C) are applied,
+  confirmed partial counterexamples stay partial, and locked evidence levels
+  are not upgraded.
 """
 import csv
 import hashlib
@@ -68,6 +71,62 @@ EVALUATION_SECTIONS = (
 # Characteristic columns of the counterexample file mapped to their corpus source.
 # ``visual_inspection`` comes from the analysis-only scope classification, not papers.csv.
 VISUAL_SCOPE_FILE = "research/gap_analysis/visual_inspection_scope.csv"
+
+YES, NO, UNKNOWN = "Yes", "No", "Unknown"
+
+
+def _tri(value: Optional[bool]) -> str:
+    """Map True/False/None (not established) to Yes/No/Unknown."""
+    if value is None:
+        return UNKNOWN
+    return YES if value else NO
+
+
+# ---------------------------------------------------------------------------
+# Operational definitions (configs/gap_evaluation.yaml: operational_definitions)
+# ---------------------------------------------------------------------------
+def code_adaptive_inference(runtime_path_changes: Optional[bool]) -> str:
+    """Decision A: a runtime change of the executed path, model, cascade stage,
+    depth, width or inference configuration (including content-driven cascades)
+    is adaptive inference."""
+    return _tri(runtime_path_changes)
+
+
+def code_resource_awareness(resource_state_drives_adaptation: Optional[bool]) -> str:
+    """Decision A: resource awareness requires device/resource state to drive the
+    adaptation. Content-driven adaptation alone passes ``False`` (No) when the
+    trigger is established to be content, or ``None`` (Unknown) when the role of
+    resource state is not established."""
+    return _tri(resource_state_drives_adaptation)
+
+
+def code_confidence_gating(triggers_downstream_action: bool,
+                           quality_signal_drives_action: Optional[bool]) -> str:
+    """Decision B: a downstream action (additional view, re-inference, referral,
+    recapture, fallback) counts as confidence gating only when confidence,
+    uncertainty, prediction quality or an equivalent inspection-quality signal
+    explicitly triggers it. A learned view-selection policy alone is not gating."""
+    if not triggers_downstream_action:
+        return NO
+    return _tri(quality_signal_drives_action)
+
+
+PLATFORMS = ("smartphone", "in_sensor", "embedded_board", "server_gpu", "unknown")
+
+
+def code_platform(platform: str) -> Dict[str, str]:
+    """Decision C: return ``{"edge_device", "smartphone"}`` for a computing platform.
+
+    In-sensor processing is edge computing but is never smartphone evidence
+    unless the actual computing platform is a smartphone."""
+    if platform not in PLATFORMS:
+        raise ValueError(f"unknown platform {platform!r}; expected one of {PLATFORMS}")
+    return {
+        "smartphone": {"smartphone": YES, "in_sensor": NO, "embedded_board": NO,
+                       "server_gpu": NO, "unknown": UNKNOWN}[platform],
+        "edge_device": {"smartphone": YES, "in_sensor": YES, "embedded_board": YES,
+                        "server_gpu": NO, "unknown": UNKNOWN}[platform],
+    }
 
 
 def sha256_of(path: Path) -> str:
@@ -207,6 +266,24 @@ class GapEvaluationValidator:
                 errors.append(f"{where}: {field}=No at {row['evidence_level']} without a stated basis")
         return errors
 
+    def check_corrections(self) -> List[str]:
+        """Confirmed partial counterexamples stay partial; locked evidence levels are not upgraded."""
+        errors = []
+        rows = self.counterexamples()
+        for pid, spec in (self.config.get("confirmed_partial_counterexamples") or {}).items():
+            for cid in spec["candidates"]:
+                match = [r for r in rows if r["paper_id_or_external_id"] == pid and r["candidate_id"] == cid]
+                if not match:
+                    errors.append(f"{pid}: confirmed partial counterexample to {cid} is missing")
+                for r in match:
+                    if r["counterexample_strength"] != "partial":
+                        errors.append(f"{pid}/{cid}: strength {r['counterexample_strength']!r}, must stay partial")
+        for pid, level in (self.config.get("locked_evidence_levels") or {}).items():
+            for r in rows:
+                if r["paper_id_or_external_id"] == pid and r["evidence_level"] != level:
+                    errors.append(f"{pid}/{r['candidate_id']}: evidence_level {r['evidence_level']!r} != locked {level!r}")
+        return errors
+
     def external_rows(self) -> List[Dict[str, str]]:
         return [r for r in self.counterexamples() if not CORPUS_ID_PATTERN.match(r["paper_id_or_external_id"])]
 
@@ -344,6 +421,7 @@ class GapEvaluationValidator:
         errors = []
         errors += self.check_frozen_corpus()
         errors += self.check_counterexamples()
+        errors += self.check_corrections()
         errors += self.check_search_log()
         errors += self.check_matrix()
         errors += self.check_no_ranking()

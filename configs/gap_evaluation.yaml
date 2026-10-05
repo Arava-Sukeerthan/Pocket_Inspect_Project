@@ -18,10 +18,72 @@ frozen_corpus:
   columns: 31
   sha256: c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521
 
+# Narrowed candidate wording (Step 9.8 controlled methodology correction,
+# researcher-approved). Candidates remain unordered, unranked, unselected,
+# corpus-bounded and provisional.
 candidates:
+  GC-01: "Limited evidence of resource-driven runtime adaptation for visual inspection specifically on resource-constrained smartphones within the reviewed corpus."
+  GC-02: "Limited direct joint evaluation of energy and thermal behavior for resource-adaptive visual inspection on resource-constrained smartphones within the reviewed corpus."
+  GC-03: "Limited evidence of an integrated resource-aware smartphone visual-inspection system that combines runtime adaptation with confidence-aware downstream verification within the reviewed corpus."
+
+# Original Step 9.7 wording, kept for traceability only. The Step 9.7 artefacts
+# (configs/gap_analysis.yaml, gap_candidates.md, gap_matrix.csv) are not rewritten.
+step_9_7_wording:
   GC-01: "Limited representation of runtime resource-aware/adaptive inference in smartphone visual inspection within the reviewed corpus"
   GC-02: "Limited direct evaluation of energy/thermal behaviour in smartphone or edge visual inspection within the reviewed corpus"
   GC-03: "Limited evidence of integrated smartphone visual inspection combining runtime adaptation with confidence-aware downstream decisions within the reviewed corpus"
+
+# What each narrowed candidate does NOT claim.
+candidate_not_claimed:
+  GC-01:
+    - "that adaptive inference is generally missing"
+    - "that adaptive inference in edge visual inspection is missing"
+    - "that content-driven cascades are missing"
+  GC-02:
+    - "that edge energy evaluation is absent"
+    - "that visual-inspection energy evaluation is absent"
+    - "that energy evaluation is generally absent"
+  GC-03:
+    - "that confidence-aware inspection is generally absent"
+    - "that active view selection is absent"
+    - "that adaptive visual inspection is absent"
+    - "that edge systems do not combine adaptation and confidence-aware actions"
+
+# Researcher-approved operational definitions (Step 9.8 correction). They govern
+# the coding of external papers in counterexample_candidates.csv. They do not
+# recode papers.csv.
+operational_definitions:
+  A_content_driven_cascades:
+    decision: "Content-driven cascades count as adaptive inference."
+    adaptive_inference: "Yes if the executed computational path, model, cascade stage, depth, width or inference configuration changes at runtime based on input content or scene complexity."
+    resource_awareness: "Yes only when device/resource state (battery, temperature, CPU/RAM, memory, compute availability or another device-resource condition) actually drives the adaptation. Content-driven adaptation alone is No unless resource-driven adaptation is separately demonstrated; Unknown when not established."
+    note: "Deployment-time choices made to fit a device budget are recorded in notes but are not resource-driven runtime adaptation."
+  B_learned_view_selection:
+    decision: "A learned view-selection policy does not automatically count as confidence gating."
+    confidence_gating: "Yes only when confidence, uncertainty, prediction quality or an equivalent inspection-quality signal explicitly informs or triggers the downstream action (e.g. low confidence -> additional view -> re-inference). Learned view selection without such a signal is No; Unknown when the role of such a signal is not established."
+  C_in_sensor_processors:
+    decision: "In-sensor processors count as edge computing for GC-02."
+    edge_device: "Yes when meaningful computation occurs locally at or immediately adjacent to the sensing source."
+    smartphone: "No for in-sensor processing unless the actual computing platform is a smartphone."
+
+# Researcher-confirmed partial counterexamples (never to be upgraded to full).
+confirmed_partial_counterexamples:
+  "arXiv:2603.16451": {name: TinyGLASS, candidates: [GC-02], evidence_level: verified_full_text}
+  "PMC11435656": {name: Cloud-Edge Collaborative Defect Detection, candidates: [GC-01, GC-03], evidence_level: verified_full_text}
+  "doi:10.3390/s26154932": {name: ActiveInspect, candidates: [GC-03], evidence_level: verified_full_text}
+  "arXiv:2608.14727": {name: Low Cost Two-Stage Fabric Defect Detection at the Edge, candidates: [GC-01, GC-03], evidence_level: verified_full_text}
+
+# Evidence levels that must not be upgraded by this correction.
+locked_evidence_levels:
+  "arXiv:2603.16451": verified_full_text
+  "arXiv:2608.14727": verified_full_text
+  "arXiv:2608.21967": verified_full_text
+  "PMC11435656": verified_full_text
+  "doi:10.3390/s26154932": verified_full_text
+  "Electronics 15(17):3915": search_snippet_only
+  "ebpj.e-iph.co.uk/6822": unresolved
+  "P001": abstract_only
+  "P007": abstract_only
 
 files:
   counterexamples: research/gap_analysis/counterexample_candidates.csv
@@ -220,12 +282,19 @@ guards:
     - "best candidate"
     - "strongest candidate"
     - "winner"
+    - "preferred candidate"
+    - "recommended gap"
+    - "final gap"
+    - "first study"
+    - "first work"
+    - "first system"
   # Phrases allowed only because they negate a selection.
   allowed_negations:
     - "no candidate is ranked"
     - "no candidate was selected or ranked"
     - "does not select the final research gap"
     - "no final research gap"
+    - "no final gap"
   required_closing_sentence: "Final research-gap selection remains a researcher decision and is outside Step 9.8."
   forbidden_files:
     - research/gap_analysis/research_gap.md
