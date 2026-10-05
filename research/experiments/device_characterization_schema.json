@@ -245,6 +245,14 @@
         },
         "variant_check": {
           "$ref": "#/$defs/capability_result"
+        },
+        "identity_match_status": {
+          "type": "string",
+          "enum": [
+            "MATCH",
+            "MISMATCH",
+            "UNKNOWN"
+          ]
         }
       },
       "required": [
@@ -514,6 +522,33 @@
         "performance_results": {
           "const": null,
           "description": "Step 10D records no performance results"
+        },
+        "app_output_status": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "APP_OUTPUT_COLLECTED",
+            "APP_OUTPUT_MISSING",
+            "APP_OUTPUT_ERROR",
+            null
+          ]
+        },
+        "manifest_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_status": {
+          "type": "string",
+          "enum": [
+            "COMPLETE",
+            "FAILED",
+            "ABORTED",
+            "DRY_RUN"
+          ]
         }
       },
       "required": [

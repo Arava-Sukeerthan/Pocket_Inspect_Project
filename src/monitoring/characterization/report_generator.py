@@ -9,6 +9,7 @@ and enforces two-run separate-day and reboot stability criteria.
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -49,6 +50,9 @@ def validate_characterization_record(
     adb_connected = conditions.get("adb_connected", False)
     is_dry_run = conditions.get("is_dry_run", False) or not adb_connected
 
+    # Track verified evidence
+    verified_refs: List[str] = []
+
     # 3. Programmatic no-fake-zeros & evidence file checks
     def _check_result(res: Dict[str, Any], path: str):
         if not isinstance(res, dict):
@@ -75,6 +79,9 @@ def validate_characterization_record(
             if is_dry_run:
                 errors.append(f"{path}: verified=True is forbidden when adb_connected=False / is_dry_run=True")
 
+            if ev_ref:
+                verified_refs.append(ev_ref)
+
             # Check if evidence file actually exists on disk
             if output_dir and ev_ref:
                 rel_path = ev_ref.split("#")[0]
@@ -97,9 +104,26 @@ def validate_characterization_record(
     # 4. P-05: Manifest SHA-256 evidence integrity verification
     if output_dir:
         manifest_file = output_dir / "evidence" / "manifest.json"
+        
+        if adb_connected or verified_refs:
+            if not manifest_file.exists():
+                errors.append(f"Required evidence manifest.json missing from '{output_dir / 'evidence'}' (P-05 requirement)")
+
         if manifest_file.exists():
             try:
-                manifest_entries = json.loads(manifest_file.read_text(encoding="utf-8"))
+                manifest_bytes = manifest_file.read_bytes()
+                actual_manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
+                record_manifest_sha = record.get("manifest_sha256")
+                
+                if not record_manifest_sha and (adb_connected or verified_refs):
+                    errors.append("Missing required 'manifest_sha256' in characterization record (P-05 requirement)")
+                elif record_manifest_sha and record_manifest_sha != actual_manifest_sha:
+                    errors.append(
+                        f"Manifest SHA-256 mismatch: record manifest_sha256 '{record_manifest_sha}' "
+                        f"does not match actual manifest.json SHA-256 '{actual_manifest_sha}' (P-05 tampering error)"
+                    )
+
+                manifest_entries = json.loads(manifest_bytes.decode("utf-8"))
                 for entry in manifest_entries:
                     rel_p = entry.get("relative_path")
                     expected_sha = entry.get("sha256")
@@ -135,6 +159,7 @@ class CharacterizationReportGenerator:
     ) -> Dict[str, Any]:
         """Validates run record and saves schema-valid JSON files in output_dir.
         P-01: A single characterization run NEVER mutates the authoritative device_capability_matrix.md.
+        R-11: Writes files atomically via temp files, flush/fsync, and rename.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         run_file = output_dir / "characterization.json"
@@ -146,13 +171,25 @@ class CharacterizationReportGenerator:
         if errors:
             raise ValueError(f"Characterization record failed validation:\n" + "\n".join(errors))
 
-        try:
-            with open(run_file, "w", encoding="utf-8") as f:
-                json.dump(run_record, f, indent=2)
+        tmp_run_file = output_dir / "characterization.json.tmp"
+        tmp_readme_file = output_dir / "README.md.tmp"
+        readme_file = output_dir / "README.md"
 
-            readme_file = output_dir / "README.md"
-            with open(readme_file, "w", encoding="utf-8") as f:
-                f.write(self._generate_markdown_summary(run_record))
+        try:
+            with open(tmp_run_file, "w", encoding="utf-8") as f:
+                json.dump(run_record, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+
+            tmp_run_file.replace(run_file)
+
+            summary_md = self._generate_markdown_summary(run_record)
+            with open(tmp_readme_file, "w", encoding="utf-8") as f:
+                f.write(summary_md)
+                f.flush()
+                os.fsync(f.fileno())
+
+            tmp_readme_file.replace(readme_file)
 
             # P-01: Do NOT call self.update_device_capability_matrix(run_record) automatically!
             # Matrix mutation is forbidden for single runs. Run outputs remain isolated in output_dir.
@@ -164,6 +201,10 @@ class CharacterizationReportGenerator:
                 "errors": [],
             }
         except Exception:
+            if tmp_run_file.exists():
+                tmp_run_file.unlink(missing_ok=True)
+            if tmp_readme_file.exists():
+                tmp_readme_file.unlink(missing_ok=True)
             if run_file.exists() and not overwrite:
                 run_file.unlink(missing_ok=True)
             raise

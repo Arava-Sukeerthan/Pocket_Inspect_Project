@@ -61,3 +61,7 @@ research/results/*.json
 # Logs
 *.log
 logs/
+
+# Gradle
+.gradle/
+build/

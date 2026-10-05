@@ -95,7 +95,11 @@ class ADBCollector:
             return "NO_DEVICE"
 
         if self.device_id:
-            matching = [l for l in lines if l.startswith(self.device_id)]
+            matching = []
+            for line in lines:
+                parts = line.split()
+                if parts and parts[0] == self.device_id:
+                    matching.append(line)
             if not matching:
                 return "NO_DEVICE"
             target_line = matching[0]
@@ -108,6 +112,7 @@ class ADBCollector:
         if len(parts) >= 2:
             state = parts[1]
             if state == "device":
+                self.detected_serial = parts[0]
                 return "CONNECTED"
             elif state == "unauthorized":
                 return "UNAUTHORIZED"
@@ -223,7 +228,8 @@ class ADBCollector:
                     try:
                         res["battery_current_now"] = int(v)
                     except ValueError:
-                        pass
+                        res["battery_current_now"] = v
+                        res["probe_error_battery_current"] = f"Failed to parse battery current value: '{v}'"
         if "charging_state" not in res:
             res["charging_state"] = False
         return res
@@ -233,7 +239,7 @@ class ADBCollector:
         if ok and out.strip():
             return out.strip()
         ok_up, out_up = self.read_file("/proc/uptime")
-        if ok_up:
+        if ok_up and out_up.strip():
             return f"uptime_{out_up.strip().split()[0]}"
         return "unknown_boot_id"
 
@@ -267,19 +273,29 @@ class ADBCollector:
 
         Status flow:
           - APP_OUTPUT_COLLECTED: Output file retrieved and valid JSON
-          - APP_OUTPUT_MISSING: Output file does not exist on device
-          - APP_OUTPUT_ERROR: Command error or invalid JSON content
+          - APP_OUTPUT_MISSING: Retrieval command executed successfully but output file missing
+          - APP_OUTPUT_ERROR: Retrieval command failed (run-as or shell error, permission denied, invalid JSON)
         """
-        code, out, err = self._adb_cmd(
+        code_runas, out_runas, err_runas = self._adb_cmd(
             ["shell", "run-as", "org.pocketinspect.characterization", "cat", "files/characterization_output.json"]
         )
-        if code != 0 or not out.strip() or "No such file" in err or "Permission denied" in err:
-            code, out, err = self._adb_cmd(
+        out = out_runas
+        err = err_runas
+        code = code_runas
+
+        if code_runas != 0 or "Permission denied" in err_runas or "not debuggable" in err_runas or "not debuggable" in out_runas:
+            code_sd, out_sd, err_sd = self._adb_cmd(
                 ["shell", "cat", "/sdcard/Android/data/org.pocketinspect.characterization/files/characterization_output.json"]
             )
+            code = code_sd
+            out = out_sd
+            err = err_sd
 
-        if code != 0 or not out.strip() or "No such file" in out or "No such file" in err:
+        if "No such file" in out or "No such file" in err:
             return "APP_OUTPUT_MISSING", None
+
+        if code != 0 or "Permission denied" in out or "Permission denied" in err or not out.strip():
+            return "APP_OUTPUT_ERROR", None
 
         try:
             parsed = json.loads(out)
@@ -304,6 +320,99 @@ class ADBCollector:
                 "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             })
             return "APP_OUTPUT_ERROR", None
+
+    # App metrics (CharacterizationRunner.kt) that the host collectors consume.
+    # Any other app metric stays only in the raw app evidence file.
+    APP_METRICS = (
+        "manufacturer",
+        "model",
+        "soc_model",
+        "total_ram_mb",
+        "available_memory_mb",
+        "battery_level_percent",
+        "battery_voltage",
+        "battery_temperature",
+        "thermal_status_api",
+        "camera_count",
+        "camera_0_hardware_level",
+        "camera_probe",
+    )
+
+    def _normalize_app_output(self, app_parsed: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """Normalizes the nested JSON schema produced by CharacterizationRunner.kt.
+
+        Returns one record per known app metric: {"state", "value", "unit", "error_message"}.
+        The app's own state is preserved (AVAILABLE, API_UNSUPPORTED, UNAVAILABLE, ERROR);
+        a metric is never treated as available just because it is present.
+        """
+        records: Dict[str, Dict[str, Any]] = {}
+        if not isinstance(app_parsed, dict):
+            return records
+
+        items: List[Any] = []
+        for section_name in ("device_identity", "memory_telemetry", "battery_telemetry",
+                             "thermal_capability", "camera_telemetry"):
+            section = app_parsed.get(section_name)
+            if isinstance(section, list):
+                items.extend(section)
+            elif isinstance(section, dict):
+                # ThermalTelemetryCollector.collect() returns a single CapabilityResult
+                items.append(section)
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            metric = item.get("metric")
+            if metric not in self.APP_METRICS:
+                continue
+            record = {
+                "state": item.get("state"),
+                "value": item.get("value"),
+                "unit": item.get("unit"),
+                "error_message": item.get("error_message"),
+            }
+            # Several items can share a metric (e.g. soc_model is emitted once per SDK branch);
+            # an AVAILABLE record takes precedence over a non-AVAILABLE one.
+            if metric in records and records[metric]["state"] == "AVAILABLE" and record["state"] != "AVAILABLE":
+                continue
+            records[metric] = record
+        return records
+
+    @staticmethod
+    def _merge_app_observations(observed_props: Dict[str, Any], app_records: Dict[str, Dict[str, Any]]) -> None:
+        """Merges app records into observed_props with source-correct provenance.
+
+        - Host value present: the host value wins and no app flag is set.
+        - Host value absent and the app reports AVAILABLE with a value: the app value is
+          used and `<metric>_is_app_derived` is set, so collectors cite android_app_evidence.json.
+        - Any non-AVAILABLE app state is recorded in `app_metric_states` and never becomes a value.
+        """
+        app_states: Dict[str, Dict[str, Any]] = {}
+        for metric, rec in app_records.items():
+            state = rec.get("state")
+            if state != "AVAILABLE":
+                app_states[metric] = {"state": state, "error_message": rec.get("error_message")}
+                continue
+
+            if metric == "thermal_status_api":
+                # The app's AVAILABLE result is the only observation of this API.
+                if observed_props.get("thermal_status_api_available") is None:
+                    observed_props["thermal_status_api_available"] = True
+                    observed_props["thermal_status_api_is_app_derived"] = True
+                continue
+
+            value = rec.get("value")
+            if value is None or observed_props.get(metric) is not None:
+                continue
+            observed_props[metric] = value
+            observed_props[f"{metric}_is_app_derived"] = True
+            if rec.get("unit"):
+                observed_props[f"{metric}_unit"] = rec["unit"]
+            if metric == "soc_model":
+                observed_props["source_soc_prop"] = "Build.SOC_MODEL (android app)"
+
+        if app_states:
+            observed_props["app_metric_states"] = app_states
 
     def collect_raw_evidence_and_observations(self, output_dir: Path) -> Tuple[List[Path], Dict[str, Any]]:
         """Collects raw evidence text files, writes observed_props.json & manifest.json."""
@@ -334,9 +443,11 @@ class ADBCollector:
             _save_evidence("cpuinfo_evidence.txt", out_cpu)
             cpu_parsed = self.parse_proc_cpuinfo(out_cpu)
             observed_props.update(cpu_parsed)
+        else:
+            observed_props["probe_error_cpuinfo"] = f"Failed to read /proc/cpuinfo: {out_cpu}"
 
         # 2. getprop with P-04 SoC property fallback provenance
-        code, out_prop, _ = self._adb_cmd(["shell", "getprop"])
+        code, out_prop, err_prop = self._adb_cmd(["shell", "getprop"])
         if code == 0:
             _save_evidence("getprop_evidence.txt", out_prop)
             props = self.get_properties()
@@ -361,6 +472,8 @@ class ADBCollector:
             else:
                 observed_props["soc_model"] = None
                 observed_props["source_soc_prop"] = "UNAVAILABLE"
+        else:
+            observed_props["probe_error_getprop"] = f"Exit code {code}: {err_prop or out_prop}"
 
         # 3. dumpsys meminfo / proc meminfo
         ok_mem, out_mem = self.read_file("/proc/meminfo")
@@ -368,52 +481,70 @@ class ADBCollector:
             _save_evidence("meminfo_evidence.txt", out_mem)
             mem_parsed = self.parse_proc_meminfo(out_mem)
             observed_props.update(mem_parsed)
+        else:
+            observed_props["probe_error_meminfo"] = f"Failed to read /proc/meminfo: {out_mem}"
 
         # 4. proc stat check
         ok_stat, out_stat = self.read_file("/proc/stat")
         if ok_stat:
             _save_evidence("proc_stat_evidence.txt", out_stat)
             observed_props["proc_stat_readable_via_adb"] = True
+        else:
+            observed_props["probe_error_proc_stat"] = f"Failed to read /proc/stat: {out_stat}"
 
         # 5. thermal zones & dumpsys thermalservice
         zones = self.check_thermal_zones()
-        code_th, out_th, _ = self._adb_cmd(["shell", "dumpsys", "thermalservice"])
+        code_th, out_th, err_th = self._adb_cmd(["shell", "dumpsys", "thermalservice"])
         th_content = f"THERMAL ZONES:\n" + "\n".join([f"{z['zone']}: {z['type']} = {z['temp']}" for z in zones])
         if code_th == 0:
             th_content += f"\n\nDUMPSYS THERMALSERVICE:\n{out_th}"
-        _save_evidence("thermal_evidence.txt", th_content)
+            _save_evidence("thermal_evidence.txt", th_content)
+        else:
+            if zones:
+                _save_evidence("thermal_evidence.txt", th_content)
+            else:
+                observed_props["probe_error_thermal"] = f"Exit code {code_th}: {err_th or out_th}"
+
         if zones:
             observed_props["thermal_zones_readable_count"] = len(zones)
 
         # 6. dumpsys battery
-        code_bat, out_bat, _ = self._adb_cmd(["shell", "dumpsys", "battery"])
+        code_bat, out_bat, err_bat = self._adb_cmd(["shell", "dumpsys", "battery"])
         if code_bat == 0:
             _save_evidence("battery_dumpsys_evidence.txt", out_bat)
             bat_parsed = self.parse_dumpsys_battery(out_bat)
             observed_props.update(bat_parsed)
+        else:
+            observed_props["probe_error_battery"] = f"Exit code {code_bat}: {err_bat or out_bat}"
 
         # 7. cpufreq
         ok_freq, out_freq = self.read_file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-        if ok_freq:
+        if ok_freq and out_freq.strip():
             _save_evidence("cpufreq_evidence.txt", out_freq)
             try:
                 observed_props["cpu_scaling_cur_freq"] = int(out_freq.strip())
             except ValueError:
-                pass
+                observed_props["probe_error_cpufreq"] = f"Failed to parse cpufreq node value: '{out_freq.strip()}'"
+        else:
+            observed_props["probe_error_cpufreq"] = f"Failed to read cpufreq node: {out_freq}"
 
         # 8. GPU sysfs / dumpsys
         ok_gpu, out_gpu = self.read_file("/sys/class/kgsl/kgsl-3d0/gpuclk")
-        if ok_gpu:
+        if ok_gpu and out_gpu.strip():
             _save_evidence("gpu_evidence.txt", out_gpu)
             try:
                 observed_props["gpu_clock_hz"] = int(out_gpu.strip())
             except ValueError:
-                pass
+                observed_props["probe_error_gpu"] = f"Failed to parse kgsl gpuclk node value: '{out_gpu.strip()}'"
+        else:
+            observed_props["probe_error_gpu"] = f"Failed to read kgsl gpuclk node: {out_gpu}"
 
         # 9. Camera dumpsys
-        code_cam, out_cam, _ = self._adb_cmd(["shell", "dumpsys", "media.camera"])
+        code_cam, out_cam, err_cam = self._adb_cmd(["shell", "dumpsys", "media.camera"])
         if code_cam == 0:
             _save_evidence("camera_dumpsys_evidence.txt", out_cam)
+        else:
+            observed_props["probe_error_camera"] = f"Exit code {code_cam}: {err_cam or out_cam}"
 
         # 10. Profiling probe (R-02)
         atrace_avail, _ = self.probe_profiling_capability(ev_dir)
@@ -425,10 +556,7 @@ class ADBCollector:
             "sha256": hashlib.sha256(data_bytes).hexdigest(),
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         })
-        if atrace_avail:
-            observed_props["atrace_adb_available"] = True
-        else:
-            observed_props["atrace_adb_available"] = False
+        observed_props["atrace_adb_available"] = atrace_avail
 
         # 11. Network state probe (R-07)
         net_state, _ = self.probe_network_state(ev_dir)
@@ -447,10 +575,9 @@ class ADBCollector:
         observed_props["app_output_status"] = app_status
         if app_status == "APP_OUTPUT_COLLECTED" and app_parsed:
             files_saved.append(ev_dir / "android_app_evidence.json")
-            # Update observed props with app-collected observations
-            for k, v in app_parsed.items():
-                if k not in observed_props or observed_props[k] is None:
-                    observed_props[k] = v
+            # Normalize nested Android app JSON schema produced by CharacterizationRunner.kt
+            observed_props["app_telemetry"] = app_parsed
+            self._merge_app_observations(observed_props, self._normalize_app_output(app_parsed))
 
         # 13. Boot ID
         observed_props["boot_id"] = self.get_boot_id()
@@ -466,7 +593,9 @@ class ADBCollector:
 
         # 16. Write manifest.json (R-01, R-07)
         manifest_file = ev_dir / "manifest.json"
-        manifest_file.write_text(json.dumps(manifest_entries, indent=2), encoding="utf-8")
+        manifest_bytes = json.dumps(manifest_entries, indent=2).encode("utf-8")
+        manifest_file.write_bytes(manifest_bytes)
         files_saved.append(manifest_file)
+        observed_props["manifest_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
 
         return files_saved, observed_props
