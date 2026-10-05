@@ -2930,3 +2930,36 @@ Step 10D Correction Round 6: implementation of the six findings (P5-01 to P5-06)
 - Branch: `claude/step-10d-correction-round6`, from `f4c98c1`, with `main` (`5d750cf`) merged in.
 
 Step 10E not started.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10D Round 6 final correction: the two minor items from the Round 6 audit of `6613aa2`. That audit gave CONDITIONAL APPROVAL; it was performed by Claude Code, the implementing agent, and is not independent.
+
+### Changes
+- `tests/test_device_characterization_connected_e2e.py`: new `test_p503_app_camera_hardware_level_state_is_preserved`, parametrized over `API_UNSUPPORTED`, `UNAVAILABLE` and `ERROR`.
+  - It runs the real pipeline: fake ADB transport → parsers → app normalizer and merge → collectors → report generator → `characterization.json`.
+  - It feeds a non-AVAILABLE `camera_0_hardware_level` app item in the Kotlin output shape.
+  - It asserts: the state equals the app's state; the value is null; `verified` is false; the result is cited to `android_app_evidence.json#camera_0_hardware_level`; an ERROR keeps its message.
+  - Mutation M6 (the collector ignores the app state) now fails all three cases; before this change it passed the whole suite.
+- `configs/device_characterization.yaml`: the `run_status_rules` comment now separates two things:
+  - the protocol requirement, which is to establish identity and the RAM for the variant check, from any source;
+  - the software policy, which treats `getprop` and `meminfo` as mandatory host probes and is stricter than the protocol.
+  
+  Comment only. `mandatory_probes` and the run-status behaviour are unchanged.
+
+### Verification
+- Full suite run twice: 312 passed, 312 passed. `git status` was clean after both runs, and `research/` is unchanged, including the capability matrix and the results directory.
+
+### Research decisions
+- None.
+
+### Real device status
+- OPPO A5 2020 connected: NO. Physical characterization: NO. Real-device evidence: NONE.
+
+### Next action
+- An independent reviewer (not Claude Code) reviews PR #28. Antigravity remains the Step 10D implementation agent for any further correction. Physical OPPO characterization starts only after the implementation PR is merged.
+
+Step 10E not started.

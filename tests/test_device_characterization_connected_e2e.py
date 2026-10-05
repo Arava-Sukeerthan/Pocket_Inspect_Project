@@ -1070,6 +1070,27 @@ def test_p503_app_camera_error_is_preserved(tmp_path):
     assert hw["verified"] is False
 
 
+@pytest.mark.parametrize("app_state", ["API_UNSUPPORTED", "UNAVAILABLE", "ERROR"])
+def test_p503_app_camera_hardware_level_state_is_preserved(tmp_path, app_state):
+    """P5-03: a non-AVAILABLE app camera_0_hardware_level state reaches the report unchanged."""
+    err = "CameraAccessException: hardware level query failed" if app_state == "ERROR" else None
+    camera = [
+        _app_item("camera_count", value=1),
+        _app_item("camera_0_hardware_level", app_state, error_message=err),
+    ]
+    _, data, observed = _run_synthetic(tmp_path, _app_json(camera=camera))
+    hw = _all_results(data)["camera_0_hardware_level"]
+    assert hw["state"] == app_state
+    assert hw["value"] is None
+    assert hw["verified"] is False
+    assert hw["report_status"] != "VERIFIED"
+    assert hw["evidence_ref"] == "evidence/android_app_evidence.json#camera_0_hardware_level"
+    if app_state == "ERROR":
+        assert "CameraAccessException" in hw["error_message"]
+    assert "camera_0_hardware_level" not in observed
+    assert "camera_0_hardware_level_is_app_derived" not in observed
+
+
 def test_p504_no_nested_app_fields_leak_into_observed_props(tmp_path):
     """P5-04: generic keys of nested app items never become top-level observed_props keys."""
     _, _, observed = _run_synthetic(tmp_path, _app_json(**_DIFFERING_APP))
