@@ -2441,3 +2441,66 @@ Correct Step 10D Device Characterization System following post-merge audit (`doc
 - Branch: `antigravity/step-10d-correction`
 - Commit: see `git log -- docs/agent_sync/CHANGELOG.md`
 
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10D follow-up audit of Antigravity's post-audit corrections: PR #22, commit `97da8c7`.
+- PR #22 had **already been merged** (`e918094`) when inspected, so this is a post-merge review.
+- Full report: `docs/architecture/step10d_correction_followup_audit.md`.
+
+### Decision
+**CONDITIONAL APPROVAL — CORRECTIONS REQUIRED BEFORE MERGE.** Because the PR is merged, the corrections are required in a follow-up PR **before any real-device characterization run**.
+- This is not an approval of Step 10D: the software is not yet usable on the real device, and **device characterization is NOT complete**.
+- **0** device capabilities are verified.
+- Current dry-run output: 58 of 59 records NOT_TESTED.
+
+### Verified in this review
+- **Tests.** `python -m pytest -q`: **272 passed**.
+- **Dry run.** Schema-valid; NOT_TESTED only; nothing verified.
+- **Corrections confirmed:**
+  - status mapping matches protocol §3;
+  - missing inputs give NOT_TESTED;
+  - no API-28 default; unknown API gives NOT_TESTED, with the D-10 source null;
+  - the VERIFIED gate requires a connected device, not a dry run, and an existing evidence file;
+  - run-date mismatch and overwrite guards work;
+  - historical runs are preserved and relabelled `is_dry_run`, `is_valid_step10d_device_evidence: false`;
+  - the original Antigravity CHANGELOG entry is untouched;
+  - no C1–C4, R0–R3, r*, energy-threshold, binning or time-budget decision was made.
+- **Connected-device path, exercised with a scratch-only `adb` test stub** (synthetic output, not device evidence, not committed): **the run aborts**. Verified records cite `evidence/observed_props.json`, which is never written, and a hard-coded `atrace_adb_available = True` cites a missing `atrace_evidence.txt`.
+- **Android project.** It does **not** configure from the repository: no plugin versions, `settings.gradle` or Gradle wrapper. The reported "BUILD SUCCESSFUL" is not reproducible here.
+
+### Findings for Antigravity
+- **P0:**
+  - R-01: evidence references point to a never-written file, so real runs abort.
+  - R-02: hard-coded atrace capability.
+- **P1:**
+  - R-03: ADB failures and connection states are not preserved as ERROR or distinguished.
+  - R-04: battery, cpufreq, GPU, thermal service, camera and backends are never probed, and the app output is never collected.
+  - R-05: the Android build is not reproducible; redundant manifest `package`; unused CAMERA permission.
+  - R-06: F-12 not fixed — `selected_level` injectable, and the `E1_feasible` path crashes.
+  - R-07: unobserved network and charging conditions; wrong `soc_model` evidence file; no evidence hashes.
+- **P2:** R-08 (variant check is a fixed window, not nearest-variant; CHANGELOG mismatch), R-09 (battery current 0 / raw value lost), R-10 (mock input merged into connected runs), R-11 (date-pattern, atomic write, partial-directory gaps), R-12 (no end-to-end or ADB-failure tests).
+- **P3:** R-13 (correction CHANGELOG entry inaccuracies), R-14 (historical folder naming README).
+
+### F-01 to F-15 status
+- **FIXED:** F-01 (software side), F-02, F-04, F-06, F-10, F-11, F-14, F-15.
+- **PARTIALLY_FIXED:** F-03, F-05, F-07, F-08, F-09, F-13.
+- **NOT_FIXED:** F-12.
+
+### Preserved as unresolved
+C1–C4, R0–R3 thresholds, r*, energy agreement threshold, calibration binning, total decision-time budget, D-10 thermal source, and D-16 energy level.
+
+### Next action
+1. Antigravity: follow-up PR fixing R-01 to R-07, plus an append-only CHANGELOG entry.
+2. Claude Code: re-review.
+3. Then the physical OPPO A5 2020 (3 GB) is connected, and two runs are made on separate days with a reboot between them.
+
+Step 10E not started.
+
+### Git
+- Branch: `claude/step-10d-correction-followup-audit`, from `main` `e918094`.
+- Review documentation only; no implementation or data file was modified.
+- Commit: see `git log -- docs/architecture/step10d_correction_followup_audit.md`.
