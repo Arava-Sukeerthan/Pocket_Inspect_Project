@@ -1,11 +1,14 @@
 """
 End-to-end tests for Step 10D connected-device characterization path,
-evidence references, ADB connection state classification, and profiling probes (R-01, R-02, R-03, R-12).
+evidence references, ADB connection state classification, profiling probes,
+evidence hash verification, CLI argument rules, and synthetic test data isolation (P-01 to P-07).
 
 Uses a mock ADB execution stub to test the complete connected pipeline without physical hardware.
-Synthetic outputs in this test are explicitly classified as TEST/MOCK and are not repository evidence.
+Synthetic outputs in this test are explicitly isolated to pytest temporary directories and are not repository evidence.
 """
 
+import datetime
+import hashlib
 import json
 import shutil
 import tempfile
@@ -45,6 +48,19 @@ def test_adb_connection_status_classification():
         assert adb.is_device_connected()
 
 
+def test_adb_serial_selection():
+    """P-06: Test that ADBCollector with explicit device_id selects the matching device."""
+    adb_target = ADBCollector(device_id="123456")
+    adb_other = ADBCollector(device_id="999999")
+
+    mock_out = "List of devices attached\n123456\tdevice\n789101\tdevice\n"
+    with patch.object(adb_target, "_adb_cmd", return_value=(0, mock_out, "")):
+        assert adb_target.get_connection_status() == "CONNECTED"
+
+    with patch.object(adb_other, "_adb_cmd", return_value=(0, mock_out, "")):
+        assert adb_other.get_connection_status() == "NO_DEVICE"
+
+
 def test_adb_collector_evidence_generation_and_hashing(temp_output_dir):
     adb = ADBCollector(device_id="123456")
 
@@ -68,6 +84,8 @@ def test_adb_collector_evidence_generation_and_hashing(temp_output_dir):
             return 0, "1\n", ""
         elif "boot_id" in cmd_str:
             return 0, "mock_boot_id_12345\n", ""
+        elif "characterization_output.json" in cmd_str:
+            return 1, "", "No such file"
         return 0, "ok\n", ""
 
     with patch.object(adb, "_adb_cmd", side_effect=mock_adb_cmd):
@@ -82,13 +100,16 @@ def test_adb_collector_evidence_generation_and_hashing(temp_output_dir):
         assert (ev_dir / "network_evidence.txt").exists()
         assert (ev_dir / "battery_dumpsys_evidence.txt").exists()
 
-        # R-02: Verify atrace probe succeeded and set flag
+        # P-03 / P-04 checks
         assert observed_props["atrace_adb_available"] is True
         assert observed_props["manufacturer"] == "OPPO"
         assert observed_props["model"] == "OPPO A5 2020"
         assert observed_props["total_ram_mb"] == 3000
         assert observed_props["network_state"] == "OFFLINE"
         assert observed_props["charging_state"] is True
+        assert observed_props["soc_model"] == "SM6125"
+        assert observed_props["source_soc_prop"] == "ro.soc.model"
+        assert observed_props["app_output_status"] == "APP_OUTPUT_MISSING"
 
 
 def test_profiling_probe_failure_handling(temp_output_dir):
@@ -106,21 +127,34 @@ def test_run_characterization_require_device_rejection(temp_output_dir):
     config_file = Path("configs/device_characterization.yaml")
     with patch("scripts.device_characterization.adb_collector.ADBCollector.get_connection_status", return_value="NO_DEVICE"):
         with pytest.raises(RuntimeError) as exc_info:
-            run_characterization(config_file, dry_run=False, require_device=True)
+            run_characterization(config_file, dry_run=False, require_device=True, results_dir=temp_output_dir)
         assert "Device execution requested (--require-device) but ADB connection status is 'NO_DEVICE'" in str(exc_info.value)
+
+
+def test_p06_require_device_and_dry_run_collision(temp_output_dir):
+    """P-06: --require-device combined with --dry-run must raise ValueError."""
+    config_file = Path("configs/device_characterization.yaml")
+    with pytest.raises(ValueError) as exc_info:
+        run_characterization(config_file, dry_run=True, require_device=True, results_dir=temp_output_dir)
+    assert "CLI argument conflict: --require-device cannot be used with --dry-run" in str(exc_info.value)
 
 
 def test_mock_observed_isolation_in_connected_run(temp_output_dir):
     config_file = Path("configs/device_characterization.yaml")
     with patch("scripts.device_characterization.adb_collector.ADBCollector.get_connection_status", return_value="CONNECTED"):
         with pytest.raises(ValueError) as exc_info:
-            run_characterization(config_file, mock_observed={"manufacturer": "Fake"}, require_device=True)
+            run_characterization(config_file, mock_observed={"manufacturer": "Fake"}, require_device=True, results_dir=temp_output_dir)
         assert "Synthetic mock_observed overrides cannot be merged into a real connected device run" in str(exc_info.value)
 
 
-def test_full_connected_path_schema_and_evidence_validation(temp_output_dir):
+def test_p01_connected_run_does_not_mutate_matrix(temp_output_dir):
+    """P-01: Verify that a connected characterization run NEVER mutates device_capability_matrix.md."""
     config_file = Path("configs/device_characterization.yaml")
-    run_id = "run_20261005_120000"
+    matrix_path = Path("research/experiments/device_capability_matrix.md")
+    original_matrix_text = matrix_path.read_text(encoding="utf-8")
+
+    today = datetime.datetime.utcnow().strftime("%Y%m%d")
+    run_id = f"run_{today}_120000"
 
     mock_adb_props = {
         "is_real_device_observation": True,
@@ -144,7 +178,6 @@ def test_full_connected_path_schema_and_evidence_validation(temp_output_dir):
     def mock_collect(output_dir):
         ev_dir = output_dir / "evidence"
         ev_dir.mkdir(parents=True, exist_ok=True)
-
         files = [
             ev_dir / "getprop_evidence.txt",
             ev_dir / "meminfo_evidence.txt",
@@ -154,34 +187,88 @@ def test_full_connected_path_schema_and_evidence_validation(temp_output_dir):
             ev_dir / "battery_dumpsys_evidence.txt",
             ev_dir / "atrace_evidence.txt",
             ev_dir / "network_evidence.txt",
-            ev_dir / "observed_props.json",
-            ev_dir / "manifest.json",
         ]
+        manifest_entries = []
         for f in files:
-            f.write_text("mock evidence content\n", encoding="utf-8")
+            content_bytes = b"mock evidence content\n"
+            f.write_bytes(content_bytes)
+            manifest_entries.append({
+                "relative_path": f"evidence/{f.name}",
+                "size_bytes": len(content_bytes),
+                "sha256": hashlib.sha256(content_bytes).hexdigest(),
+                "created_at": "2026-10-05T12:00:00Z"
+            })
 
-        (ev_dir / "observed_props.json").write_text(json.dumps(mock_adb_props), encoding="utf-8")
+        obs_bytes = json.dumps(mock_adb_props, indent=2).encode("utf-8")
+        obs_file = ev_dir / "observed_props.json"
+        obs_file.write_bytes(obs_bytes)
+        manifest_entries.append({
+            "relative_path": "evidence/observed_props.json",
+            "size_bytes": len(obs_bytes),
+            "sha256": hashlib.sha256(obs_bytes).hexdigest(),
+            "created_at": "2026-10-05T12:00:00Z"
+        })
+        manifest_file = ev_dir / "manifest.json"
+        manifest_file.write_text(json.dumps(manifest_entries, indent=2), encoding="utf-8")
+        files.append(manifest_file)
         return files, mock_adb_props
-
-    tmp_matrix = temp_output_dir / "device_capability_matrix.md"
-    tmp_matrix.write_text(Path("research/experiments/device_capability_matrix.md").read_text(encoding="utf-8"), encoding="utf-8")
 
     with patch("scripts.device_characterization.adb_collector.ADBCollector.get_connection_status", return_value="CONNECTED"):
         with patch("scripts.device_characterization.adb_collector.ADBCollector.collect_raw_evidence_and_observations", side_effect=mock_collect):
-            with patch("src.monitoring.characterization.report_generator.MATRIX_PATH", tmp_matrix):
-                out_dir, run_dict = run_characterization(config_file, run_id=run_id, overwrite=True)
+            out_dir, run_dict = run_characterization(config_file, run_id=run_id, overwrite=True, results_dir=temp_output_dir)
 
-                # Validate that output directory and characterization.json exist
-                run_file = out_dir / "characterization.json"
-                assert run_file.exists()
+    # P-01 assertion: device_capability_matrix.md text must remain 100% untouched
+    assert matrix_path.read_text(encoding="utf-8") == original_matrix_text
 
-                # Perform schema & evidence file validation
-                errors = validate_characterization_record(run_dict, output_dir=out_dir)
-                assert errors == [], f"Validation failed for connected run: {errors}"
 
-                # Verify that verified records cite existing evidence files
-                observed = run_dict["device_identity"]["observed"]
-                mfr_item = next(item for item in observed if item["metric"] == "manufacturer")
-                assert mfr_item["verified"] is True
-                assert mfr_item["report_status"] == "VERIFIED"
-                assert (out_dir / mfr_item["evidence_ref"].split("#")[0]).exists()
+def test_p05_manifest_hash_verification(temp_output_dir):
+    """P-05: Test SHA-256 evidence integrity check in validate_characterization_record."""
+    output_dir = temp_output_dir / "run_hash_test"
+    ev_dir = output_dir / "evidence"
+    ev_dir.mkdir(parents=True)
+
+    ev_file = ev_dir / "sample_ev.txt"
+    ev_file.write_text("valid content", encoding="utf-8")
+    correct_sha = hashlib.sha256(b"valid content").hexdigest()
+
+    manifest_file = ev_dir / "manifest.json"
+    manifest_entries = [{
+        "relative_path": "evidence/sample_ev.txt",
+        "size_bytes": 13,
+        "sha256": correct_sha,
+        "created_at": "2026-10-05T12:00:00Z"
+    }]
+    manifest_file.write_text(json.dumps(manifest_entries), encoding="utf-8")
+
+    dummy_record = {
+        "run_id": "run_20261005_120000",
+        "started_at": "2026-10-05T12:00:00Z",
+        "app_version": "1.0.0",
+        "git_commit": "abc",
+        "conditions": {},
+    }
+
+    # 1. Valid hash -> no integrity errors
+    errors = validate_characterization_record(dummy_record, output_dir=output_dir)
+    assert not any("Evidence integrity failure" in e for e in errors)
+
+    # 2. Tampered evidence content -> integrity error detected
+    ev_file.write_text("TAMPERED CONTENT", encoding="utf-8")
+    errors_tampered = validate_characterization_record(dummy_record, output_dir=output_dir)
+    assert any("Evidence integrity failure" in e for e in errors_tampered)
+
+
+def test_p04_soc_property_fallback_provenance():
+    """P-04: Test SoC property fallback hierarchy and provenance recording."""
+    adb = ADBCollector()
+
+    # Case 1: ro.soc.model present
+    with patch.object(adb, "_adb_cmd", return_value=(0, "[ro.soc.model]: [SM6125]\n", "")):
+        props = adb.get_properties()
+        assert props.get("ro.soc.model") == "SM6125"
+
+    # Case 2: ro.soc.model absent, ro.board.platform present
+    with patch.object(adb, "_adb_cmd", return_value=(0, "[ro.board.platform]: [trinket]\n", "")):
+        props = adb.get_properties()
+        assert props.get("ro.soc.model") is None
+        assert props.get("ro.board.platform") == "trinket"

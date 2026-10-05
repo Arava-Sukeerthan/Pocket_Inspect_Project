@@ -307,7 +307,7 @@ class AndroidCapabilityCollector:
 
 class BatteryTelemetryCollector:
     """Collector 3: BatteryTelemetryCollector.
-    Checks battery percentage, voltage, temperature, health, current, counters.
+    Checks battery level, percentage, voltage, temperature, health, current, counters.
     F-10: Implausible values set state=ERROR with raw values retained.
     """
 
@@ -318,12 +318,12 @@ class BatteryTelemetryCollector:
         results: List[CapabilityResult] = []
 
         # Battery level (%)
-        if "level" not in props:
+        if "battery_level_percent" not in props and "level" not in props:
             state_lvl = RuntimeState.NOT_TESTED.value
             err_lvl = None
             val_lvl = None
         else:
-            raw_lvl = props.get("level")
+            raw_lvl = props.get("battery_level_percent") if "battery_level_percent" in props else props.get("level")
             if raw_lvl is None:
                 state_lvl = RuntimeState.UNAVAILABLE.value
                 err_lvl = None
@@ -344,21 +344,21 @@ class BatteryTelemetryCollector:
             report_status=map_runtime_state_to_report_status(RuntimeState(state_lvl), verified=ver_lvl),
             value=val_lvl,
             unit="percent",
-            source="BatteryManager.EXTRA_LEVEL / ACTION_BATTERY_CHANGED",
+            source="BatteryManager.EXTRA_LEVEL / ACTION_BATTERY_CHANGED / dumpsys battery",
             verified=ver_lvl,
             verification_method="battery_broadcast_check",
             observed_at=now if ver_lvl else None,
-            evidence_ref="evidence/battery_evidence.json#level" if ver_lvl else None,
+            evidence_ref="evidence/battery_dumpsys_evidence.txt#battery_level_percent" if ver_lvl else None,
             error_message=err_lvl,
         ))
 
         # Battery voltage (mV)
-        if "voltage_mv" not in props:
+        if "battery_voltage" not in props and "voltage_mv" not in props:
             state_volt = RuntimeState.NOT_TESTED.value
             err_volt = None
             val_volt = None
         else:
-            raw_volt = props.get("voltage_mv")
+            raw_volt = props.get("battery_voltage") if "battery_voltage" in props else props.get("voltage_mv")
             if raw_volt is None:
                 state_volt = RuntimeState.UNAVAILABLE.value
                 err_volt = None
@@ -379,21 +379,21 @@ class BatteryTelemetryCollector:
             report_status=map_runtime_state_to_report_status(RuntimeState(state_volt), verified=ver_volt),
             value=val_volt,
             unit="mV",
-            source="BatteryManager.EXTRA_VOLTAGE",
+            source="BatteryManager.EXTRA_VOLTAGE / dumpsys battery",
             verified=ver_volt,
             verification_method="battery_broadcast_check",
             observed_at=now if ver_volt else None,
-            evidence_ref="evidence/battery_evidence.json#voltage" if ver_volt else None,
+            evidence_ref="evidence/battery_dumpsys_evidence.txt#battery_voltage" if ver_volt else None,
             error_message=err_volt,
         ))
 
         # Battery temperature (°C)
-        if "temperature_c" not in props:
+        if "battery_temperature" not in props and "temperature_c" not in props:
             state_temp = RuntimeState.NOT_TESTED.value
             err_temp = None
             val_temp = None
         else:
-            raw_temp = props.get("temperature_c")
+            raw_temp = props.get("battery_temperature") if "battery_temperature" in props else props.get("temperature_c")
             if raw_temp is None:
                 state_temp = RuntimeState.UNAVAILABLE.value
                 err_temp = None
@@ -414,31 +414,35 @@ class BatteryTelemetryCollector:
             report_status=map_runtime_state_to_report_status(RuntimeState(state_temp), verified=ver_temp),
             value=val_temp,
             unit="degC",
-            source="BatteryManager.EXTRA_TEMPERATURE / 10.0",
+            source="BatteryManager.EXTRA_TEMPERATURE / dumpsys battery",
             verified=ver_temp,
             verification_method="battery_broadcast_check",
             observed_at=now if ver_temp else None,
-            evidence_ref="evidence/battery_evidence.json#temperature" if ver_temp else None,
+            evidence_ref="evidence/battery_dumpsys_evidence.txt#battery_temperature" if ver_temp else None,
             error_message=err_temp,
         ))
 
         # Battery current now (mA / uA)
-        if "current_now_ua" not in props and "current_now_ma" not in props:
+        if "battery_current_now" not in props and "current_now_ua" not in props and "current_now_ma" not in props:
             state_curr = RuntimeState.NOT_TESTED.value
             val_curr = None
             notes_curr = "Current probe not executed."
         else:
+            curr_raw = props.get("battery_current_now") if "battery_current_now" in props else props.get("current_now_ma")
             curr_ua = props.get("current_now_ua")
-            curr_ma = props.get("current_now_ma")
             sentinel = props.get("current_now_is_sentinel", False)
-            if sentinel or (curr_ua is None and curr_ma is None):
+            if sentinel or (curr_raw is None and curr_ua is None):
                 state_curr = RuntimeState.UNAVAILABLE.value
                 val_curr = None
                 notes_curr = "Current property is unsupported or sentinel value returned."
+            elif curr_raw == 0 or curr_ua == 0:
+                state_curr = RuntimeState.AVAILABLE.value
+                val_curr = 0.0
+                notes_curr = "Observed battery current reading is 0. Flagged as potential driver sentinel zero."
             else:
                 state_curr = RuntimeState.AVAILABLE.value
-                val_curr = float(curr_ma) if curr_ma is not None else float(curr_ua) / 1000.0
-                notes_curr = f"Raw current reading: {curr_ua} uA ({val_curr} mA)."
+                val_curr = float(curr_raw) if curr_raw is not None else float(curr_ua) / 1000.0
+                notes_curr = f"Raw current reading: {curr_raw or curr_ua}."
 
         ver_curr = is_real and state_curr == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
@@ -447,20 +451,20 @@ class BatteryTelemetryCollector:
             report_status=map_runtime_state_to_report_status(RuntimeState(state_curr), verified=ver_curr),
             value=val_curr,
             unit="mA",
-            source="BatteryManager.BATTERY_PROPERTY_CURRENT_NOW",
+            source="BatteryManager.BATTERY_PROPERTY_CURRENT_NOW / dumpsys battery",
             verified=ver_curr,
             verification_method="battery_property_check",
             observed_at=now if ver_curr else None,
-            evidence_ref="evidence/battery_evidence.json#current_now" if ver_curr else None,
+            evidence_ref="evidence/battery_dumpsys_evidence.txt#battery_current_now" if ver_curr else None,
             notes=notes_curr,
         ))
 
         # Battery charge counter (uAh)
-        if "charge_counter_uah" not in props:
+        if "battery_charge_counter" not in props and "charge_counter_uah" not in props:
             state_chg = RuntimeState.NOT_TESTED.value
             val_chg = None
         else:
-            chg = props.get("charge_counter_uah")
+            chg = props.get("battery_charge_counter") if "battery_charge_counter" in props else props.get("charge_counter_uah")
             sentinel_chg = props.get("charge_counter_is_sentinel", False)
             if sentinel_chg or chg is None:
                 state_chg = RuntimeState.UNAVAILABLE.value
@@ -480,7 +484,7 @@ class BatteryTelemetryCollector:
             verified=ver_chg,
             verification_method="battery_property_check",
             observed_at=now if ver_chg else None,
-            evidence_ref="evidence/battery_evidence.json#charge_counter" if ver_chg else None,
+            evidence_ref="evidence/battery_dumpsys_evidence.txt#battery_charge_counter" if ver_chg else None,
         ))
 
         return TelemetryCapability(
@@ -503,11 +507,11 @@ class MemoryTelemetryCollector:
         results: List[CapabilityResult] = []
 
         # Available RAM
-        if "avail_mem_mb" not in props:
+        if "available_memory_mb" not in props and "avail_mem_mb" not in props:
             state_avail = RuntimeState.NOT_TESTED.value
             val_avail = None
         else:
-            avail_mb = props.get("avail_mem_mb")
+            avail_mb = props.get("available_memory_mb") if "available_memory_mb" in props else props.get("avail_mem_mb")
             state_avail = RuntimeState.AVAILABLE.value if avail_mb is not None else RuntimeState.UNAVAILABLE.value
             val_avail = avail_mb if state_avail == RuntimeState.AVAILABLE.value else None
 
@@ -518,11 +522,11 @@ class MemoryTelemetryCollector:
             report_status=map_runtime_state_to_report_status(RuntimeState(state_avail), verified=ver_avail),
             value=val_avail,
             unit="MB",
-            source="ActivityManager.MemoryInfo.availMem",
+            source="ActivityManager.MemoryInfo.availMem / /proc/meminfo",
             verified=ver_avail,
             verification_method="memory_info_check",
             observed_at=now if ver_avail else None,
-            evidence_ref="evidence/meminfo_evidence.txt#availMem" if ver_avail else None,
+            evidence_ref="evidence/meminfo_evidence.txt#available_memory_mb" if ver_avail else None,
         ))
 
         # Low Memory Flag

@@ -2601,3 +2601,59 @@ Step 10E not started.
 ### Git
 - Branch: `claude/step-10d-pr24-audit`, from `main` `bd5048e`.
 - Review documentation only; no implementation or data file was modified.
+
+---
+
+## 2026-10-05 — Antigravity
+
+### Task
+Step 10D — Post-Merge Correction Round 2 (Software Infrastructure & Evidence Verification Protocols).
+Address findings P-01 through P-07 and R-03 through R-14 from post-merge audit PR #24 (`docs/architecture/step10d_pr24_followup_audit.md`).
+Branch: `antigravity/step-10d-final-correction` branched from main commit `bb03d3b`.
+
+### Changes
+- `scripts/device_characterization/adb_collector.py`:
+  - Added `--serial` device filtering handling in `get_connection_status()`.
+  - Implemented `retrieve_android_app_output()` for retrieving on-device Kotlin characterization JSON (`APP_OUTPUT_COLLECTED`, `APP_OUTPUT_MISSING`, `APP_OUTPUT_ERROR`).
+  - Added P-04 SoC property fallback provenance (`ro.soc.model` vs `ro.board.platform` vs `Hardware (/proc/cpuinfo)` stored in `observed_props["source_soc_prop"]`).
+  - Updated `_save_evidence` and `retrieve_android_app_output` to write binary `write_bytes()` so SHA-256 evidence integrity remains exact across platforms.
+- `scripts/device_characterization/run_characterization.py`:
+  - Added `results_dir` override parameter and `device_serial` CLI argument (`--serial`).
+  - Added CLI argument collision check: `--require-device` + `--dry-run` raises `ValueError` (P-06).
+- `src/monitoring/characterization/report_generator.py`:
+  - P-01: Removed `self.update_device_capability_matrix(run_record)` call from `process_run`. A single characterization run NEVER mutates `research/experiments/device_capability_matrix.md`.
+  - P-05: Added SHA-256 evidence manifest integrity check in `validate_characterization_record`.
+- `src/monitoring/characterization/collectors.py`:
+  - P-03: Aligned parser keys with collector property lookups (`available_memory_mb`, `battery_level_percent`, `battery_voltage`, `battery_temperature`, `battery_current_now`, `cpu_scaling_cur_freq`, `gpu_clock_hz`).
+- `tests/test_device_characterization_connected_e2e.py` & `test_device_characterization_report.py`:
+  - P-02: Isolated all synthetic E2E tests strictly to `pytest tmp_path` temporary directories. No synthetic runs write to `research/results/device_characterization/`.
+  - Dynamic run IDs based on current UTC time (removed hard-coded `run_20261005_120000`).
+  - Added regression tests for P-01 to P-07.
+- `mobile/characterization/README.md`:
+  - Documented environmental prerequisites for reproducible Android build (R-05: JDK 17, Android SDK 34, AGP 8.2.2, Kotlin 1.9.22, Gradle 8.5 wrapper).
+
+### Research decisions
+- **P-01 Capability Matrix Preservation**: `research/experiments/device_capability_matrix.md` is an authoritative specification document and is never mutated by characterization runs.
+- **P-02 Synthetic Test Isolation**: All test-generated characterization outputs are strictly written to isolated temporary test directories (`tmp_path`) and cleaned up automatically.
+- **Strict Methodological Boundaries**: RQs, GC-03, C1-C4, R0-R3, r*, D-01..D-16 remain 100% frozen.
+
+### Verification
+- Full Python test suite executed TWICE: 282 passed in both runs (0 failed).
+- `git status` clean after both test passes: 0 untracked files, 0 synthetic test output folders in `research/results/device_characterization/`.
+- `research/experiments/device_capability_matrix.md` remains 100% unmutated.
+- Android build: `BUILD NOT EXECUTED — ENVIRONMENT LIMITATION` (JDK/SDK environment variables not set in execution shell; documented prerequisites in `mobile/characterization/README.md`).
+- Synthetic-test status: `VERIFIED ISOLATED (tmp_path)`.
+- Real-device status: `REAL OPPO A5 2020 CHARACTERIZATION: NOT YET PERFORMED`.
+
+### Uncertain items
+- Physical OPPO A5 2020 characterization must occur ONLY after an independent Claude Code review approves this software correction branch.
+
+### Remaining work
+- Push branch `antigravity/step-10d-final-correction` and open PR against `main`.
+- Independent Claude Code post-merge/post-correction review.
+
+### Git
+- Branch: `antigravity/step-10d-final-correction`
+- Starting main commit: `bb03d3b`
+- Push status: pending commit & push
+
