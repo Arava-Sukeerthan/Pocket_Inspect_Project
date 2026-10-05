@@ -2,7 +2,9 @@
 Step 9.9C tests: reconciliation of Step 9.9 Phase A and Step 9.9B, and the
 researcher approval gate for GC-03.
 
-GC-03 is approval-ready but NOT selected; research_gap.md must not exist.
+At Step 9.9C GC-03 was approval-ready but not selected. Step 10A recorded the
+researcher's explicit approval, so these tests now check the approved state
+(the pending wording is kept in the approval document as audit context).
 """
 import csv
 import hashlib
@@ -88,30 +90,38 @@ class TestReconciliationAndApprovalGate(unittest.TestCase):
         ids = [r[0] for r in rows[1:]]
         self.assertEqual(len(ids), len(set(ids)))
 
-    # 5-6. selection state
+    # 5-6. selection state (Step 10A: researcher approved GC-03)
     def test_selection_state(self):
         sel = self.sel["selection"]
-        self.assertIsNone(sel["selected_candidate"])
-        self.assertIsNone(sel["approved_by"])
-        self.assertEqual(sel["selection_status"], "researcher_approval_required")
-        self.assertFalse(sel["research_gap_file_created"])
-        self.assertFalse(self.sel["approval_ready"]["GC-03"]["selected"])
+        self.assertEqual(sel["selected_candidate"], "GC-03")
+        self.assertEqual(sel["approved_by"], "researcher")
+        self.assertEqual(sel["selection_status"], "researcher_approved")
+        self.assertEqual(sel["previous_status"], "researcher_approval_required")
+        self.assertEqual(sel["approval_statement"], "Approve GC-03 as the final research gap.")
+        self.assertTrue(sel["research_gap_file_created"])
+        self.assertTrue(self.sel["approval_ready"]["GC-03"]["selected"])
+        # the automated gate is unchanged (partially satisfied items remain)
         for cid in ("GC-01", "GC-02", "GC-03"):
             self.assertFalse(self.validator.can_select(cid))
         self.assertEqual(self.validator.validate(), [])
 
-    # 7-8. research_gap.md absent; approval document present and pending
+    # 7-8. research_gap.md present; approval document records the approval with audit trail
     def test_approval_document(self):
-        self.assertFalse((GAP_DIR / "research_gap.md").exists())
+        self.assertTrue((GAP_DIR / "research_gap.md").exists())
         self.assertTrue(APPROVAL.exists())
         self.assertTrue(self.approval.startswith("# Research Gap Approval — GC-03\n"))
         headings = re.findall(r"^## (\d+)\. (.+)$", self.approval, flags=re.MULTILINE)
         self.assertEqual([h[1] for h in headings], APPROVAL_SECTIONS)
         self.assertEqual([int(h[0]) for h in headings], list(range(1, 15)))
         status = self.approval.split("## 1. Candidate Status", 1)[1].split("\n## ", 1)[0]
-        self.assertIn("Status:\nRESEARCHER APPROVAL REQUIRED", status)
+        self.assertIn("Status:\nRESEARCHER APPROVED — GC-03", status)
+        self.assertIn('Audit trail (Step 9.9C, commit `72a828b`): status was "RESEARCHER APPROVAL REQUIRED"', status)
         decision = self.approval.split("## 14. Researcher Decision", 1)[1].strip()
-        self.assertEqual(decision, "DECISION: PENDING EXPLICIT RESEARCHER APPROVAL")
+        self.assertEqual(decision.splitlines()[0], "DECISION: GC-03 APPROVED AS THE FINAL RESEARCH GAP")
+        self.assertEqual([ln for ln in decision.splitlines() if ln.startswith("DECISION:")],
+                         ["DECISION: GC-03 APPROVED AS THE FINAL RESEARCH GAP"])
+        self.assertIn('this section read "PENDING EXPLICIT RESEARCHER APPROVAL"', decision)
+        self.assertIn('"Approve GC-03 as the final research gap."', decision)
 
     # 9. corpus-bounded GC-03 wording
     def test_wording_corpus_bounded(self):
@@ -119,7 +129,8 @@ class TestReconciliationAndApprovalGate(unittest.TestCase):
         self.assertEqual(wording, APPROVAL_WORDING)
         self.assertTrue(wording.startswith("Within the reviewed literature corpus"))
         self.assertIn(APPROVAL_WORDING, self.approval)
-        self.assertEqual(self.sel["approval_ready"]["GC-03"]["status"], "approval_ready_candidate")
+        self.assertEqual(self.sel["approval_ready"]["GC-03"]["status"], "researcher_approved")
+        self.assertEqual(self.sel["approval_ready"]["GC-03"]["previous_status"], "approval_ready_candidate")
         rq1 = self.sel["candidate_research_questions"]["GC-03"][0]
         self.assertEqual(rq1["text"], PRIMARY_RQ)
         self.assertIn(PRIMARY_RQ, self.approval)

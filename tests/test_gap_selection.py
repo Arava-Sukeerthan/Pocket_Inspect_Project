@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 
-from src.literature.gap_evaluation import sha256_of
+from src.literature.gap_evaluation import approval_state_errors, sha256_of
 from src.literature.gap_selection import DOCUMENT_SECTIONS, GapSelectionValidator
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,6 +44,8 @@ class _Sandbox:
         "research/literature/papers.csv",
         "research/gap_analysis/final_gap_selection_matrix.csv",
         "research/gap_analysis/final_gap_selection.md",
+        "research/gap_analysis/research_gap.md",
+        "research/gap_analysis/research_gap_approval.md",
     ]
 
     def __enter__(self):
@@ -72,6 +74,22 @@ class _Sandbox:
         text = path.read_text(encoding="utf-8")
         assert old in text, old
         path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+    def edit_file(self, rel, old, new):
+        path = self.root / rel
+        text = path.read_text(encoding="utf-8")
+        assert old in text, old
+        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+    def set_pending(self):
+        """Return the sandbox to a consistent STATE 1 (pending, no research_gap.md)."""
+        self.edit_config(lambda c: c["selection"].update(
+            selection_status="researcher_approval_required", selected_candidate=None, approved_by=None,
+            approval_date=None, research_gap_file_created=False))
+        self.edit_file("research/gap_analysis/research_gap_approval.md",
+                       "DECISION: GC-03 APPROVED AS THE FINAL RESEARCH GAP",
+                       "DECISION: PENDING EXPLICIT RESEARCHER APPROVAL")
+        (self.root / "research/gap_analysis/research_gap.md").unlink()
 
     def rewrite_matrix(self, mutate):
         path = self.root / "research/gap_analysis/final_gap_selection_matrix.csv"
@@ -117,13 +135,16 @@ class TestCommittedSelectionFramework(unittest.TestCase):
             self.assertIn(row["confidence"], v.config["confidence_values"])
         self.assertIn("Listed in ID order; no ordering of merit is implied.", v.document())
 
-    # 5. no winner/selection; 14. selection gate researcher-controlled
+    # 5. no automatic winner/selection; 14. selection gate researcher-controlled.
+    # Step 10A: the only selection is the researcher's explicit approval of GC-03.
     def test_no_selection_and_gate_is_researcher_controlled(self):
         v = _v()
         sel = v.config["selection"]
-        self.assertIsNone(sel["selected_candidate"])
-        self.assertIsNone(sel["approved_by"])
-        self.assertFalse(sel["research_gap_file_created"])
+        self.assertEqual(sel["selection_status"], "researcher_approved")
+        self.assertEqual(sel["selected_candidate"], "GC-03")
+        self.assertEqual(sel["approved_by"], "researcher")
+        self.assertTrue(sel["research_gap_file_created"])
+        # the automated gate is unchanged: GC-03 gate items stay partially satisfied
         for cid in CANDIDATES:
             self.assertFalse(v.can_select(cid))
         self.assertEqual(v.check_gate(), [])
@@ -142,9 +163,10 @@ class TestCommittedSelectionFramework(unittest.TestCase):
             self.assertNotEqual(set(statuses), {"satisfied"}, cid)
         self.assertIn("not** grounds for eliminating any candidate", v.document())
 
-    # 6. research_gap.md does not exist
+    # 6. research_gap.md follows the approval lifecycle (exists only once approved)
     def test_research_gap_md_absent(self):
-        self.assertFalse((GAP_DIR / "research_gap.md").exists())
+        approved = _v().config["selection"]["selection_status"] == "researcher_approved"
+        self.assertEqual((GAP_DIR / "research_gap.md").exists(), approved)
         self.assertEqual(_v().check_selection_state(), [])
 
     # 7. papers.csv frozen
@@ -234,9 +256,11 @@ class TestSelectionViolationsRejected(unittest.TestCase):
             self.assertFalse(sb.validator().can_select("GC-01"))  # gate not satisfied
 
     def test_rejects_research_gap_file(self):
+        # pending status + research_gap.md exists
         with _Sandbox() as sb:
+            sb.set_pending()
             (sb.root / "research/gap_analysis/research_gap.md").write_text("# gap\n", encoding="utf-8")
-            self.assertTrue(sb.validator().check_selection_state())
+            self.assertTrue(any("research_gap.md exists" in e for e in sb.validator().check_selection_state()))
 
     def test_rejects_score_column(self):
         with _Sandbox() as sb:
@@ -301,6 +325,75 @@ class TestSelectionViolationsRejected(unittest.TestCase):
                 return f, rows
             sb.rewrite_matrix(mutate)
             self.assertTrue(any("2603.16451" in e for e in sb.validator().check_counterexamples()))
+
+
+class TestApprovalLifecycle(unittest.TestCase):
+    """Step 10A: STATE 1 (pending) and STATE 2 (approved) are valid; every
+    inconsistent combination is rejected."""
+
+    def test_committed_state_is_consistent_approved(self):
+        self.assertEqual(_v().check_selection_state(), [])
+        self.assertEqual(approval_state_errors(ROOT, _v().config), [])
+
+    def test_consistent_pending_state_accepted(self):
+        with _Sandbox() as sb:
+            sb.set_pending()
+            self.assertEqual(sb.validator().check_selection_state(), [])
+
+    def test_rejects_approved_without_candidate(self):
+        with _Sandbox() as sb:
+            sb.edit_config(lambda c: c["selection"].update(selected_candidate=None))
+            self.assertTrue(any("selected_candidate is null" in e for e in sb.validator().check_selection_state()))
+
+    def test_rejects_approved_without_research_gap_file(self):
+        with _Sandbox() as sb:
+            (sb.root / "research/gap_analysis/research_gap.md").unlink()
+            self.assertTrue(any("research_gap.md missing" in e for e in sb.validator().check_selection_state()))
+
+    def test_rejects_approved_with_pending_approval_document(self):
+        with _Sandbox() as sb:
+            sb.edit_file("research/gap_analysis/research_gap_approval.md",
+                         "DECISION: GC-03 APPROVED AS THE FINAL RESEARCH GAP",
+                         "DECISION: PENDING EXPLICIT RESEARCHER APPROVAL")
+            self.assertTrue(any("§14" in e for e in sb.validator().check_selection_state()))
+
+    def test_rejects_pending_with_research_gap_file(self):
+        with _Sandbox() as sb:
+            sb.edit_config(lambda c: c["selection"].update(
+                selection_status="researcher_approval_required", selected_candidate=None, approved_by=None,
+                approval_date=None, research_gap_file_created=False))
+            errors = sb.validator().check_selection_state()
+            self.assertTrue(any("research_gap.md exists" in e for e in errors))
+            self.assertTrue(any("records an approval" in e for e in errors))
+
+    def test_rejects_candidate_other_than_gc03(self):
+        for cid in ("GC-01", "GC-02", "GC-99"):
+            with _Sandbox() as sb:
+                sb.edit_config(lambda c, cid=cid: c["selection"].update(selected_candidate=cid))
+                self.assertTrue(sb.validator().check_selection_state(), cid)
+
+    def test_rejects_changed_research_gap_wording(self):
+        with _Sandbox() as sb:
+            sb.edit_file("research/gap_analysis/research_gap.md", "> Within the reviewed literature corpus, there is limited",
+                         "> There is no")
+            self.assertTrue(any("wording differs" in e for e in sb.validator().check_selection_state()))
+
+    def test_rejects_inconsistent_metadata(self):
+        mutations = (
+            lambda c: c["selection"].update(approved_by=None),
+            lambda c: c["selection"].update(approval_date=None),
+            lambda c: c["selection"].update(research_gap_file_created=False),
+            lambda c: c["selection"].update(approval_statement="Approve GC-01 as the final research gap."),
+            lambda c: c["approval_ready"]["GC-03"].update(selected=False),
+            lambda c: c["approval_ready"]["GC-03"].update(
+                researcher_decision="DECISION: PENDING EXPLICIT RESEARCHER APPROVAL"),
+            lambda c: c["approval_ready"]["GC-03"].update(approval_date="2026-01-01"),
+            lambda c: c["selection"].update(selection_status="approved"),
+        )
+        for i, mutate in enumerate(mutations):
+            with _Sandbox() as sb:
+                sb.edit_config(mutate)
+                self.assertTrue(sb.validator().check_selection_state(), i)
 
 
 if __name__ == "__main__":

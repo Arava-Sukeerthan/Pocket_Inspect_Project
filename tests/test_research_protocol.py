@@ -14,6 +14,8 @@ from pathlib import Path
 
 import yaml
 
+from src.literature.gap_evaluation import lifecycle_errors
+
 ROOT = Path(__file__).resolve().parent.parent
 GAP_DOC = ROOT / "research" / "gap_analysis" / "research_gap.md"
 RQ_DIR = ROOT / "research" / "research_questions"
@@ -115,7 +117,16 @@ class TestResearchProtocol(unittest.TestCase):
         self.assertIn(f"> {APPROVED_GAP}", self.gap)
         self.assertEqual(self.cfg["approved_gap"]["wording"], APPROVED_GAP)
         self.assertEqual(self.cfg["approved_gap"]["id"], "GC-03")
-        self.assertEqual(self.cfg["approved_gap"]["approval_status"], "approved")
+        self.assertEqual(self.cfg["approved_gap"]["approval_status"], "researcher_approved")
+        sel = yaml.safe_load((ROOT / "configs" / "gap_selection.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(sel["selection"]["selection_status"], "researcher_approved")
+        self.assertEqual(sel["selection"]["selected_candidate"], "GC-03")
+        self.assertEqual(sel["approval_ready"]["GC-03"]["candidate_gap"], APPROVED_GAP)
+        for key in ("approved_by", "approval_date", "approval_statement"):
+            self.assertEqual(self.cfg["approved_gap"][key], sel["selection"][key], key)
+        self.assertEqual(lifecycle_errors(ROOT), [])
+        section1 = _section(self.gap, "## 1. Research Gap")
+        self.assertEqual([ln[2:] for ln in section1.splitlines() if ln.startswith("> ")], [APPROVED_GAP])
         self.assertIn("**APPROVED — GC-03 is the approved PocketInspect research gap.**",
                       _section(self.gap, "## 8. Approval Status"))
         self.assertTrue(APPROVED_GAP.startswith("Within the reviewed literature corpus"))
@@ -290,6 +301,36 @@ class TestResearchProtocol(unittest.TestCase):
                   "Memory", "Recapture rate", "Escalation rate", "Verification overhead", "Dataset", "Test split",
                   "Device model", "Software version", "Defect type", "Scene complexity", "Image quality"):
             self.assertIn(v, self.var, v)
+
+    # recovery metric retained, with the zero/negligible-denominator edge case
+    def test_recovery_metric_edge_case(self):
+        rec = self.hyp.split("- **Recovery proportion.**", 1)[1].split("\n- **Pairing", 1)[0]
+        self.assertIn("Recovery = (B5 − B3) / (B1 − B3)", rec)
+        self.assertIn("If the B1 − B3 denominator is zero or practically negligible, the recovery ratio is "
+                      "undefined or uninformative and **must not be interpreted as evidence of recovery**.", rec)
+        self.assertIn("`to_be_preregistered`; no numerical threshold is set here", rec)
+
+    # telemetry vs experimental resource condition vs adaptation decision
+    def test_resource_variable_layers(self):
+        layers = self.var.split("### 1.1 Three layers of resource variables", 1)[1].split("\n## ", 1)[0]
+        for layer in ("| 1. Measured resource telemetry |", "| 2. Experimental resource condition |",
+                      "| 3. Adaptation decision |"):
+            self.assertIn(layer, layers)
+        self.assertIn("Not independently manipulated factors unless a later experimental protocol specifies it.", layers)
+        ivs = _section(self.var, "## 2. Independent Variables")
+        for telemetry in ("Battery state", "Temperature", "CPU/GPU utilisation", "Available memory"):
+            row = next(ln for ln in ivs.splitlines() if ln.startswith(f"| {telemetry}"))
+            self.assertIn("Layer 1: measured telemetry", row)
+            self.assertIn("Not independently manipulated", row)
+        for r in self.rows:
+            for telemetry in ("battery state", "CPU/GPU utilization", "available memory"):
+                self.assertNotIn(telemetry, _split(r["Independent_Variables"]), r["ID"])
+
+    # B5-F is an ablation of B5, never a sixth primary baseline
+    def test_b5f_is_ablation(self):
+        self.assertNotIn("B5-F", self.cfg["baselines"])
+        self.assertEqual(len(self.cfg["baselines"]), 5)
+        self.assertEqual(self.cfg["ablation_variants"]["B5-F"]["parent"], "B5")
 
     # 15-16. no implementation files, no datasets, no results created
     def test_no_implementation_datasets_or_results(self):

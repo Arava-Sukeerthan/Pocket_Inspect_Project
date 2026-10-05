@@ -7,6 +7,7 @@ import csv
 import tempfile
 import unittest
 from pathlib import Path
+from src.literature.gap_evaluation import lifecycle_errors
 
 import yaml
 
@@ -328,7 +329,9 @@ class TestCommittedGapAnalysis(unittest.TestCase):
             self.analyzer.write_gap_candidates_markdown(Path(tmp) / "gap_candidates.md")
             self.assertFalse((Path(tmp) / "research_gap.md").exists())
             md = (Path(tmp) / "gap_candidates.md").read_text(encoding="utf-8").lower()
-        self.assertFalse((GAP_DIR / "research_gap.md").exists())
+        # the generator never writes research_gap.md; the committed file is governed by the
+        # approval lifecycle (Step 10A) and may exist only in a consistent approved state
+        self.assertEqual(lifecycle_errors(GAP_DIR.parent.parent), [])
         for phrase in ("the research gap is", "selected gap", "final gap:", "recommended gap"):
             self.assertNotIn(phrase, md)
 

@@ -4,6 +4,8 @@ _Step 9.9C, 2026-10-05, Claude Code._
 
 This is an approval document. It is **not** `research_gap.md`, it does not select GC-03, and it is not a ranking. GC-01 and GC-02 remain candidate gaps.
 
+> **Step 10A update (2026-10-05).** The researcher explicitly approved GC-03 ("Approve GC-03 as the final research gap."). The decision is recorded in §14, and the approved gap is in [`research_gap.md`](research_gap.md). Sections 2–13 are kept unchanged as the Step 9.9C evidence record; the status lines in §1 and §14 keep the pre-approval wording as audit context.
+
 Sources:
 - `configs/gap_selection.yaml` (`approval_ready.GC-03`, `evidence_closure.GC-03`, `selection`);
 - [`gc03_evidence_closure.md`](gc03_evidence_closure.md);
@@ -15,9 +17,10 @@ Frozen corpus: `research/literature/papers.csv`, SHA-256 `c8fac51d5d80abd25f0981
 ## 1. Candidate Status
 
 Status:
-RESEARCHER APPROVAL REQUIRED
+RESEARCHER APPROVED — GC-03 (Step 10A, 2026-10-05)
 
-- `selection_status: researcher_approval_required`; `selected_candidate: null`.
+- Current: `selection_status: researcher_approved`; `selected_candidate: GC-03`.
+- Audit trail (Step 9.9C, commit `72a828b`): status was "RESEARCHER APPROVAL REQUIRED", with `selection_status: researcher_approval_required` and `selected_candidate: null`. The remaining bullets record that pre-approval state.
 - Evidence closure is complete for GC-03, but final research-gap selection requires explicit researcher approval.
 - GC-03 is an approval-ready candidate. It is not selected.
 
@@ -198,4 +201,15 @@ The 13 datasets are **not** claimed to be available, licensed or smartphone data
 
 ## 14. Researcher Decision
 
-DECISION: PENDING EXPLICIT RESEARCHER APPROVAL
+DECISION: GC-03 APPROVED AS THE FINAL RESEARCH GAP
+
+| Field | Value |
+| :-- | :-- |
+| Approved candidate | GC-03 |
+| Approved by | Researcher |
+| Date | 2026-10-05 |
+| Explicit approval | "Approve GC-03 as the final research gap." |
+| Approved wording | §2 (corpus-bounded); official document [`research_gap.md`](research_gap.md) |
+| Limitations accepted | §5, §6–§8 and §13 are retained; gate questions marked partially satisfied stay partially satisfied. |
+
+Audit trail: at Step 9.9C (commit `72a828b`) this section read "PENDING EXPLICIT RESEARCHER APPROVAL". GC-01 and GC-02 were not approved and remain candidate gaps; no candidate was ranked.

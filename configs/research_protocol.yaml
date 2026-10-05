@@ -15,15 +15,12 @@ status: "Research specification — no implementation, no experiments, no measur
 approved_gap:
   id: GC-03
   wording: "Within the reviewed literature corpus, there is limited evidence of an integrated resource-aware smartphone visual-inspection system in which device-state-driven runtime adaptation is coupled with confidence-aware downstream verification, particularly for recovering inspection performance under resource-induced model/configuration degradation."
-  approval_status: approved
+  approval_status: researcher_approved
   approved_by: researcher
   approval_date: "2026-10-05"
-  approval_source: "Step 10A task instruction from the researcher: 'GC-03 has now been explicitly approved by the researcher as the FINAL research gap.'"
-  approval_record: research/gap_analysis/research_gap.md
-  # research_gap_approval.md section 14 and configs/gap_selection.yaml `selection`
-  # still record the Step 9.9C pending state; updating them (and the Step
-  # 9.8-9.9C guard-rails that forbid research_gap.md) awaits a researcher decision.
-  pre_step_10A_records_updated: false
+  approval_statement: "Approve GC-03 as the final research gap."
+  approval_record: research/gap_analysis/research_gap_approval.md
+  selection_config: configs/gap_selection.yaml
   official_document: research/gap_analysis/research_gap.md
 
 primary_rq: "Can confidence-aware downstream verification recover inspection accuracy lost when a resource-constrained smartphone dynamically downgrades its inference configuration under changing device conditions?"

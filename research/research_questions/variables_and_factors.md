@@ -11,6 +11,18 @@ The same quantity can play different roles, so every variable is tagged with one
 - **Measurement variable.** Observed and logged; it is never chosen by the system. Examples: battery level, temperature, latency, recall.
 - **Decision variable.** Chosen by a policy (or forced by the experimenter). Examples: resource state R (derived from telemetry by the state classifier), configuration C, verification action A, confidence threshold.
 
+### 1.1 Three layers of resource variables
+
+Measured telemetry, experimental resource condition and adaptation decision are different things and are never conflated.
+
+| Layer | What it is | Examples | Role in the design |
+| :-- | :-- | :-- | :-- |
+| 1. Measured resource telemetry | Raw signals read from the device | Battery level and charging state, temperature / thermal status, CPU/GPU utilisation and frequency, available RAM, power-saver mode | **Measurement variables.** Logged continuously as covariates and as manipulation checks. Not independently manipulated factors unless a later experimental protocol specifies it. |
+| 2. Experimental resource condition | The qualitative state R0–R3 | R0 nominal … R3 critical | **The manipulated resource factor.** The experimenter induces a target condition through a pressure protocol (load, thermal soak, battery/power-saver state). Telemetry verifies that the intended condition was reached; at runtime the policy classifies telemetry into R. |
+| 3. Adaptation decision | The configuration C1–C4 chosen for an item | C1 → C2 under R1 | **Decision variable.** Forced by the experimenter in E1 (an independent variable); chosen by the policy from R in E2 (B3, B5), where it is a logged mediator, not a manipulated factor. |
+
+The individual telemetry signals are correlated (load raises temperature; temperature triggers throttling), and the pressure protocol does not set them independently. Treating them as separate experimental factors would claim a factorial control that the design does not have. Analyses may use them as covariates only.
+
 Consequences for the design:
 - In **E1** (forced sweep) configuration and induced resource state are **manipulated** by the experimenter, so they are true independent variables.
 - In **E2** (policy-driven) configuration and action are **endogenous**: they are outputs of the policies, driven by the resource-pressure schedule. The manipulated independent variables are the baseline (which mechanisms are enabled) and the pressure schedule; configuration and action are logged as mediators.
@@ -20,12 +32,12 @@ Consequences for the design:
 
 | Variable | Kind | Levels / form | Manipulated in |
 | :-- | :-- | :-- | :-- |
-| Battery state (level, charging state, power-saver mode) | Measurement (input to R) | Induced by discharge protocol or power-saver setting | E1, E2 |
-| Temperature (device thermal status, battery/skin temperature) | Measurement (input to R) | Induced by thermal soak / sustained load | E1, E2 |
-| CPU/GPU utilisation (and frequency where readable) | Measurement (input to R) | Induced by scripted background load | E1, E2 |
-| Available memory | Measurement (input to R) | Induced by scripted memory pressure | E1, E2 |
-| Resource-pressure condition | Decision (experimenter) | R0–R3 (E1); scripted R-state schedule (E2) | E1, E2 |
-| Inference configuration | Decision | C1–C4 | Forced in E1; policy-chosen in E2 (B3, B5) |
+| Resource-pressure condition | Layer 2: experimental condition (manipulated) | R0–R3 (E1); scripted R-state schedule (E2), induced by the pressure protocol | E1, E2 |
+| Battery state (level, charging state, power-saver mode) | Layer 1: measured telemetry (input to R; manipulation check) | Logged; moved by the discharge / power-saver part of the protocol, not set independently | Not independently manipulated |
+| Temperature (device thermal status, battery/skin temperature) | Layer 1: measured telemetry (input to R; manipulation check) | Logged; moved by thermal soak / sustained load | Not independently manipulated |
+| CPU/GPU utilisation (and frequency where readable) | Layer 1: measured telemetry (input to R; manipulation check) | Logged; moved by scripted background load | Not independently manipulated |
+| Available memory | Layer 1: measured telemetry (input to R; manipulation check) | Logged; moved by scripted memory pressure | Not independently manipulated |
+| Inference configuration | Layer 3: adaptation decision | C1–C4 | Forced in E1; policy-chosen in E2 (B3, B5), logged as mediator |
 | Adaptation state | Decision | Adaptation enabled/disabled; current state and transition history | E2 |
 | Confidence threshold | Decision | Per configuration (B5) or fixed global (B5-F); values `to_be_calibrated` | E2, E3 |
 | Baseline condition | Decision (experimenter) | B1–B5, B5-F | E2, E3 |

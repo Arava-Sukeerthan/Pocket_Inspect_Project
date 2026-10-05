@@ -11,7 +11,11 @@ Baselines (B1–B5, B5-F), experiments (E1–E3), resource states (R0–R3), con
 - **Primary accuracy metric (M).** Defect recall on the test items. Secondary: precision, F1, and mAP where the task is detection. Metrics are reported both for the automated decision and with human-review referrals (A4) counted separately, never silently as correct.
 - **Coverage.** The proportion of items decided without A4. Any accuracy comparison involving A4 is reported at matched coverage or as a risk–coverage curve, so that recovery cannot be produced by referring everything to a human.
 - **Degradation.** Δ_deg = M(B1) − M(B3), on the same items under the same resource-pressure schedule.
-- **Recovery proportion.** ρ = [M(B5) − M(B3)] / [M(B1) − M(B3)]. ρ is defined only when the confidence interval for Δ_deg lies above zero (H1); otherwise H2 is reported as not testable rather than as supported or refuted.
+- **Recovery proportion.** Recovery = (B5 − B3) / (B1 − B3), i.e. ρ = [M(B5) − M(B3)] / [M(B1) − M(B3)].
+  - **Edge case (denominator).** If the B1 − B3 denominator is zero or practically negligible, the recovery ratio is undefined or uninformative and **must not be interpreted as evidence of recovery**. A tiny denominator inflates ρ arbitrarily and makes its sign unstable.
+  - "Practically negligible" means the confidence interval for Δ_deg = M(B1) − M(B3) does not lie entirely above the pre-registered SESOI. The SESOI is `to_be_preregistered`; no numerical threshold is set here.
+  - In that case, ρ is not reported as a recovery estimate. H2 is reported as **not testable** (neither supported nor refuted), and only the absolute difference M(B5) − M(B3), with its CI, is reported descriptively.
+  - ρ is computed only when the confidence interval for Δ_deg lies above zero and beyond the SESOI (H1 statistically and practically supported).
 - **Pairing.** All baselines run on the same item sequence and the same scripted resource-pressure schedule, so item-level comparisons are paired.
 - **Repeated runs.** Each condition is repeated; the number of runs is `to_be_preregistered`. Run is a random effect in device-level cost models.
 - **Multiplicity.** Holm correction across the confirmatory tests H1–H5.

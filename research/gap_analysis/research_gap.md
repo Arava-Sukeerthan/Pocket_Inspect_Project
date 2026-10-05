@@ -80,10 +80,10 @@ Integrating resource-aware inference, smartphone inspection and confidence gatin
 | :-- | :-- |
 | Approved by | Researcher |
 | Date | 2026-10-05 |
-| Source | Step 10A task instruction: "GC-03 has now been explicitly approved by the researcher as the FINAL research gap." |
-| Repository state before Step 10A | `research_gap_approval.md` §14 read "DECISION: PENDING EXPLICIT RESEARCHER APPROVAL" (commit `72a828b`). |
-| Recorded in | This section; `configs/research_protocol.yaml` `approved_gap` |
-| Not yet updated | `research_gap_approval.md` §14 and `configs/gap_selection.yaml` `selection` still record the Step 9.9C pending state. The Step 9.8–9.9C validators and tests also require that this file does not exist. Updating them needs a researcher decision (see the Step 10A CHANGELOG entry). |
+| Explicit approval | "Approve GC-03 as the final research gap." |
+| Selection state | `configs/gap_selection.yaml`: `selection_status: researcher_approved`, `selected_candidate: GC-03` |
+| Decision record | `research_gap_approval.md` §14: "DECISION: GC-03 APPROVED AS THE FINAL RESEARCH GAP" |
+| Repository state before Step 10A | `researcher_approval_required` / pending (commit `72a828b`), kept as audit context in `research_gap_approval.md`. |
 
 GC-01 and GC-02 are not approved and remain candidate gaps with their Phase A status. No candidate was ranked.
 

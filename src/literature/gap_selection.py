@@ -12,7 +12,9 @@ never ranks, scores or selects a candidate. Phase A guard-rails enforced here:
 
 * the canonical corpus is frozen and the candidate wording matches Step 9.8;
 * assessments are qualitative (no numeric ranks, scores or weights);
-* no candidate is selected and ``research_gap.md`` does not exist;
+* selection follows the approval lifecycle: either no candidate is selected and
+  ``research_gap.md`` does not exist, or the researcher's approval is recorded
+  consistently and ``research_gap.md`` exists (``approval_state_errors``);
 * candidate research questions are measurable, falsifiable and labelled as
   candidates rather than final RQs;
 * Unknowns, counterexamples and dataset uncertainty stay explicit;
@@ -26,7 +28,7 @@ from typing import Dict, List, Optional
 
 import yaml
 
-from src.literature.gap_evaluation import sha256_of
+from src.literature.gap_evaluation import approval_state_errors, sha256_of
 
 DOCUMENT_SECTIONS = (
     "Purpose",
@@ -187,14 +189,12 @@ class GapSelectionValidator:
         return errors
 
     def check_selection_state(self) -> List[str]:
-        errors = []
-        sel = self.config["selection"]
-        if sel.get("selected_candidate") is not None or sel.get("approved_by") is not None:
-            errors.append("a candidate is selected or approved in Phase A")
-        if sel.get("research_gap_file_created"):
-            errors.append("research_gap_file_created must be false in Phase A")
+        """Enforce the approval lifecycle (STATE 1 pending / STATE 2 approved) and
+        reject every inconsistent combination. Other forbidden files stay forbidden."""
+        governed = set(self.config["guards"].get("lifecycle_governed_files", []))
+        errors = approval_state_errors(self.root, self.config)
         for rel in self.config["guards"]["forbidden_files"]:
-            if (self.root / rel).exists():
+            if rel not in governed and (self.root / rel).exists():
                 errors.append(f"{rel} exists")
         return errors
 

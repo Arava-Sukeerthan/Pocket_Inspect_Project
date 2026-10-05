@@ -306,3 +306,7 @@ guards:
   required_closing_sentence: "Final research-gap selection remains a researcher decision and is outside Step 9.8."
   forbidden_files:
     - research/gap_analysis/research_gap.md
+  # Step 10A: research_gap.md is governed by the approval lifecycle in
+  # configs/gap_selection.yaml (allowed only in a consistent researcher_approved state).
+  lifecycle_governed_files:
+    - research/gap_analysis/research_gap.md
