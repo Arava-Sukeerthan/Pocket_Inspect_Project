@@ -1,0 +1,61 @@
+# Step 10B: dataset, smartphone, model ladder and measurement design (GC-03).
+#
+# Declarative decision record only. No dataset is downloaded, no model is
+# trained or benchmarked, no device is selected and no value is measured.
+# Every quantity that will need a number is `to_be_calibrated`,
+# `to_be_preregistered` or `requires_empirical_benchmarking`.
+# Documents: research/datasets/*.md; matrix: research/datasets/dataset_device_model_matrix.csv
+
+step: "10B"
+decision_statuses: [VERIFIED, SUPPORTED, PROVISIONAL, REQUIRES_VERIFICATION]
+suitability_classes: [SUITABLE, POSSIBLY_SUITABLE, UNSUITABLE, REQUIRES_VERIFICATION]
+telemetry_classes: [AVAILABLE, CONDITIONALLY_AVAILABLE, UNAVAILABLE, REQUIRES_EXTERNAL_INSTRUMENTATION]
+
+datasets:
+  primary: {name: Real-IAD, status: PROVISIONAL, access: REQUIRES_VERIFICATION, license: REQUIRES_VERIFICATION}
+  secondary: {name: Phone-captured 3D-printed-part set, status: PROVISIONAL, kind: custom_capture_protocol_only}
+  fallback_primary: {name: MANTA, status: REQUIRES_VERIFICATION}
+  replay_sanity_set: {name: VisA, status: SUPPORTED, basis: "licence stated as CC BY 4.0 in the official repository README; not verified"}
+  custom_smartphone_capture_required: true
+  verified_licenses: []
+  downloaded: []
+
+device:
+  selected: null
+  available_devices_known: []
+  candidate_classes: [D1_pixel_class, D2_midrange_snapdragon_class, D3_low_cost_legacy_class]
+  min_api_level_thermal_status: 29
+  preferred_api_level_thermal_headroom: 30
+  status: REQUIRES_VERIFICATION
+
+model_ladder:
+  C1: {family_candidates: [EfficientNet-family, ConvNeXt-Tiny-class], precision: FP16, backend: accelerator, metrics: requires_empirical_benchmarking, selected: false}
+  C2: {family_candidates: [EfficientNet-Lite, MobileNetV3-Large-class], precision: FP16_or_INT8, backend: accelerator, metrics: requires_empirical_benchmarking, selected: false}
+  C3: {family_candidates: [MobileNetV3-Small-class], precision: INT8, backend: accelerator_or_cpu, metrics: requires_empirical_benchmarking, selected: false}
+  C4: {family_candidates: [same_as_C3], precision: INT8, backend: cpu, metrics: requires_empirical_benchmarking, selected: false}
+  runtime: REQUIRES_VERIFICATION
+  status: PROVISIONAL
+
+confidence:
+  primary_signal: temperature_scaled_probability
+  calibration: per_configuration_temperature_scaling
+  threshold_rule: to_be_preregistered
+  thresholds: to_be_calibrated
+  secondary_option: split_conformal_per_configuration
+  gating_definition: "confidence, probability or uncertainty triggers a downstream action (A1-A4); logging a score alone is reporting, not gating"
+  status: PROVISIONAL
+
+energy:
+  strategy: external_reference_plus_validated_software_counters
+  external_meter_validation_required: true
+  sampling_rate: to_be_determined
+  status: PROVISIONAL
+
+thermal:
+  temperature_and_throttling_state_logged_separately: true
+  status: PROVISIONAL
+
+multi_view:
+  stage1_additional_view_proxy: Real-IAD stored views
+  same_view_recapture_in_static_benchmarks: false
+  status: PROVISIONAL
