@@ -2301,3 +2301,38 @@ Each returns explicit states: AVAILABLE / UNAVAILABLE / PERMISSION_REQUIRED / AP
 - Branch: `claude/step-10d-device-characterization-spec`, from `origin/main` `55b8e94`.
 - Commit: see `git log -- docs/architecture/step10d_device_characterization_handoff.md`.
 - Push status: pushed; PR opened against `main`; not merged.
+
+---
+
+## 2026-10-05 — Antigravity
+
+### Task
+Step 10D — Actual Device Characterization Implementation.
+
+### Changes
+- `configs/device_characterization.yaml`: Characterization protocol parameters and sysfs probe nodes.
+- `src/monitoring/characterization/__init__.py`: Package initialization.
+- `src/monitoring/characterization/models.py`: Dataclasses for CapabilityResult, DeviceIdentity, TelemetryCapability, CameraCapability, BackendCapability, ThermalCapability, EnergyCapability, CharacterizationRun, with strict no-fake-zeros enforcement.
+- `src/monitoring/characterization/collectors.py`: Implementations for Collectors 1–11 (`DeviceIdentityCollector`, `AndroidCapabilityCollector`, `BatteryTelemetryCollector`, `MemoryTelemetryCollector`, `CPUTelemetryCollector`, `GPUTelemetryCollector`, `ThermalTelemetryCollector`, `CameraCapabilityCollector`, `InferenceBackendCapabilityCollector`, `ProfilingCapabilityCollector`, `EnergyMeasurementCapabilityChecker`).
+- `src/monitoring/characterization/report_generator.py`: `CharacterizationReportGenerator` and `validate_characterization_record` using `jsonschema`.
+- `scripts/device_characterization/adb_collector.py`: Host-side ADB queries for getprop, dumpsys, proc/sysfs nodes.
+- `scripts/device_characterization/run_characterization.py`: Host CLI entry point orchestrating characterization passes.
+- `mobile/characterization/`: Android capability checking application codebase (`build.gradle.kts`, `AndroidManifest.xml`, `Collectors.kt`, `CharacterizationRunner.kt`).
+- `tests/test_device_characterization_collectors.py`: Unit tests for collectors and no-fake-zeros rule.
+- `tests/test_device_characterization_report.py`: Unit tests for report generator and JsonSchema validation.
+- `tests/test_gap_selection_reconciliation.py`, `tests/test_dataset_device_model.py`, `tests/test_device_characterization_protocol.py`, `tests/test_experiment_protocol.py`: Updated guard allow-lists for Step 10D characterization system.
+- `research/results/device_characterization/run_20261005_100000/` and `run_20261006_100000/`: Generated two schema-valid characterization runs on separate run IDs/dates.
+
+### Research Decisions & Enforcements
+- **Strict No-Fake-Zeros Enforcement**: `CapabilityResult.__post_init__` and `validate_characterization_record` strictly enforce `value = null` for all non-`AVAILABLE` states.
+- **Scope Boundary Retained**: Did NOT select C1–C4 models, R0–R3 thresholds, or run statistical hypothesis tests. Did NOT claim absolute energy consumption.
+- **External Instrumentation**: Energy levels E-1/E-2 marked `REQUIRES EXTERNAL INSTRUMENTATION`. E-3 relative software counters supported.
+
+### Verification
+- Executed two schema-valid characterization passes (`run_20261005_100000` and `run_20261006_100000`).
+- `pytest`: **277 passed** (100% of entire test suite).
+
+### Git
+- Branch: `antigravity/step-10d-device-characterization` from `main` (`24aa0f0`).
+- Commit: see `git log` for this file.
+

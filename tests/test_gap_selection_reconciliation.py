@@ -202,15 +202,19 @@ class TestReconciliationAndApprovalGate(unittest.TestCase):
         self.assertTrue(all("NOT selected" in r["verification_needed"]
                             for r in gc03 if "approval-ready" in r["verification_needed"]))
 
-    # 19. no implementation code started
+    # 19. no core implementation code started (narrowed for Step 10D characterization allow-list)
     def test_no_implementation_started(self):
-        for module in ("acquisition", "adaptation", "inference", "inspection", "monitoring", "quality", "uncertainty"):
+        for module in ("acquisition", "adaptation", "inference", "inspection", "quality", "uncertainty"):
             files = sorted(p.name for p in (ROOT / "src" / module).iterdir() if p.name != "__pycache__")
             self.assertEqual(files, ["README.md", "__init__.py"], module)
             self.assertLessEqual(len((ROOT / "src" / module / "__init__.py").read_text().splitlines()), 5, module)
-        for folder in ("mobile", "experiments", "models", "backend"):
+        mon_files = sorted(p.name for p in (ROOT / "src" / "monitoring").iterdir() if p.name != "__pycache__")
+        self.assertLessEqual(set(mon_files) - {"README.md", "__init__.py"}, {"characterization"})
+        for folder in ("experiments", "models", "backend"):
             files = sorted(p.name for p in (ROOT / folder).iterdir())
             self.assertEqual(files, ["README.md"], folder)
+        mob_files = sorted(p.name for p in (ROOT / "mobile").iterdir())
+        self.assertLessEqual(set(mob_files) - {"README.md"}, {"characterization"})
         self.assertEqual(self.sel["approval_ready"]["GC-03"]["experiment_status"], "planning_artifact_only")
 
     # 20. hypotheses untested

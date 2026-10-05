@@ -272,16 +272,22 @@ class TestDatasetDeviceModel(unittest.TestCase):
                              capture_output=True, text=True).stdout.split()
         for rel in out:
             self.assertNotIn(Path(rel).suffix.lower(), data_ext, rel)
-        for folder in ("results", "figures", "tables", "manuscript_data"):
+        for folder in ("figures", "tables", "manuscript_data"):
             self.assertEqual(sorted(p.name for p in (ROOT / "research" / folder).iterdir()), ["README.md"], folder)
+        res_files = sorted(p.name for p in (ROOT / "research" / "results").iterdir())
+        self.assertLessEqual(set(res_files) - {"README.md"}, {"device_characterization"})
         # research/experiments holds only the README and the Step 10C protocol documents (no runs, no results)
         self.assertLessEqual({p.name for p in (ROOT / "research" / "experiments").iterdir()} - {"README.md"},
                              STEP_10C_PROTOCOL_DOCS)
-        for folder in ("experiments", "mobile", "models", "backend"):
+        for folder in ("experiments", "models", "backend"):
             self.assertEqual(sorted(p.name for p in (ROOT / folder).iterdir()), ["README.md"], folder)
-        for module in ("acquisition", "adaptation", "inference", "inspection", "monitoring", "quality", "uncertainty"):
+        mob_files = sorted(p.name for p in (ROOT / "mobile").iterdir())
+        self.assertLessEqual(set(mob_files) - {"README.md"}, {"characterization"})
+        for module in ("acquisition", "adaptation", "inference", "inspection", "quality", "uncertainty"):
             files = sorted(p.name for p in (ROOT / "src" / module).iterdir() if p.name != "__pycache__")
             self.assertEqual(files, ["README.md", "__init__.py"], module)
+        mon_files = sorted(p.name for p in (ROOT / "src" / "monitoring").iterdir() if p.name != "__pycache__")
+        self.assertLessEqual(set(mon_files) - {"README.md", "__init__.py"}, {"characterization"})
         claims = re.compile(r"\b(we (measured|benchmarked|observed|found)|(?<!nothing )was measured|benchmark results?|achieved)\b",
                             re.IGNORECASE)
         for name, text in self.docs.items():

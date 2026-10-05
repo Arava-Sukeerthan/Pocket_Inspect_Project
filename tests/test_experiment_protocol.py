@@ -210,7 +210,8 @@ class TestExperimentProtocol(unittest.TestCase):
     # no experimental results; no fabricated latency/energy/thermal/accuracy values
     def test_no_results_or_fabricated_values(self):
         self.assertEqual(self.cfg["results"], [])
-        self.assertEqual(sorted(p.name for p in (ROOT / "research" / "results").iterdir()), ["README.md"])
+        res_files = sorted(p.name for p in (ROOT / "research" / "results").iterdir())
+        self.assertLessEqual(set(res_files) - {"README.md"}, {"device_characterization"})
         for name, text in self.docs.items():
             hit = MEASURED_VALUE.search(_without_spec(text))
             self.assertIsNone(hit, (name, hit))
