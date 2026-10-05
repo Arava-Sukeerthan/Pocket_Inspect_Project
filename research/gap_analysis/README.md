@@ -31,6 +31,7 @@ The evaluated combinations, analysis populations, derived attributes and candida
   - [`candidate_gap_matrix.csv`](candidate_gap_matrix.csv): qualitative candidate × criterion assessments (14 criteria; no scores).
   - [`candidate_gap_evaluation.md`](candidate_gap_evaluation.md): the written evaluation. It does not rank or select a candidate.
   - Step 9.8 methodology correction (researcher-approved): narrowed GC-01/GC-02/GC-03 wording, operational Decisions A–C (content-driven cascades; learned view selection; in-sensor processors) and four confirmed partial counterexamples, all recorded in `configs/gap_evaluation.yaml` and §3.4 of the evaluation. The Step 9.7 files keep the original wording as the historical record.
+- **Step 9.9 Phase A selection framework.** [`final_gap_selection.md`](final_gap_selection.md) and [`final_gap_selection_matrix.csv`](final_gap_selection_matrix.csv) (criteria A–Q; candidate RQs; feasibility; contribution and risk analysis; selection gate). Inputs: [`configs/gap_selection.yaml`](../../configs/gap_selection.yaml). Validator: `src/literature/gap_selection.py`. No candidate is ranked or selected; `research_gap.md` is created only after explicit researcher approval.
 
 The earlier hard-coded prototype combinations (GAP-001 to GAP-006) are retired. They remain only as the fallback used when no configuration file is present.
 
