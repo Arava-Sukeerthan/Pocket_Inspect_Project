@@ -2551,3 +2551,53 @@ Step 10D Follow-up Correction — Resolved audit findings R-01 through R-14 (`do
 - Branch: `antigravity/step-10d-followup-correction`
 - Commit: see `git log -- docs/agent_sync/CHANGELOG.md`
 
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10D: final follow-up audit of PR #24 (Antigravity, `597298e`). This is a software-readiness review. PR #24 had already been merged as `bd5048e`, so this is a post-merge review.
+
+### Decision
+**CONDITIONAL APPROVAL — CORRECTIONS REQUIRED.** Full report: [`docs/architecture/step10d_pr24_followup_audit.md`](../architecture/step10d_pr24_followup_audit.md).
+
+### R-01 to R-14 status
+- FIXED: R-01, R-02, R-06, R-10, R-14.
+- PARTIALLY_FIXED: R-03, R-04, R-05, R-07, R-08, R-09, R-11, R-12.
+- NOT_FIXED: R-13.
+
+### New findings (for Antigravity; not implemented by Claude)
+- P-01 (P0): `update_device_capability_matrix()`:
+  - every single connected run rewrites `research/experiments/device_capability_matrix.md`;
+  - the status is written as the literal string `ReportStatus.VERIFIED`;
+  - there is no check against the known specification, no requirement for two runs or a reboot, and the evidence paths have no run ID.
+  
+  In this audit a fake `adb` reporting `STUB` turned the Manufacturer and Model rows VERIFIED. The change was reverted.
+- P-02 (P1): the E2E full-path test:
+  - writes a synthetic `adb_connected: true` run, with identity VERIFIED, into `research/results/device_characterization/run_20261005_120000/`, which git does not ignore;
+  - uses `overwrite=True`;
+  - is date-locked and fails from 2026-10-06.
+- P-03 (P1): the ADB parser keys do not match the collector keys, so battery, cpufreq, available memory and camera stay NOT_TESTED despite having evidence. The host never retrieves the app's JSON.
+- P-04 to P-07: `soc_model` cites the wrong key on fallback; manifest hashes are never verified; `--require-device` together with `--dry-run` silently runs a dry run, there is no `--serial`, and a failed probe gives NOT_TESTED instead of ERROR; the CHANGELOG overstates the work.
+
+### Verification
+- `pytest`: 278 passed. As a side effect it leaves the synthetic run directory in `research/results/`, which was removed. With the clock set to 2026-10-06 the E2E suite gives 1 failed, 5 passed.
+- The connected path was exercised with a scratch fake `adb`, kept outside the repo and never committed. It is not device evidence.
+- Dry run: 0 VERIFIED, all NOT_TESTED. Energy: `selected_level: null`, `absolute_energy_claimed: false`.
+- Android build: **BUILD NOT EXECUTED — ENVIRONMENT LIMITATION** (dl.google.com is blocked and there is no Android SDK). Independently of the environment, the committed `gradlew` cannot run: `gradle-wrapper.jar` is missing.
+
+### Research decisions
+- None changed. No change to RQs, gaps, C1–C4, R0–R3, r*, energy threshold, binning, time budget or D-01 to D-16.
+- Real OPPO A5 2020 characterization: **NOT PERFORMED.** No OPPO capability is marked VERIFIED.
+
+### Next action
+1. Antigravity: fix P-01, P-02 and P-03 (blocking), then R-05 (the wrapper jar needs the user's approval as a binary), then the remaining items. Append a CHANGELOG entry.
+2. Claude Code: re-review.
+3. Then physical OPPO characterization: two runs on separate days with a reboot in between.
+
+Step 10E not started.
+
+### Git
+- Branch: `claude/step-10d-pr24-audit`, from `main` `bd5048e`.
+- Review documentation only; no implementation or data file was modified.
