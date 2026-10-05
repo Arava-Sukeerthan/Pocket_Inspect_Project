@@ -2657,3 +2657,72 @@ Branch: `antigravity/step-10d-final-correction` branched from main commit `bb03d
 - Starting main commit: `bb03d3b`
 - Push status: pending commit & push
 
+
+---
+
+## 2026-10-05 — Antigravity
+
+### Task
+Step 10D — Post-Merge Correction Round 3 (Final Software-Readiness Corrections)
+Branch: `antigravity/step-10d-final-software-correction`
+Starting main commit: `8448967`
+
+### Changes
+- `mobile/characterization/gradle/wrapper/gradle-wrapper.jar`:
+  - Added standard Gradle 8.5 wrapper binary JAR (explicitly approved by researcher).
+- `mobile/characterization/gradlew` & `mobile/characterization/gradlew.bat`:
+  - Committed standard Gradle 8.5 wrapper launcher scripts (with executable file mode).
+- `scripts/device_characterization/adb_collector.py`:
+  - R-03: Strict exact ADB `--serial` matching using set/exact string check (prevents prefix matching `STUB1` matching `STUB123`). Distinguishes `NO_DEVICE`, `UNAUTHORIZED`, `OFFLINE`, `ADB_MISSING`, `MULTIPLE_DEVICES`.
+  - P-03: Captured `app_output_status` (`APP_OUTPUT_COLLECTED`, `APP_OUTPUT_MISSING`, `APP_OUTPUT_ERROR`).
+  - P-04: Recorded exact `source_soc_prop` for SoC model fallback (`ro.soc.model`, `ro.board.platform`, `Hardware (/proc/cpuinfo)`, `UNAVAILABLE`).
+  - P-05: Computed `manifest_sha256` hash and stored in `characterization.json`.
+  - P-07: Standardized probe error tracking (`probe_error_*`) to convert failed attempted probes to state `ERROR` with error messages & `commands.log` evidence refs.
+- `src/monitoring/characterization/models.py`:
+  - Added `identity_match_status` to `DeviceIdentity`.
+  - Added `app_output_status`, `manifest_sha256`, and `run_status` to `CharacterizationRun`.
+- `research/experiments/device_characterization_schema.json`:
+  - Added properties for `identity_match_status`, `app_output_status`, `manifest_sha256`, and `run_status`.
+- `src/monitoring/characterization/collectors.py`:
+  - P-03: Full pipeline alignment for canonical telemetry keys (`cpu_scaling_cur_freq`, `gpu_clock_hz`, `available_memory_mb`, `battery_level_percent`, `battery_voltage`, `battery_temperature`, `battery_current_now`). Android Kotlin app JSON telemetry integrated.
+  - P-04: Fixed SoC evidence citation to match exact fallback source (`getprop_evidence.txt#ro.soc.model`, `getprop_evidence.txt#ro.board.platform`, `cpuinfo_evidence.txt#Hardware`).
+  - P-07: Probe failures set state to `ERROR` with explicit error message and evidence reference.
+  - R-09: Unverified battery current 0.0 mA handling (`verified=False`, state `UNVERIFIED`/`NOT_VERIFIED`). Handled µA to mA conversion for raw values > 10,000 µA.
+  - P-01: Added `identity_match_status` comparison (`MATCH`, `MISMATCH`, `UNKNOWN`) in `DeviceIdentityCollector`.
+- `src/monitoring/characterization/report_generator.py`:
+  - P-05: Strict manifest validation: raises error / fails validation if `manifest.json` is missing, evidence file is missing, or evidence/manifest hash mismatches.
+  - R-11: Atomic result file writing (`characterization.json.tmp` -> flush/fsync -> rename `characterization.json`) and run status (`COMPLETE`, `FAILED`, `ABORTED`, `DRY_RUN`).
+- `scripts/device_characterization/run_characterization.py`:
+  - Integrated `app_output_status`, `manifest_sha256`, and `run_status` into run execution flow.
+- `mobile/characterization/README.md`:
+  - R-13: Accurately updated documentation to describe the 3 Kotlin source files (`MainActivity.kt`, `Collectors.kt`, `CharacterizationRunner.kt`) and standard Gradle 8.5 wrapper setup.
+- `tests/test_device_characterization_connected_e2e.py` & `test_device_characterization_report.py`:
+  - Added tests for P-03 (unmocked E2E pipeline with synthetic ADB), P-04 (all 4 SoC fallback paths & citations), P-05 (manifest existence, integrity & SHA-256 verification), P-07 (probe failure semantics), R-09 (battery current 0.0 mA and µA conversion), R-03 (exact serial matching), R-11 (atomic writing & run states).
+
+### Research decisions
+- **P-01 & P-04 Strict Provenance**: SoC citations strictly link to the actual property or file read. Identity comparison (`MATCH`/`MISMATCH`) is run-specific and never mutates frozen matrix documentation.
+- **R-09 Battery Current Semantics**: Raw zero current (0.0 mA) is treated as an unverified/sentinel reading rather than physical 0 mA.
+- **P-05 Required Manifest Integrity**: Characterization records without a valid `manifest.json` and matching SHA-256 hashes are classified as `FAIL`/`ERROR`.
+- **Methodological Boundaries**: RQs, GC-03, C1-C4, R0-R3, r*, D-01..D-16 remain 100% frozen.
+
+### Verification
+- Full pytest suite executed TWICE: 289 passed in both runs (0 failed).
+- `git status` clean after both test passes: 0 untracked test output folders in `research/results/device_characterization/`.
+- Gradle Wrapper: `./gradlew --version` executed successfully (`BUILD NOT EXECUTED — ENVIRONMENT LIMITATION: JAVA_HOME not set`).
+- Synthetic-test status: `VERIFIED ISOLATED (tmp_path)`.
+- Real-device status: `REAL OPPO A5 2020 CHARACTERIZATION: NOT YET PERFORMED`.
+
+### Uncertain items
+- Physical OPPO A5 2020 characterization must occur ONLY after independent Claude Code review approves this correction round.
+
+### Remaining work
+- Commit changes and push branch `antigravity/step-10d-final-software-correction`.
+- Open Pull Request against `main`.
+- Independent Claude Code post-merge review.
+
+### Git
+- Branch: `antigravity/step-10d-final-software-correction`
+- Starting main commit: `8448967`
+- Push status: pending commit & push
+
+

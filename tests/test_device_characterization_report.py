@@ -7,6 +7,7 @@ Validates findings F-02, F-05, F-14:
 - F-14: Overwriting existing characterization.json raises FileExistsError.
 """
 
+import hashlib
 import json
 import pytest
 from pathlib import Path
@@ -128,10 +129,18 @@ def test_f05_verified_requires_existing_evidence_file(tmp_path):
     assert len(errors) > 0
     assert any("does not exist on disk" in err for err in errors)
 
-    # Now create the evidence file -> validation passes
+    # Now create the evidence file and manifest.json -> validation passes
     ev_dir = output_dir / "evidence"
-    ev_dir.mkdir(parents=True)
-    (ev_dir / "non_existent.txt").write_text("sample evidence data", encoding="utf-8")
+    ev_dir.mkdir(parents=True, exist_ok=True)
+    content = b"sample evidence data"
+    (ev_dir / "non_existent.txt").write_bytes(content)
+    manifest_data = [{
+        "relative_path": "evidence/non_existent.txt",
+        "size_bytes": len(content),
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "created_at": "2026-10-05T10:00:02Z"
+    }]
+    (ev_dir / "manifest.json").write_text(json.dumps(manifest_data, indent=2), encoding="utf-8")
     errors_ok = validate_characterization_record(record, output_dir=output_dir)
     assert errors_ok == []
 

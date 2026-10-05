@@ -28,16 +28,9 @@ Build Commands:
 
 ## Components
 
-1. `DeviceIdentityCollector.kt`
-2. `AndroidCapabilityCollector.kt`
-3. `BatteryTelemetryCollector.kt`
-4. `MemoryTelemetryCollector.kt`
-5. `CPUTelemetryCollector.kt`
-6. `GPUTelemetryCollector.kt`
-7. `ThermalTelemetryCollector.kt`
-8. `CameraCapabilityCollector.kt`
-9. `InferenceBackendCapabilityCollector.kt`
-10. `ProfilingCapabilityCollector.kt`
-11. `EnergyMeasurementCapabilityChecker.kt`
-12. `CharacterizationRunner.kt`
+The Android characterization client consists of 3 Kotlin source files:
+1. `MainActivity.kt`: Android UI activity and entry point for initiating on-device characterization tasks.
+2. `Collectors.kt`: On-device telemetry and capability collectors for Android services and hardware properties.
+3. `CharacterizationRunner.kt`: Runner for executing characterization probes and outputting canonical JSON results to app file storage.
+
 

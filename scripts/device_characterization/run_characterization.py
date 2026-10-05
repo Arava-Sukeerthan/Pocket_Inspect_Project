@@ -179,6 +179,9 @@ def run_characterization(
             "boot_id": boot_id,
             "is_dry_run": not adb_connected,
         },
+        app_output_status=props.get("app_output_status"),
+        manifest_sha256=props.get("manifest_sha256"),
+        run_status="COMPLETE" if adb_connected else "DRY_RUN",
     )
 
     run_dict = run.to_dict()

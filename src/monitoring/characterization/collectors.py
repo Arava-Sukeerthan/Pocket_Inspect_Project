@@ -134,20 +134,32 @@ class DeviceIdentityCollector:
             evidence_ref=ev_ram,
         ))
 
-        # SoC Model
+        # SoC Model (P-04 provenance check)
         obs_soc = props.get("soc_model") or props.get("ro.soc.model")
+        source_soc_prop = props.get("source_soc_prop")
         state_soc = RuntimeState.AVAILABLE.value if obs_soc else (
-            RuntimeState.UNAVAILABLE.value if ("soc_model" in props or "ro.soc.model" in props) else RuntimeState.NOT_TESTED.value
+            RuntimeState.UNAVAILABLE.value if ("soc_model" in props or "ro.soc.model" in props or "source_soc_prop" in props) else RuntimeState.NOT_TESTED.value
         )
         ver_soc = bool(props.get("is_real_device_observation") and obs_soc)
-        ev_soc = "evidence/getprop_evidence.txt#ro.soc.model" if ver_soc else None
+        
+        if ver_soc and obs_soc:
+            if source_soc_prop == "ro.soc.model":
+                ev_soc = "evidence/getprop_evidence.txt#ro.soc.model"
+            elif source_soc_prop == "ro.board.platform":
+                ev_soc = "evidence/getprop_evidence.txt#ro.board.platform"
+            elif source_soc_prop in ("Hardware (/proc/cpuinfo)", "hardware"):
+                ev_soc = "evidence/cpuinfo_evidence.txt#Hardware"
+            else:
+                ev_soc = "evidence/getprop_evidence.txt#ro.soc.model"
+        else:
+            ev_soc = None
 
         observed_results.append(CapabilityResult(
             metric="soc_model",
             state=state_soc,
             report_status=map_runtime_state_to_report_status(RuntimeState(state_soc), verified=ver_soc),
             value=obs_soc if state_soc == RuntimeState.AVAILABLE.value else None,
-            source="Build.SOC_MODEL (API>=31) / /proc/cpuinfo",
+            source=f"Build.SOC_MODEL / {source_soc_prop or 'getprop'}",
             min_api=31,
             verified=ver_soc,
             verification_method="device_observation",
@@ -220,11 +232,29 @@ class DeviceIdentityCollector:
                 notes="Total RAM not yet observed on device.",
             )
 
+        # Determine P-01 run-specific identity_match_status
+        obs_mfr_u = str(obs_mfr).upper() if obs_mfr else ""
+        obs_model_u = str(obs_model).upper() if obs_model else ""
+        obs_soc_u = str(obs_soc).upper() if obs_soc else ""
+
+        if obs_model or obs_mfr:
+            model_match = ("A5" in obs_model_u and "2020" in obs_model_u) or ("CPH1931" in obs_model_u) or (obs_model_u == known.model.upper())
+            mfr_match = ("OPPO" in obs_mfr_u) or not obs_mfr
+            soc_match = ("665" in obs_soc_u) or ("SM6125" in obs_soc_u) or not obs_soc
+
+            if model_match and mfr_match and soc_match:
+                id_match = "MATCH"
+            else:
+                id_match = "MISMATCH"
+        else:
+            id_match = "UNKNOWN"
+
         return DeviceIdentity(
             device_unit_id=self.device_unit_id,
             known_specification=known,
             observed=observed_results,
             variant_check=variant_res,
+            identity_match_status=id_match,
         )
 
 
@@ -294,7 +324,7 @@ class AndroidCapabilityCollector:
                 verified=ver_svc,
                 verification_method="service_get_check",
                 observed_at=now if ver_svc else None,
-                evidence_ref=f"evidence/device_app_evidence.json#{key}" if ver_svc else None,
+                evidence_ref=f"evidence/android_app_evidence.json#{key}" if ver_svc else None,
             ))
 
         return TelemetryCapability(
@@ -309,6 +339,8 @@ class BatteryTelemetryCollector:
     """Collector 3: BatteryTelemetryCollector.
     Checks battery level, percentage, voltage, temperature, health, current, counters.
     F-10: Implausible values set state=ERROR with raw values retained.
+    P-07: Failed probe returns state=ERROR.
+    R-09: Raw 0 current is NOT verified. Unit conversions >10,000 uA handled.
     """
 
     def collect(self, battery_props: Optional[Dict[str, Any]] = None) -> TelemetryCapability:
@@ -316,26 +348,37 @@ class BatteryTelemetryCollector:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         is_real = bool(props.get("is_real_device_observation", False))
         results: List[CapabilityResult] = []
+        probe_err_bat = props.get("probe_error_battery")
 
         # Battery level (%)
         if "battery_level_percent" not in props and "level" not in props:
-            state_lvl = RuntimeState.NOT_TESTED.value
-            err_lvl = None
-            val_lvl = None
+            if probe_err_bat:
+                state_lvl = RuntimeState.ERROR.value
+                err_lvl = probe_err_bat
+                val_lvl = None
+                ev_lvl = "evidence/commands.log#probe_error_battery"
+            else:
+                state_lvl = RuntimeState.NOT_TESTED.value
+                err_lvl = None
+                val_lvl = None
+                ev_lvl = None
         else:
             raw_lvl = props.get("battery_level_percent") if "battery_level_percent" in props else props.get("level")
             if raw_lvl is None:
                 state_lvl = RuntimeState.UNAVAILABLE.value
                 err_lvl = None
                 val_lvl = None
+                ev_lvl = None
             elif isinstance(raw_lvl, (int, float)) and 0 <= raw_lvl <= 100:
                 state_lvl = RuntimeState.AVAILABLE.value
                 err_lvl = None
                 val_lvl = int(raw_lvl)
+                ev_lvl = "evidence/battery_dumpsys_evidence.txt#battery_level_percent" if (is_real and state_lvl == RuntimeState.AVAILABLE.value) else None
             else:
                 state_lvl = RuntimeState.ERROR.value
                 err_lvl = f"Implausible battery level value observed: {raw_lvl}"
                 val_lvl = None
+                ev_lvl = None
 
         ver_lvl = is_real and state_lvl == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
@@ -348,29 +391,39 @@ class BatteryTelemetryCollector:
             verified=ver_lvl,
             verification_method="battery_broadcast_check",
             observed_at=now if ver_lvl else None,
-            evidence_ref="evidence/battery_dumpsys_evidence.txt#battery_level_percent" if ver_lvl else None,
+            evidence_ref=ev_lvl,
             error_message=err_lvl,
         ))
 
         # Battery voltage (mV)
         if "battery_voltage" not in props and "voltage_mv" not in props:
-            state_volt = RuntimeState.NOT_TESTED.value
-            err_volt = None
-            val_volt = None
+            if probe_err_bat:
+                state_volt = RuntimeState.ERROR.value
+                err_volt = probe_err_bat
+                val_volt = None
+                ev_volt = "evidence/commands.log#probe_error_battery"
+            else:
+                state_volt = RuntimeState.NOT_TESTED.value
+                err_volt = None
+                val_volt = None
+                ev_volt = None
         else:
             raw_volt = props.get("battery_voltage") if "battery_voltage" in props else props.get("voltage_mv")
             if raw_volt is None:
                 state_volt = RuntimeState.UNAVAILABLE.value
                 err_volt = None
                 val_volt = None
+                ev_volt = None
             elif isinstance(raw_volt, (int, float)) and 2000 <= raw_volt <= 5000:
                 state_volt = RuntimeState.AVAILABLE.value
                 err_volt = None
                 val_volt = float(raw_volt)
+                ev_volt = "evidence/battery_dumpsys_evidence.txt#battery_voltage" if (is_real and state_volt == RuntimeState.AVAILABLE.value) else None
             else:
                 state_volt = RuntimeState.ERROR.value
                 err_volt = f"Implausible battery voltage value observed: {raw_volt} mV"
                 val_volt = None
+                ev_volt = None
 
         ver_volt = is_real and state_volt == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
@@ -383,29 +436,39 @@ class BatteryTelemetryCollector:
             verified=ver_volt,
             verification_method="battery_broadcast_check",
             observed_at=now if ver_volt else None,
-            evidence_ref="evidence/battery_dumpsys_evidence.txt#battery_voltage" if ver_volt else None,
+            evidence_ref=ev_volt,
             error_message=err_volt,
         ))
 
         # Battery temperature (°C)
         if "battery_temperature" not in props and "temperature_c" not in props:
-            state_temp = RuntimeState.NOT_TESTED.value
-            err_temp = None
-            val_temp = None
+            if probe_err_bat:
+                state_temp = RuntimeState.ERROR.value
+                err_temp = probe_err_bat
+                val_temp = None
+                ev_temp = "evidence/commands.log#probe_error_battery"
+            else:
+                state_temp = RuntimeState.NOT_TESTED.value
+                err_temp = None
+                val_temp = None
+                ev_temp = None
         else:
             raw_temp = props.get("battery_temperature") if "battery_temperature" in props else props.get("temperature_c")
             if raw_temp is None:
                 state_temp = RuntimeState.UNAVAILABLE.value
                 err_temp = None
                 val_temp = None
+                ev_temp = None
             elif isinstance(raw_temp, (int, float)) and -20 <= raw_temp <= 80:
                 state_temp = RuntimeState.AVAILABLE.value
                 err_temp = None
                 val_temp = float(raw_temp)
+                ev_temp = "evidence/battery_dumpsys_evidence.txt#battery_temperature" if (is_real and state_temp == RuntimeState.AVAILABLE.value) else None
             else:
                 state_temp = RuntimeState.ERROR.value
                 err_temp = f"Implausible battery temperature value observed: {raw_temp} degC"
                 val_temp = None
+                ev_temp = None
 
         ver_temp = is_real and state_temp == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
@@ -418,33 +481,67 @@ class BatteryTelemetryCollector:
             verified=ver_temp,
             verification_method="battery_broadcast_check",
             observed_at=now if ver_temp else None,
-            evidence_ref="evidence/battery_dumpsys_evidence.txt#battery_temperature" if ver_temp else None,
+            evidence_ref=ev_temp,
             error_message=err_temp,
         ))
 
-        # Battery current now (mA / uA)
+        # Battery current now (mA / uA) — R-09 explicit handling
         if "battery_current_now" not in props and "current_now_ua" not in props and "current_now_ma" not in props:
-            state_curr = RuntimeState.NOT_TESTED.value
-            val_curr = None
-            notes_curr = "Current probe not executed."
+            if probe_err_bat:
+                state_curr = RuntimeState.ERROR.value
+                val_curr = None
+                ver_curr = False
+                err_curr = probe_err_bat
+                notes_curr = f"Battery probe failed: {probe_err_bat}"
+                ev_curr = "evidence/commands.log#probe_error_battery"
+            else:
+                state_curr = RuntimeState.NOT_TESTED.value
+                val_curr = None
+                ver_curr = False
+                err_curr = None
+                notes_curr = "Current probe not executed."
+                ev_curr = None
         else:
             curr_raw = props.get("battery_current_now") if "battery_current_now" in props else props.get("current_now_ma")
             curr_ua = props.get("current_now_ua")
             sentinel = props.get("current_now_is_sentinel", False)
+            err_curr = None
+
             if sentinel or (curr_raw is None and curr_ua is None):
                 state_curr = RuntimeState.UNAVAILABLE.value
                 val_curr = None
+                ver_curr = False
                 notes_curr = "Current property is unsupported or sentinel value returned."
-            elif curr_raw == 0 or curr_ua == 0:
-                state_curr = RuntimeState.AVAILABLE.value
-                val_curr = 0.0
-                notes_curr = "Observed battery current reading is 0. Flagged as potential driver sentinel zero."
+                ev_curr = None
             else:
-                state_curr = RuntimeState.AVAILABLE.value
-                val_curr = float(curr_raw) if curr_raw is not None else float(curr_ua) / 1000.0
-                notes_curr = f"Raw current reading: {curr_raw or curr_ua}."
+                raw_val = curr_raw if curr_raw is not None else curr_ua
+                # Unit conversion check: if absolute raw value > 10,000, convert uA -> mA
+                if abs(raw_val) > 10000:
+                    converted_ma = float(raw_val) / 1000.0
+                else:
+                    converted_ma = float(raw_val)
 
-        ver_curr = is_real and state_curr == RuntimeState.AVAILABLE.value
+                if abs(converted_ma) > 10000:
+                    state_curr = RuntimeState.ERROR.value
+                    val_curr = None
+                    ver_curr = False
+                    err_curr = f"Implausible battery current value: {raw_val} (converted: {converted_ma} mA)"
+                    notes_curr = f"Implausible battery current value: {raw_val}"
+                    ev_curr = None
+                elif converted_ma == 0.0:
+                    # R-09: Zero current cannot be verified as valid physical measurement
+                    state_curr = RuntimeState.AVAILABLE.value
+                    val_curr = 0.0
+                    ver_curr = False  # CANNOT BE VERIFIED
+                    notes_curr = "Observed battery current reading is 0. Flagged as potential driver sentinel zero (unverified)."
+                    ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now"
+                else:
+                    state_curr = RuntimeState.AVAILABLE.value
+                    val_curr = converted_ma
+                    ver_curr = is_real
+                    notes_curr = f"Raw current reading: {raw_val}, converted to {converted_ma} mA."
+                    ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if ver_curr else None
+
         results.append(CapabilityResult(
             metric="battery_current_now",
             state=state_curr,
@@ -454,24 +551,37 @@ class BatteryTelemetryCollector:
             source="BatteryManager.BATTERY_PROPERTY_CURRENT_NOW / dumpsys battery",
             verified=ver_curr,
             verification_method="battery_property_check",
-            observed_at=now if ver_curr else None,
-            evidence_ref="evidence/battery_dumpsys_evidence.txt#battery_current_now" if ver_curr else None,
+            observed_at=now if (ver_curr or state_curr == RuntimeState.AVAILABLE.value) else None,
+            evidence_ref=ev_curr,
+            error_message=err_curr,
             notes=notes_curr,
         ))
 
         # Battery charge counter (uAh)
         if "battery_charge_counter" not in props and "charge_counter_uah" not in props:
-            state_chg = RuntimeState.NOT_TESTED.value
-            val_chg = None
+            if probe_err_bat:
+                state_chg = RuntimeState.ERROR.value
+                val_chg = None
+                err_chg = probe_err_bat
+                ev_chg = "evidence/commands.log#probe_error_battery"
+            else:
+                state_chg = RuntimeState.NOT_TESTED.value
+                val_chg = None
+                err_chg = None
+                ev_chg = None
         else:
             chg = props.get("battery_charge_counter") if "battery_charge_counter" in props else props.get("charge_counter_uah")
             sentinel_chg = props.get("charge_counter_is_sentinel", False)
             if sentinel_chg or chg is None:
                 state_chg = RuntimeState.UNAVAILABLE.value
                 val_chg = None
+                err_chg = None
+                ev_chg = None
             else:
                 state_chg = RuntimeState.AVAILABLE.value
                 val_chg = int(chg)
+                err_chg = None
+                ev_chg = "evidence/battery_dumpsys_evidence.txt#battery_charge_counter" if is_real else None
 
         ver_chg = is_real and state_chg == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
@@ -484,7 +594,8 @@ class BatteryTelemetryCollector:
             verified=ver_chg,
             verification_method="battery_property_check",
             observed_at=now if ver_chg else None,
-            evidence_ref="evidence/battery_dumpsys_evidence.txt#battery_charge_counter" if ver_chg else None,
+            evidence_ref=ev_chg,
+            error_message=err_chg,
         ))
 
         return TelemetryCapability(
@@ -498,6 +609,8 @@ class BatteryTelemetryCollector:
 class MemoryTelemetryCollector:
     """Collector 4: MemoryTelemetryCollector.
     Checks total/available RAM, threshold, low-memory flag, app memory, process memory.
+    P-03: Uses canonical available_memory_mb key.
+    P-07: Probe failures set state=ERROR.
     """
 
     def collect(self, memory_props: Optional[Dict[str, Any]] = None) -> TelemetryCapability:
@@ -505,15 +618,26 @@ class MemoryTelemetryCollector:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         is_real = bool(props.get("is_real_device_observation", False))
         results: List[CapabilityResult] = []
+        probe_err_mem = props.get("probe_error_meminfo")
 
-        # Available RAM
+        # Available RAM (P-03 canonical key)
         if "available_memory_mb" not in props and "avail_mem_mb" not in props:
-            state_avail = RuntimeState.NOT_TESTED.value
-            val_avail = None
+            if probe_err_mem:
+                state_avail = RuntimeState.ERROR.value
+                val_avail = None
+                err_avail = probe_err_mem
+                ev_avail = "evidence/commands.log#probe_error_meminfo"
+            else:
+                state_avail = RuntimeState.NOT_TESTED.value
+                val_avail = None
+                err_avail = None
+                ev_avail = None
         else:
             avail_mb = props.get("available_memory_mb") if "available_memory_mb" in props else props.get("avail_mem_mb")
             state_avail = RuntimeState.AVAILABLE.value if avail_mb is not None else RuntimeState.UNAVAILABLE.value
             val_avail = avail_mb if state_avail == RuntimeState.AVAILABLE.value else None
+            err_avail = None
+            ev_avail = "evidence/meminfo_evidence.txt#available_memory_mb" if (is_real and state_avail == RuntimeState.AVAILABLE.value) else None
 
         ver_avail = is_real and state_avail == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
@@ -526,17 +650,28 @@ class MemoryTelemetryCollector:
             verified=ver_avail,
             verification_method="memory_info_check",
             observed_at=now if ver_avail else None,
-            evidence_ref="evidence/meminfo_evidence.txt#available_memory_mb" if ver_avail else None,
+            evidence_ref=ev_avail,
+            error_message=err_avail,
         ))
 
         # Low Memory Flag
         if "low_memory_flag" not in props:
-            state_low = RuntimeState.NOT_TESTED.value
-            val_low = None
+            if probe_err_mem:
+                state_low = RuntimeState.ERROR.value
+                val_low = None
+                err_low = probe_err_mem
+                ev_low = "evidence/commands.log#probe_error_meminfo"
+            else:
+                state_low = RuntimeState.NOT_TESTED.value
+                val_low = None
+                err_low = None
+                ev_low = None
         else:
             low_flag = props.get("low_memory_flag")
             state_low = RuntimeState.AVAILABLE.value if low_flag is not None else RuntimeState.UNAVAILABLE.value
             val_low = low_flag if state_low == RuntimeState.AVAILABLE.value else None
+            err_low = None
+            ev_low = "evidence/meminfo_evidence.txt#lowMemory" if (is_real and state_low == RuntimeState.AVAILABLE.value) else None
 
         ver_low = is_real and state_low == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
@@ -548,7 +683,8 @@ class MemoryTelemetryCollector:
             verified=ver_low,
             verification_method="memory_info_check",
             observed_at=now if ver_low else None,
-            evidence_ref="evidence/meminfo_evidence.txt#lowMemory" if ver_low else None,
+            evidence_ref=ev_low,
+            error_message=err_low,
         ))
 
         # App Heap Allocated
@@ -614,6 +750,8 @@ class MemoryTelemetryCollector:
 class CPUTelemetryCollector:
     """Collector 5: CPUTelemetryCollector.
     Checks CPU core count, frequencies, app CPU time, device-wide CPU utilization.
+    P-03: Uses canonical cpu_scaling_cur_freq key.
+    P-07: Probe failures set state=ERROR.
     """
 
     def collect(self, cpu_props: Optional[Dict[str, Any]] = None) -> TelemetryCapability:
@@ -623,13 +761,24 @@ class CPUTelemetryCollector:
         results: List[CapabilityResult] = []
 
         # CPU Core Count
+        probe_err_cpu = props.get("probe_error_cpuinfo")
         if "core_count" not in props:
-            state_cores = RuntimeState.NOT_TESTED.value
-            val_cores = None
+            if probe_err_cpu:
+                state_cores = RuntimeState.ERROR.value
+                val_cores = None
+                err_cores = probe_err_cpu
+                ev_cores = "evidence/commands.log#probe_error_cpuinfo"
+            else:
+                state_cores = RuntimeState.NOT_TESTED.value
+                val_cores = None
+                err_cores = None
+                ev_cores = None
         else:
             cores = props.get("core_count")
             state_cores = RuntimeState.AVAILABLE.value if cores is not None else RuntimeState.UNAVAILABLE.value
             val_cores = cores if state_cores == RuntimeState.AVAILABLE.value else None
+            err_cores = None
+            ev_cores = "evidence/cpuinfo_evidence.txt#processor_count" if (is_real and state_cores == RuntimeState.AVAILABLE.value) else None
 
         ver_cores = is_real and state_cores == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
@@ -642,17 +791,29 @@ class CPUTelemetryCollector:
             verified=ver_cores,
             verification_method="cpu_sysfs_check",
             observed_at=now if ver_cores else None,
-            evidence_ref="evidence/cpuinfo_evidence.txt#processor_count" if ver_cores else None,
+            evidence_ref=ev_cores,
+            error_message=err_cores,
         ))
 
-        # CPU scaling cur freq
-        if "cur_freq_khz" not in props:
-            state_freq = RuntimeState.NOT_TESTED.value
-            val_freq = None
+        # CPU scaling cur freq (P-03 canonical key)
+        probe_err_freq = props.get("probe_error_cpufreq")
+        if "cpu_scaling_cur_freq" not in props and "cur_freq_khz" not in props:
+            if probe_err_freq:
+                state_freq = RuntimeState.ERROR.value
+                val_freq = None
+                err_freq = probe_err_freq
+                ev_freq = "evidence/commands.log#probe_error_cpufreq"
+            else:
+                state_freq = RuntimeState.NOT_TESTED.value
+                val_freq = None
+                err_freq = None
+                ev_freq = None
         else:
-            freq = props.get("cur_freq_khz")
+            freq = props.get("cpu_scaling_cur_freq") if "cpu_scaling_cur_freq" in props else props.get("cur_freq_khz")
             state_freq = RuntimeState.AVAILABLE.value if freq is not None else RuntimeState.UNAVAILABLE.value
             val_freq = freq if state_freq == RuntimeState.AVAILABLE.value else None
+            err_freq = None
+            ev_freq = "evidence/cpufreq_evidence.txt#scaling_cur_freq" if (is_real and state_freq == RuntimeState.AVAILABLE.value) else None
 
         ver_freq = is_real and state_freq == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
@@ -665,7 +826,8 @@ class CPUTelemetryCollector:
             verified=ver_freq,
             verification_method="cpufreq_sysfs_check",
             observed_at=now if ver_freq else None,
-            evidence_ref="evidence/cpufreq_evidence.txt#scaling_cur_freq" if ver_freq else None,
+            evidence_ref=ev_freq,
+            error_message=err_freq,
         ))
 
         # App CPU time
@@ -692,11 +854,22 @@ class CPUTelemetryCollector:
         ))
 
         # Device-wide CPU utilization via ADB /proc/stat
+        probe_err_stat = props.get("probe_error_proc_stat")
         if "proc_stat_readable_via_adb" not in props:
-            state_proc = RuntimeState.NOT_TESTED.value
-            val_proc = None
-            cond_proc = None
-            ver_proc = False
+            if probe_err_stat:
+                state_proc = RuntimeState.ERROR.value
+                val_proc = None
+                cond_proc = None
+                ver_proc = False
+                err_proc = probe_err_stat
+                ev_proc = "evidence/commands.log#probe_error_proc_stat"
+            else:
+                state_proc = RuntimeState.NOT_TESTED.value
+                val_proc = None
+                cond_proc = None
+                ver_proc = False
+                err_proc = None
+                ev_proc = None
         else:
             proc_adb = props.get("proc_stat_readable_via_adb")
             if proc_adb is True:
@@ -704,11 +877,15 @@ class CPUTelemetryCollector:
                 val_proc = "Readable via host ADB"
                 cond_proc = "HOST ADB SHELL"
                 ver_proc = is_real
+                err_proc = None
+                ev_proc = "evidence/proc_stat_evidence.txt" if is_real else None
             else:
                 state_proc = RuntimeState.PERMISSION_REQUIRED.value
                 val_proc = None
                 cond_proc = "HOST ADB SHELL"
                 ver_proc = False
+                err_proc = None
+                ev_proc = None
 
         results.append(CapabilityResult(
             metric="device_wide_cpu_utilization",
@@ -720,7 +897,8 @@ class CPUTelemetryCollector:
             verified=ver_proc,
             verification_method="adb_shell_proc_stat_check",
             observed_at=now if ver_proc else None,
-            evidence_ref="evidence/proc_stat_evidence.txt" if ver_proc else None,
+            evidence_ref=ev_proc,
+            error_message=err_proc,
             notes="App-level read of /proc/stat is PERMISSION_REQUIRED on Android 8+ SELinux.",
         ))
 
@@ -735,6 +913,8 @@ class CPUTelemetryCollector:
 class GPUTelemetryCollector:
     """Collector 6: GPUTelemetryCollector.
     Checks GPU identification, utilization, frequency, and sysfs readability.
+    P-03: Uses canonical gpu_clock_hz key.
+    P-07: Probe failures set state=ERROR.
     """
 
     def collect(self, gpu_props: Optional[Dict[str, Any]] = None) -> TelemetryCapability:
@@ -742,6 +922,7 @@ class GPUTelemetryCollector:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         is_real = bool(props.get("is_real_device_observation", False))
         results: List[CapabilityResult] = []
+        probe_err_gpu = props.get("probe_error_gpu")
 
         if "renderer" not in props and "gles_renderer" not in props:
             state_rend = RuntimeState.NOT_TESTED.value
@@ -761,20 +942,31 @@ class GPUTelemetryCollector:
             verified=ver_rend,
             verification_method="gles_string_check",
             observed_at=now if ver_rend else None,
-            evidence_ref="evidence/device_app_evidence.json#gpu_renderer" if ver_rend else None,
+            evidence_ref="evidence/android_app_evidence.json#gpu_renderer" if ver_rend else None,
         ))
 
-        if "gpu_freq_hz" not in props:
-            state_freq = RuntimeState.NOT_TESTED.value
-            val_freq = None
+        # GPU clock frequency (P-03 canonical key)
+        if "gpu_clock_hz" not in props and "gpu_freq_hz" not in props:
+            if probe_err_gpu:
+                state_freq = RuntimeState.ERROR.value
+                val_freq = None
+                err_freq = probe_err_gpu
+                ev_freq = "evidence/commands.log#probe_error_gpu"
+            else:
+                state_freq = RuntimeState.NOT_TESTED.value
+                val_freq = None
+                err_freq = None
+                ev_freq = None
         else:
-            gpu_freq = props.get("gpu_freq_hz")
+            gpu_freq = props.get("gpu_clock_hz") if "gpu_clock_hz" in props else props.get("gpu_freq_hz")
             state_freq = RuntimeState.AVAILABLE.value if gpu_freq is not None else RuntimeState.UNAVAILABLE.value
             val_freq = gpu_freq if state_freq == RuntimeState.AVAILABLE.value else None
+            err_freq = None
+            ev_freq = "evidence/gpu_evidence.txt#gpuclk" if (is_real and state_freq == RuntimeState.AVAILABLE.value) else None
 
         ver_freq = is_real and state_freq == RuntimeState.AVAILABLE.value
         results.append(CapabilityResult(
-            metric="gpu_frequency",
+            metric="gpu_clock_hz",
             state=state_freq,
             report_status=map_runtime_state_to_report_status(RuntimeState(state_freq), verified=ver_freq),
             value=val_freq,
@@ -783,7 +975,8 @@ class GPUTelemetryCollector:
             verified=ver_freq,
             verification_method="kgsl_sysfs_check",
             observed_at=now if ver_freq else None,
-            evidence_ref="evidence/kgsl_evidence.txt#gpuclk" if ver_freq else None,
+            evidence_ref=ev_freq,
+            error_message=err_freq,
         ))
 
         if "gpu_utilization_percent" not in props:
@@ -924,13 +1117,24 @@ class ThermalTelemetryCollector:
         ))
 
         # Thermal zones sysfs
+        probe_err_th = props.get("probe_error_thermal")
         if "thermal_zones_readable_count" not in props:
-            state_zones = RuntimeState.NOT_TESTED.value
-            val_zones = None
+            if probe_err_th:
+                state_zones = RuntimeState.ERROR.value
+                val_zones = None
+                err_zones = probe_err_th
+                ev_zones = "evidence/commands.log#probe_error_thermal"
+            else:
+                state_zones = RuntimeState.NOT_TESTED.value
+                val_zones = None
+                err_zones = None
+                ev_zones = None
         else:
             z_count = props.get("thermal_zones_readable_count", 0)
             state_zones = RuntimeState.AVAILABLE.value if z_count > 0 else RuntimeState.UNAVAILABLE.value
             val_zones = f"{z_count} thermal zones readable" if state_zones == RuntimeState.AVAILABLE.value else None
+            err_zones = None
+            ev_zones = "evidence/thermal_evidence.txt#thermal_zones" if (is_real and state_zones == RuntimeState.AVAILABLE.value) else None
 
         ver_zones = is_real and state_zones == RuntimeState.AVAILABLE.value
         temp_sources.append(CapabilityResult(
@@ -943,7 +1147,8 @@ class ThermalTelemetryCollector:
             verified=ver_zones,
             verification_method="thermal_zone_sysfs_read_check",
             observed_at=now if ver_zones else None,
-            evidence_ref="evidence/thermal_evidence.txt#thermal_zones" if ver_zones else None,
+            evidence_ref=ev_zones,
+            error_message=err_zones,
         ))
 
         # Frequency capping observable
@@ -1018,15 +1223,26 @@ class CameraCapabilityCollector:
         for cid in camera_ids:
             cam_info = props.get(f"camera_{cid}", {})
             res_cam: List[CapabilityResult] = []
+            probe_err_cam = props.get("probe_error_camera")
 
             # Hardware level
             if "hardware_level" not in cam_info:
-                state_hw = RuntimeState.NOT_TESTED.value
-                val_hw = None
+                if probe_err_cam:
+                    state_hw = RuntimeState.ERROR.value
+                    val_hw = None
+                    err_hw = probe_err_cam
+                    ev_hw = "evidence/commands.log#probe_error_camera"
+                else:
+                    state_hw = RuntimeState.NOT_TESTED.value
+                    val_hw = None
+                    err_hw = None
+                    ev_hw = None
             else:
                 hw_level = cam_info.get("hardware_level")
                 state_hw = RuntimeState.AVAILABLE.value if hw_level else RuntimeState.UNAVAILABLE.value
                 val_hw = hw_level if state_hw == RuntimeState.AVAILABLE.value else None
+                err_hw = None
+                ev_hw = f"evidence/camera_{cid}_evidence.json#hardware_level" if (is_real and state_hw == RuntimeState.AVAILABLE.value) else None
 
             ver_hw = is_real and state_hw == RuntimeState.AVAILABLE.value
             res_cam.append(CapabilityResult(
@@ -1038,7 +1254,8 @@ class CameraCapabilityCollector:
                 verified=ver_hw,
                 verification_method="camera_characteristics_check",
                 observed_at=now if ver_hw else None,
-                evidence_ref=f"evidence/camera_{cid}_evidence.json#hardware_level" if ver_hw else None,
+                evidence_ref=ev_hw,
+                error_message=err_hw,
             ))
 
             # Manual exposure control advertised

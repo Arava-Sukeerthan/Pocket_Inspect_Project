@@ -123,6 +123,7 @@ class DeviceIdentity:
     known_specification: KnownSpecification
     observed: List[CapabilityResult]
     variant_check: CapabilityResult
+    identity_match_status: str = "UNKNOWN"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -130,6 +131,7 @@ class DeviceIdentity:
             "known_specification": self.known_specification.to_dict(),
             "observed": [r.to_dict() for r in self.observed],
             "variant_check": self.variant_check.to_dict(),
+            "identity_match_status": self.identity_match_status,
         }
 
 
@@ -246,9 +248,12 @@ class CharacterizationRun:
     repeat_index: int = 1
     host_tool_versions: Dict[str, Any] = field(default_factory=dict)
     performance_results: Optional[Any] = None
+    app_output_status: Optional[str] = None
+    manifest_sha256: Optional[str] = None
+    run_status: str = "COMPLETE"
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "run_id": self.run_id,
             "started_at": self.started_at,
             "repeat_index": self.repeat_index,
@@ -264,4 +269,10 @@ class CharacterizationRun:
             "energy": self.energy.to_dict(),
             "conditions": self.conditions,
             "performance_results": None,
+            "run_status": self.run_status,
         }
+        if self.app_output_status:
+            d["app_output_status"] = self.app_output_status
+        if self.manifest_sha256:
+            d["manifest_sha256"] = self.manifest_sha256
+        return d

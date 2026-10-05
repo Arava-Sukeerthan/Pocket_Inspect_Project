@@ -272,3 +272,322 @@ def test_p04_soc_property_fallback_provenance():
         props = adb.get_properties()
         assert props.get("ro.soc.model") is None
         assert props.get("ro.board.platform") == "trinket"
+
+
+def test_p03_unmocked_collector_e2e_pipeline(tmp_path):
+    """P-03: End-to-end unmocked pipeline test executing:
+    synthetic ADB -> raw evidence -> parser -> actual collectors -> report generator -> characterization.json.
+    Verifies CPU frequency and GPU clock appear in the final report, and app_output_status reaches characterization.json.
+    """
+    adb = ADBCollector(device_id="SYNTHETIC_DEVICE_01")
+
+    def mock_adb_cmd(args):
+        cmd_str = " ".join(args)
+        if "getprop" in cmd_str:
+            return 0, "[ro.product.manufacturer]: [OPPO]\n[ro.product.model]: [OPPO A5 2020]\n[ro.build.version.sdk]: [28]\n[ro.soc.model]: [SM6125]\n", ""
+        elif "/proc/meminfo" in cmd_str:
+            return 0, "MemTotal:        3072000 kB\nMemAvailable:    1500000 kB\n", ""
+        elif "/proc/cpuinfo" in cmd_str:
+            return 0, "processor : 0\nprocessor : 1\nHardware : Qualcomm\n", ""
+        elif "scaling_cur_freq" in cmd_str:
+            return 0, "1804800\n", ""
+        elif "gpuclk" in cmd_str:
+            return 0, "600000000\n", ""
+        elif "/proc/stat" in cmd_str:
+            return 0, "cpu  1234 5678 9101\n", ""
+        elif "dumpsys battery" in cmd_str:
+            return 0, "level: 80\nvoltage: 4100\ntemperature: 290\ncurrent now: 150\n", ""
+        elif "dumpsys media.camera" in cmd_str:
+            return 0, "Camera 0 info\n", ""
+        elif "dumpsys thermalservice" in cmd_str:
+            return 0, "ThermalService status: 0\n", ""
+        elif "atrace" in cmd_str:
+            return 0, "gfx - Graphics\n", ""
+        elif "airplane_mode_on" in cmd_str:
+            return 0, "1\n", ""
+        elif "boot_id" in cmd_str:
+            return 0, "synthetic_boot_123\n", ""
+        elif "run-as" in cmd_str:
+            return 0, '{"service_PowerManager": true, "gpu_renderer": "Adreno 610"}', ""
+        return 0, "ok\n", ""
+
+    with patch.object(adb, "_adb_cmd", side_effect=mock_adb_cmd):
+        with patch("scripts.device_characterization.run_characterization.ADBCollector", return_value=adb):
+            with patch.object(adb, "get_connection_status", return_value="CONNECTED"):
+                today = datetime.datetime.utcnow().strftime("%Y%m%d")
+                run_id = f"run_{today}_150000"
+                config_file = Path("configs/device_characterization.yaml")
+
+                out_dir, run_dict = run_characterization(
+                    config_file,
+                    run_id=run_id,
+                    overwrite=True,
+                    results_dir=tmp_path,
+                )
+
+                # Verify characterization.json output
+                char_json = out_dir / "characterization.json"
+                assert char_json.exists()
+
+                with open(char_json, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                # Verify app_output_status
+                assert data.get("app_output_status") == "APP_OUTPUT_COLLECTED"
+
+                # Search CPU frequency and GPU clock in telemetry
+                telemetry = data.get("telemetry", [])
+                cpu_telemetry = next((t for t in telemetry if t["dimension"] == "cpu"), None)
+                gpu_telemetry = next((t for t in telemetry if t["dimension"] == "gpu"), None)
+
+                assert cpu_telemetry is not None
+                assert gpu_telemetry is not None
+
+                cpu_freq_res = next((r for r in cpu_telemetry["results"] if r["metric"] == "cpu_scaling_cur_freq"), None)
+                gpu_clock_res = next((r for r in gpu_telemetry["results"] if r["metric"] == "gpu_clock_hz"), None)
+
+                assert cpu_freq_res is not None
+                assert cpu_freq_res["value"] == 1804800
+                assert cpu_freq_res["state"] == "AVAILABLE"
+                assert cpu_freq_res["verified"] is True
+                assert cpu_freq_res["evidence_ref"] == "evidence/cpufreq_evidence.txt#scaling_cur_freq"
+
+                assert gpu_clock_res is not None
+                assert gpu_clock_res["value"] == 600000000
+                assert gpu_clock_res["state"] == "AVAILABLE"
+                assert gpu_clock_res["verified"] is True
+                assert gpu_clock_res["evidence_ref"] == "evidence/gpu_evidence.txt#gpuclk"
+
+
+def test_p04_all_soc_fallback_paths_and_evidence_refs(tmp_path):
+    """P-04: Test all 4 SoC fallback paths and verify evidence_ref citations."""
+    from src.monitoring.characterization.collectors import DeviceIdentityCollector
+
+    # Path 1: ro.soc.model available
+    adb1 = ADBCollector(device_id="DEV1")
+    def mock_cmd1(args):
+        c = " ".join(args)
+        if "getprop" in c: return 0, "[ro.soc.model]: [SM6125]\n", ""
+        return 0, "ok\n", ""
+
+    with patch.object(adb1, "_adb_cmd", side_effect=mock_cmd1):
+        _, props1 = adb1.collect_raw_evidence_and_observations(tmp_path / "p1")
+        ident1 = DeviceIdentityCollector().collect(props1)
+        soc_res1 = next(r for r in ident1.observed if r.metric == "soc_model")
+        assert soc_res1.value == "SM6125"
+        assert soc_res1.evidence_ref == "evidence/getprop_evidence.txt#ro.soc.model"
+
+    # Path 2: ro.soc.model unavailable, ro.board.platform available
+    adb2 = ADBCollector(device_id="DEV2")
+    def mock_cmd2(args):
+        c = " ".join(args)
+        if "getprop" in c: return 0, "[ro.board.platform]: [trinket]\n", ""
+        return 0, "ok\n", ""
+
+    with patch.object(adb2, "_adb_cmd", side_effect=mock_cmd2):
+        _, props2 = adb2.collect_raw_evidence_and_observations(tmp_path / "p2")
+        ident2 = DeviceIdentityCollector().collect(props2)
+        soc_res2 = next(r for r in ident2.observed if r.metric == "soc_model")
+        assert soc_res2.value == "trinket"
+        assert soc_res2.evidence_ref == "evidence/getprop_evidence.txt#ro.board.platform"
+
+    # Path 3: both getprop unavailable, cpuinfo Hardware available
+    adb3 = ADBCollector(device_id="DEV3")
+    def mock_cmd3(args):
+        c = " ".join(args)
+        if "getprop" in c: return 0, "", ""
+        elif "/proc/cpuinfo" in c: return 0, "Hardware : Qualcomm Technologies, Inc SM6125\n", ""
+        return 0, "ok\n", ""
+
+    with patch.object(adb3, "_adb_cmd", side_effect=mock_cmd3):
+        _, props3 = adb3.collect_raw_evidence_and_observations(tmp_path / "p3")
+        ident3 = DeviceIdentityCollector().collect(props3)
+        soc_res3 = next(r for r in ident3.observed if r.metric == "soc_model")
+        assert soc_res3.value == "Qualcomm Technologies, Inc SM6125"
+        assert soc_res3.evidence_ref == "evidence/cpuinfo_evidence.txt#Hardware"
+
+    # Path 4: all unavailable
+    adb4 = ADBCollector(device_id="DEV4")
+    def mock_cmd4(args):
+        return 0, "", ""
+
+    with patch.object(adb4, "_adb_cmd", side_effect=mock_cmd4):
+        _, props4 = adb4.collect_raw_evidence_and_observations(tmp_path / "p4")
+        ident4 = DeviceIdentityCollector().collect(props4)
+        soc_res4 = next(r for r in ident4.observed if r.metric == "soc_model")
+        assert soc_res4.value is None
+        assert soc_res4.state in ("UNAVAILABLE", "NOT_TESTED")
+        assert soc_res4.evidence_ref is None
+
+
+def test_p05_manifest_validation_cases(tmp_path):
+    """P-05: Comprehensive tests for valid, missing, tampered manifest and evidence files."""
+    from tests.test_device_characterization_report import _build_dummy_run_record
+
+    dummy_record = _build_dummy_run_record("run_20261005_120000", is_dry_run=False)
+    dummy_record["conditions"]["adb_connected"] = True
+    dummy_record["conditions"]["is_dry_run"] = False
+
+    run_dir = tmp_path / "run_p05"
+    ev_dir = run_dir / "evidence"
+    ev_dir.mkdir(parents=True)
+
+    ev_file = ev_dir / "test_ev.txt"
+    ev_bytes = b"valid content"
+    ev_file.write_bytes(ev_bytes)
+    sha_ev = hashlib.sha256(ev_bytes).hexdigest()
+
+    manifest_file = ev_dir / "manifest.json"
+    manifest_entries = [{
+        "relative_path": "evidence/test_ev.txt",
+        "size_bytes": len(ev_bytes),
+        "sha256": sha_ev,
+        "created_at": "2026-10-05T12:00:00Z"
+    }]
+    manifest_bytes = json.dumps(manifest_entries, indent=2).encode("utf-8")
+    manifest_file.write_bytes(manifest_bytes)
+    manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
+    dummy_record["manifest_sha256"] = manifest_sha
+
+    # 1. Valid manifest -> passes
+    errors1 = validate_characterization_record(dummy_record, output_dir=run_dir)
+    assert not errors1
+
+    # 2. Missing manifest -> fails
+    manifest_file.unlink()
+    errors2 = validate_characterization_record(dummy_record, output_dir=run_dir)
+    assert any("manifest.json missing" in e for e in errors2)
+
+    # Re-write manifest
+    manifest_file.write_bytes(manifest_bytes)
+
+    # 3. Tampered manifest hash in record -> fails
+    dummy_record_tampered = dict(dummy_record)
+    dummy_record_tampered["manifest_sha256"] = "0000000000000000000000000000000000000000000000000000000000000000"
+    errors3 = validate_characterization_record(dummy_record_tampered, output_dir=run_dir)
+    assert any("Manifest SHA-256 mismatch" in e for e in errors3)
+
+    # 4. Missing evidence file -> fails
+    ev_file.unlink()
+    errors4 = validate_characterization_record(dummy_record, output_dir=run_dir)
+    assert any("Manifest evidence file missing" in e for e in errors4)
+
+    # 5. Wrong evidence hash -> fails
+    ev_file.write_bytes(b"corrupted evidence")
+    errors5 = validate_characterization_record(dummy_record, output_dir=run_dir)
+    assert any("Evidence integrity failure" in e for e in errors5)
+
+
+def test_p07_probe_failure_semantics():
+    """P-07: Verify probe failures yield state=ERROR with error messages and commands.log evidence_ref."""
+    props = {
+        "is_real_device_observation": False,
+        "probe_error_battery": "Battery probe failed with exit code 1",
+        "probe_error_cpufreq": "Cpufreq sysfs node unreadable",
+        "probe_error_gpu": "GPU sysfs node unreadable",
+        "probe_error_meminfo": "Meminfo read error",
+        "probe_error_thermal": "Thermal service unavailable",
+        "probe_error_camera": "Camera service dead",
+    }
+
+    from src.monitoring.characterization.collectors import (
+        BatteryTelemetryCollector,
+        CPUTelemetryCollector,
+        GPUTelemetryCollector,
+        MemoryTelemetryCollector,
+        ThermalTelemetryCollector,
+        CameraCapabilityCollector,
+    )
+
+    bat_cap = BatteryTelemetryCollector().collect(props)
+    cpu_cap = CPUTelemetryCollector().collect(props)
+    gpu_cap = GPUTelemetryCollector().collect(props)
+    mem_cap = MemoryTelemetryCollector().collect(props)
+    th_cap = ThermalTelemetryCollector().collect(props)
+    cam_caps = CameraCapabilityCollector().collect(props)
+
+    bat_lvl = next(r for r in bat_cap.results if r.metric == "battery_level_percent")
+    assert bat_lvl.state == "ERROR"
+    assert bat_lvl.error_message == "Battery probe failed with exit code 1"
+    assert bat_lvl.evidence_ref == "evidence/commands.log#probe_error_battery"
+
+    cpu_freq = next(r for r in cpu_cap.results if r.metric == "cpu_scaling_cur_freq")
+    assert cpu_freq.state == "ERROR"
+    assert cpu_freq.error_message == "Cpufreq sysfs node unreadable"
+
+    gpu_freq = next(r for r in gpu_cap.results if r.metric == "gpu_clock_hz")
+    assert gpu_freq.state == "ERROR"
+    assert gpu_freq.error_message == "GPU sysfs node unreadable"
+
+    mem_avail = next(r for r in mem_cap.results if r.metric == "available_memory_mb")
+    assert mem_avail.state == "ERROR"
+    assert mem_avail.error_message == "Meminfo read error"
+
+    th_zones = next(r for r in th_cap.temperature_sources if r.metric == "thermal_zones_sysfs")
+    assert th_zones.state == "ERROR"
+
+    cam_hw = next(r for r in cam_caps[0].results if r.metric == "hardware_level")
+    assert cam_hw.state == "ERROR"
+
+
+def test_r09_battery_current_semantics():
+    """R-09: Test battery current unit conversions, zero current unverified flag, and implausible values."""
+    from src.monitoring.characterization.collectors import BatteryTelemetryCollector
+
+    # Case 1: Valid positive current in mA
+    props1 = {"is_real_device_observation": True, "battery_current_now": 250}
+    res1 = next(r for r in BatteryTelemetryCollector().collect(props1).results if r.metric == "battery_current_now")
+    assert res1.state == "AVAILABLE"
+    assert res1.value == 250.0
+    assert res1.verified is True
+
+    # Case 2: Zero current -> NOT marked VERIFIED
+    props2 = {"is_real_device_observation": True, "battery_current_now": 0}
+    res2 = next(r for r in BatteryTelemetryCollector().collect(props2).results if r.metric == "battery_current_now")
+    assert res2.state == "AVAILABLE"
+    assert res2.value == 0.0
+    assert res2.verified is False  # Cannot be verified!
+    assert res2.report_status == "AVAILABLE"
+
+    # Case 3: Unit conversion (uA -> mA for raw values > 10,000)
+    props3 = {"is_real_device_observation": True, "battery_current_now": 350000}
+    res3 = next(r for r in BatteryTelemetryCollector().collect(props3).results if r.metric == "battery_current_now")
+    assert res3.state == "AVAILABLE"
+    assert res3.value == 350.0  # Converted to mA
+    assert res3.verified is True
+
+    # Case 4: Implausible current (> 10,000 mA) -> state ERROR
+    props4 = {"is_real_device_observation": False, "battery_current_now": 99999999}
+    res4 = next(r for r in BatteryTelemetryCollector().collect(props4).results if r.metric == "battery_current_now")
+    assert res4.state == "ERROR"
+    assert "Implausible battery current" in res4.error_message
+
+
+def test_r03_exact_serial_matching():
+    """R-03: --serial must use exact matching, not prefix matching."""
+    adb = ADBCollector(device_id="STUB1")
+    devices_output = "List of devices attached\nSTUB123\tdevice\n"
+    with patch.object(adb, "_adb_cmd", return_value=(0, devices_output, "")):
+        assert adb.get_connection_status() == "NO_DEVICE"
+
+    devices_output_exact = "List of devices attached\nSTUB1\tdevice\n"
+    with patch.object(adb, "_adb_cmd", return_value=(0, devices_output_exact, "")):
+        assert adb.get_connection_status() == "CONNECTED"
+
+
+def test_r11_atomic_write_and_run_status(tmp_path):
+    """R-11: Verify atomic file creation and run_status handling."""
+    from tests.test_device_characterization_report import _build_dummy_run_record
+
+    generator = CharacterizationReportGenerator()
+    dummy_record = _build_dummy_run_record("run_20261005_160000", is_dry_run=True)
+    dummy_record["run_status"] = "DRY_RUN"
+
+    out_dir = tmp_path / "atomic_run"
+    res = generator.process_run(dummy_record, output_dir=out_dir)
+
+    assert res["status"] == "VALID"
+    assert (out_dir / "characterization.json").exists()
+    assert (out_dir / "README.md").exists()
+    assert not (out_dir / "characterization.json.tmp").exists()
+    assert not (out_dir / "README.md.tmp").exists()
