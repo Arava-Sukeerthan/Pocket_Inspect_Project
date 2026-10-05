@@ -31,6 +31,7 @@ The evaluated combinations, analysis populations, derived attributes and candida
   - [`candidate_gap_matrix.csv`](candidate_gap_matrix.csv): qualitative candidate × criterion assessments (14 criteria; no scores).
   - [`candidate_gap_evaluation.md`](candidate_gap_evaluation.md): the written evaluation. It does not rank or select a candidate.
   - Step 9.8 methodology correction (researcher-approved): narrowed GC-01/GC-02/GC-03 wording, operational Decisions A–C (content-driven cascades; learned view selection; in-sensor processors) and four confirmed partial counterexamples, all recorded in `configs/gap_evaluation.yaml` and §3.4 of the evaluation. The Step 9.7 files keep the original wording as the historical record.
+  - [`gc03_evidence_closure.md`](gc03_evidence_closure.md) (Step 9.9B): targeted evidence closure for GC-03 only. It records full-text reads of PMC11435656 and ActiveInspect, the P001/P007 access attempts, searches S46–S57 and the GC-03 answers to gate questions Q2, Q8 and Q10. Configuration: `configs/gc03_evidence_closure.yaml`. It does not select, rank or finalise a gap.
 
 The earlier hard-coded prototype combinations (GAP-001 to GAP-006) are retired. They remain only as the fallback used when no configuration file is present.
 

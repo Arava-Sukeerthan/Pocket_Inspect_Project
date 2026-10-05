@@ -411,11 +411,15 @@ class TestOperationalDefinitions(unittest.TestCase):
         self.assertEqual(code_resource_awareness(True), "Yes")
         for cid in ("GC-01", "GC-02", "GC-03"):
             self.assertNotEqual(_row("arXiv:2608.14727", cid)["resource_awareness"], "Yes")
-        # confidence-driven adaptation with resource role not established stays Unknown
+        # confidence-driven adaptation is never coded resource-aware Yes. Step 9.8 left it
+        # Unknown (keyword scan); the Step 9.9B end-to-end read established confidence-only
+        # routing, so it is now No, and only with a documented full-text basis.
         for cid in ("GC-01", "GC-03"):
             row = _row("PMC11435656", cid)
             self.assertEqual(row["adaptive_inference"], "Yes")
-            self.assertEqual(row["resource_awareness"], "Unknown")
+            self.assertEqual(row["resource_awareness"], "No")
+            self.assertEqual(row["verification_status"], "verified_by_full_text_read")
+            self.assertIn("Step 9.9B", row["notes"])
         defs = _validator().config["operational_definitions"]["A_content_driven_cascades"]
         self.assertIn("only when device/resource state", defs["resource_awareness"])
 
@@ -514,7 +518,10 @@ class TestNarrowedClaimFalsificationCheck(unittest.TestCase):
             self.assertIn("narrowed wording", entries[sid]["Candidate"])
             self.assertTrue(entries[sid]["Search limitations"].strip())
             self.assertRegex(entries[sid]["Results returned"], r"^\d+")
-        self.assertNotIn("S46", entries)
+        # Step 9.8 ended at S45; later entries (S46+) belong only to the Step 9.9B GC-03 closure
+        for sid in entries:
+            if int(sid[1:]) > 45:
+                self.assertIn("Step 9.9B", entries[sid]["Candidate"], sid)
         for cid in CANDIDATES:
             n = sum(1 for sid in self.NEW_SEARCHES if cid in entries[sid]["Candidate"])
             self.assertEqual(n, 6, cid)

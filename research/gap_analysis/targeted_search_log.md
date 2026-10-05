@@ -768,3 +768,215 @@ The four partial counterexamples above were confirmed by the researcher in the S
 No full counterexample was identified in this targeted falsification search.
 
 This describes 18 bounded web searches (one results page each) and the hits verified from them. It is not a statement about the literature as a whole.
+
+
+## Step 9.9B GC-03 evidence closure (S46–S57)
+
+_2026-10-05, Claude Code, branch `claude/step-9-9b-gc03-evidence-closure`. Twelve searches against GC-03 only, intended to falsify it. Report: [`gc03_evidence_closure.md`](gc03_evidence_closure.md)._
+
+**Database access.** IEEE Xplore, ACM Digital Library, Scopus and Web of Science were all blocked by this environment's egress proxy (HTTP CONNECT 403 or `EGRESS_BLOCKED` on 2026-10-05). No results were fabricated. Each planned database search was run through a legitimate substitute, named in the "Database / engine" row:
+- IEEE Xplore: 3 WebSearch queries restricted to the IEEE domain;
+- ACM DL: 3 WebSearch queries restricted to the ACM domain;
+- Scopus: 3 Consensus queries;
+- Web of Science: 3 PubMed queries.
+
+**Verification lookups (not counted among the 12 searches).** Full texts read:
+- PMC11435656, PMC13468834 (ActiveInspect) and PMC10280690, through the PubMed Central full-text service.
+
+Repository-copy searches:
+- P001: two WebSearch queries; the hits were a different paper;
+- P007: one WebSearch query.
+
+Citation follow-up and snippet lookup:
+- One WebSearch query followed the 'resource awareness module' citation in PMC11435656 and found AIVD, arXiv 2601.04734.
+- One WebSearch query looked up AIVD snippet detail.
+
+Blocked fetches: onlinelibrary.wiley.com (P001, P007), downloads.hindawi.com, structurae.de, www.mdpi.com and arxiv.org.
+
+### S46
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `smartphone visual inspection resource-aware adaptive inference confidence` |
+| Database / engine | WebSearch restricted to ieeexplore.ieee.org (IEEE Xplore itself blocked by the egress proxy; not the Xplore search interface) |
+| Results returned | 10 |
+| Relevant results inspected | 3: RobustDefect-LLM (already classified); CE-SGNet (already classified); ApproxDet (already classified, generic mobile vision) |
+| Strongest relevant papers | None meeting all five criteria; medical smartphone screening papers off-task |
+| Potential counterexamples | None new |
+| Unresolved items | None |
+| Search limitations | The domain filter leaked: most results came from PMC, arXiv and USPTO rather than the restricted domain; one results page |
+
+### S47
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `smartphone defect detection resource-aware adaptive confidence on-device` |
+| Database / engine | WebSearch restricted to ieeexplore.ieee.org (IEEE Xplore itself blocked by the egress proxy; not the Xplore search interface) |
+| Results returned | 9 |
+| Relevant results inspected | 3: PMC12716720 (already classified); SSGD dataset (phone as inspected product); arXiv 2509.20946 (on-device laser power-meter defect detection, title/snippet) |
+| Strongest relevant papers | None: phone-as-product inspection and a non-smartphone edge-AI core |
+| Potential counterexamples | None new |
+| Unresolved items | arXiv 2509.20946: snippet only; platform is an edge-AI core, not a smartphone |
+| Search limitations | The domain filter leaked: most results came from PMC, arXiv and USPTO rather than the restricted domain; one results page |
+
+### S48
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `mobile industrial inspection resource-aware inference confidence escalation` |
+| Database / engine | WebSearch restricted to ieeexplore.ieee.org (IEEE Xplore itself blocked by the egress proxy; not the Xplore search interface) |
+| Results returned | 10 |
+| Relevant results inspected | 2: HAPI, arXiv 2008.03997 (new, snippet); RobustDefect-LLM (already classified) |
+| Strongest relevant papers | HAPI: confidence-based progressive inference on generic workloads (partial; not inspection) |
+| Potential counterexamples | None |
+| Unresolved items | HAPI: snippet only |
+| Search limitations | The domain filter leaked: most results came from PMC, arXiv and USPTO rather than the restricted domain; one results page; patents returned |
+
+### S49
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `smartphone visual inspection resource-aware adaptive inference confidence` |
+| Database / engine | WebSearch restricted to dl.acm.org (ACM DL itself blocked by the egress proxy; not the ACM DL search interface) |
+| Results returned | 9 |
+| Relevant results inspected | 2: ApproxDet (already classified; ACM DL PDF link); Corun (mobile image sensing, not inspection) |
+| Strongest relevant papers | None meeting all five criteria |
+| Potential counterexamples | None new |
+| Unresolved items | None |
+| Search limitations | The domain filter leaked: most results came from PMC, arXiv and USPTO rather than the restricted domain; one results page |
+
+### S50
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `smartphone manufacturing inspection dynamic inference confidence` |
+| Database / engine | WebSearch restricted to dl.acm.org (ACM DL itself blocked by the egress proxy; not the ACM DL search interface) |
+| Results returned | 9 |
+| Relevant results inspected | 2: Multi-View Reflective Surface Inspection (already classified); Mobiprox (already classified) |
+| Strongest relevant papers | None meeting all five criteria |
+| Potential counterexamples | None new |
+| Unresolved items | A snippet describing edge systems delegating low-confidence inspections to a higher instance could not be attributed to a source |
+| Search limitations | The domain filter leaked: most results came from PMC, arXiv and USPTO rather than the restricted domain; one results page |
+
+### S51
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `mobile defect detection resource-aware adaptive model selection confidence threshold recapture` |
+| Database / engine | WebSearch restricted to dl.acm.org (ACM DL itself blocked by the egress proxy; not the ACM DL search interface) |
+| Results returned | 9 |
+| Relevant results inspected | 3: RAMS, arXiv 2606.14716 (new, snippet); ModiPick (generic SLA-aware mobile inference); arXiv 2509.20946 |
+| Strongest relevant papers | RAMS: resource-adaptive, detection-conditioned model switching for road-user perception (partial; not inspection) |
+| Potential counterexamples | None |
+| Unresolved items | RAMS: snippet only |
+| Search limitations | The domain filter leaked: most results came from PMC, arXiv and USPTO rather than the restricted domain; one results page |
+
+### S52
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `smartphone visual inspection resource-aware adaptive inference confidence-based verification defect detection` |
+| Database / engine | Consensus (substitute for Scopus, which is blocked; Consensus states coverage of Semantic Scholar, PubMed, Scopus and arXiv) |
+| Results returned | 10 |
+| Relevant results inspected | 4: Zakaria et al. 2022 (new, abstract); P001 (corpus, abstract re-read); Multi-View Reflective (already classified); CE-SGNet (already classified) |
+| Strongest relevant papers | Zakaria et al. 2022: bridge visual inspection on edge devices including smartphones, with human-verified results (potential, abstract only) |
+| Potential counterexamples | Zakaria et al. 2022 (potential) |
+| Unresolved items | Zakaria et al. 2022: runtime adaptation and confidence-triggered verification not stated in the abstract |
+| Search limitations | One results page (10 results, free tier); phone-as-product glass inspection papers off-task |
+
+### S53
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `on-device defect detection mobile phone dynamic model switching battery thermal confidence recapture` |
+| Database / engine | Consensus (substitute for Scopus, which is blocked; Consensus states coverage of Semantic Scholar, PubMed, Scopus and arXiv) |
+| Results returned | 10 |
+| Relevant results inspected | 0: results drifted to lithium-ion battery fault detection; DGNet (static detector on Jetson Nano) not relevant |
+| Strongest relevant papers | None |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | Query terms 'battery thermal' were matched as the inspected object; one results page |
+
+### S54
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `mobile industrial inspection resource-aware inference low-confidence escalation human review` |
+| Database / engine | Consensus (substitute for Scopus, which is blocked; Consensus states coverage of Semantic Scholar, PubMed, Scopus and arXiv) |
+| Results returned | 10 |
+| Relevant results inspected | 5: Yan et al. 2025 (new, abstract); Choi et al. 2026 (new, abstract); RobustDefect-LLM (already classified); arXiv 2608.21967 (already classified); P011 (corpus) |
+| Strongest relevant papers | Yan et al. 2025: visual defect inspection with confidence-based early exit (partial; not on a smartphone). Choi et al. 2026: confidence-threshold cooperative edge inference with joint radio-resource optimisation (potential; task and device not stated) |
+| Potential counterexamples | Choi et al. 2026 (potential) |
+| Unresolved items | Choi et al. 2026: device type, image task and runtime role of resource state not stated in the abstract |
+| Search limitations | One results page; first attempt hit the Consensus rate limit and was retried |
+
+### S55
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `(smartphone OR "mobile phone") AND ("defect detection" OR "visual inspection") AND (adaptive OR "resource-aware" OR "dynamic inference") AND confidence` |
+| Database / engine | PubMed (substitute for Web of Science, which is blocked; indexes Sensors, PeerJ CS and other engineering journals in PMC) |
+| Results returned | 3 |
+| Relevant results inspected | 0: all three records are smartphone cervical-cancer screening (medical, not inspection of physical items) |
+| Strongest relevant papers | None |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | PubMed covers engineering only through journals it indexes |
+
+### S56
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `(smartphone OR mobile) AND "industrial inspection" AND (resource OR battery OR thermal) AND (confidence OR uncertainty)` |
+| Database / engine | PubMed (substitute for Web of Science, which is blocked; indexes Sensors, PeerJ CS and other engineering journals in PMC) |
+| Results returned | 0 |
+| Relevant results inspected | 0 |
+| Strongest relevant papers | None |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | Zero records; PubMed engineering coverage is partial |
+
+### S57
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording; Step 9.9B evidence closure) |
+| Exact query | `(smartphone OR "edge device") AND (manufacturing OR "surface defect") AND ("model switching" OR "early exit" OR "dynamic inference" OR cascade) AND (confidence OR uncertainty)` |
+| Database / engine | PubMed (substitute for Web of Science, which is blocked; indexes Sensors, PeerJ CS and other engineering journals in PMC) |
+| Results returned | 0 |
+| Relevant results inspected | 0 |
+| Strongest relevant papers | None |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | Zero records; PubMed engineering coverage is partial |
+
+### Outcome of S46–S57
+
+| Candidate | Full counterexamples | Partial | Potential / unresolved | Not counterexamples |
+| :-- | :-- | :-- | :-- | :-- |
+| GC-03 | None | Yan et al. 2025 (abstract; visual inspection + early exit + confidence; not a smartphone); RAMS (snippet; not inspection); HAPI (snippet; not inspection); P007 (corpus; not a smartphone) | AIVD (snippet; resource-aware scheduling claimed; platform and confidence role unknown); Choi et al. 2026 (abstract); Zakaria et al. 2022 (abstract); P001 (corpus, abstract only); Electronics 15(17):3915 (snippet) | PMC10280690 (full text: training-time meta-learning) |
+
+No full counterexample to GC-03 was identified in these twelve searches and the verification lookups. This describes bounded, one-page searches through substitute engines. It is not a statement about the literature as a whole.

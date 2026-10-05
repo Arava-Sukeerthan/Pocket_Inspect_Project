@@ -1453,3 +1453,94 @@ Step 9.8 final narrowed-claim falsification check (PR #10; not merged). A small,
 - Branch: `claude/step-9-8-gap-evaluation` (PR #10; not merged). Previous commit: `fb5b9a5`.
 - Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
 - Push status: pushed to the branch; not merged; `main` not modified.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.9B: a final, targeted evidence-closure pass for **GC-03 only**. It resolves the three GC-03 gate questions left `unresolved` in Step 9.9 Phase A:
+- Q2: the Unknown burden;
+- Q8: whether a contribution is distinguishable from integration;
+- Q10: the risk of being overturned by further literature.
+
+Not a broad survey. No selection, no ranking, no `research_gap.md`, no merge.
+
+### Changes
+- **`research/gap_analysis/gc03_evidence_closure.md` (new).** The 17 required sections, ending with the required closing sentence.
+- **`configs/gc03_evidence_closure.yaml` (new).** Declarative record of:
+  - criteria and strength rules;
+  - priority-paper findings;
+  - gate answers;
+  - overturn candidates and searches;
+  - dataset feasibility for the 13 Phase A entries (access/licence `verification_required` or `unknown`);
+  - candidate baselines B1–B5;
+  - null selection.
+- **`research/gap_analysis/counterexample_candidates.csv`.** 4 rows updated and 10 appended (48 → 58). CRLF line endings preserved.
+  - PMC11435656 (GC-01/02/03 rows): `resource_awareness` Unknown → No, after an end-to-end full-text read.
+  - ActiveInspect: `resource_awareness` Unknown → No; `confidence_gating` kept Unknown and flagged.
+  - Both: `verification_status` → `verified_by_full_text_read`. Evidence levels are locked and strengths unchanged (partial).
+  - New GC-03 rows:
+    - P001 (potential, corpus-reproduced) and P007 (partial, corpus-reproduced);
+    - PMC10280690 (not_counterexample, full text);
+    - AIVD, arXiv 2601.04734 (potential, snippet);
+    - Choi et al. 2026 (potential, abstract);
+    - Zakaria et al. 2022 (potential, abstract);
+    - Yan et al. 2025 (partial, abstract);
+    - RAMS and HAPI (partial, snippet);
+    - Electronics 15(17):3915 (potential, snippet).
+- **`research/gap_analysis/targeted_search_log.md`.** New section with S46–S57, an outcome table and the separately listed verification lookups. S01–S45 are unchanged.
+- **`research/gap_analysis/README.md`.** Pointer to the closure document.
+- **`tests/test_gc03_evidence_closure.py` (new).** 15 tests covering the 15 required checks.
+- **`tests/test_gap_evaluation.py`.** Two assertions updated to the new evidence:
+  - PMC11435656 `resource_awareness` is now No, with a full-text basis (it was pinned Unknown);
+  - entries after S45 must belong to the Step 9.9B section (it was "no S46").
+
+### Research decisions
+- **Evidence checked.**
+  - Full-text reads via PubMed Central: PMC11435656, PMC13468834 (ActiveInspect) and PMC10280690.
+  - **P001:** Wiley is blocked by the egress proxy, and the repository hits are a different 2019 *Sensors* paper. The full text stays unresolved: `abstract_only`, potential.
+  - **P007:** Wiley, Hindawi and structurae are blocked. The full text stays unresolved: `abstract_only`, partial (the abstract places inference on OAK-D/Raspberry Pi).
+  - **PMC11435656:** routing is driven by confidence only (threshold 0.6 → re-detection → cloud). The platform is Raspberry Pi 4 edge devices, not a smartphone, and the three-device split is design-time. **Partial.**
+  - **ActiveInspect:** the budget is a fixed hyperparameter, and inference runs on an A100 over pre-acquired pools. Confidence informs a learned policy but triggers nothing explicitly. **Partial.** The `confidence_gating` coding needs a researcher decision: Decision B "explicitly informs" versus this task's "explicitly triggers".
+- **Searches.**
+  - 12 (S46–S57). IEEE Xplore, ACM DL, Scopus and Web of Science were all blocked, so legitimate substitutes were used and labelled:
+    - WebSearch restricted to `ieeexplore.ieee.org` (3) and `dl.acm.org` (3);
+    - Consensus (3);
+    - PubMed (3).
+  - No results were fabricated.
+- **No full counterexample** was identified in the searches and papers read. This is an observation, not a claim about the literature as a whole. No record meets four criteria with the fifth unresolved.
+- **Q2: `conditionally_acceptable`.** Acceptable for the corpus-bounded wording, provided P001 and AIVD are read or named as limitations.
+- **Q8: `conditionally_distinct`.**
+  - Every component is already demonstrated, including resource-adaptive plus confidence-conditioned switching outside inspection (RAMS, HAPI, Choi 2026), so integration alone is not distinctive.
+  - The downgrade-recovery and calibration-shift question is quantitatively testable (B1–B5).
+  - Distinctiveness depends on untested Hypotheses and on full reads of Choi 2026 and AIVD.
+- **Q10: `moderate`.** The overturning paper type is specified in §13 of the closure document.
+- **Datasets.**
+  - All 13 entries support visual defect inspection, and all can drive on-device inference by replay.
+  - None is verified as smartphone-captured.
+  - Multi-view exists in Real-IAD, MANTA and MVTec3D-AD/Eyecandies; physical recapture needs custom capture.
+  - No access or licence is asserted.
+- **Minimum viable experiment.** A defensible minimum experiment (Proposed idea) exists, conditional on dataset, device and API verification. No results are claimed.
+- **Branch base.** Step 9.9 Phase A (`d8894d9`) is not on `main`. Its files were read from its branch and not modified. The Q2/Q8/Q10 results are documented to replace Phase A's `unresolved` GC-03 gate entries once the branches are reconciled.
+
+### Verification
+- `python -m pytest -q`: 129 passed (114 existing + 15 new).
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 31 columns; 0 duplicate IDs.
+- `GapEvaluationValidator.validate()` returns no errors; 57 search entries are parsed.
+- `papers.csv` SHA-256 is `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521` before and after, and `git diff -- research/literature/` is empty.
+- `research/gap_analysis/research_gap.md` does not exist.
+
+### Uncertain items
+- Full texts of AIVD (arXiv 2601.04734), P001 and Choi et al. 2026 are needed. arXiv and alphaXiv were unreachable.
+- The DOIs of the Consensus-sourced records (Yan 2025, Choi 2026, Zakaria 2022) were not verified.
+- Researcher decision on ActiveInspect `confidence_gating`.
+- Reconciliation with the Step 9.9 Phase A branch.
+
+### Remaining work
+- Researcher review of Step 9.9B. **No final research gap was selected or approved.** GC-03 is not selected, no candidate is ranked, and Step 10 has not started.
+
+### Git
+- Branch: `claude/step-9-9b-gc03-evidence-closure` (from `origin/main` `f8e0d2e`).
+- Commit: see `git log -- research/gap_analysis/gc03_evidence_closure.md`.
+- Push status: pushed to the branch; not merged; `main` not modified.

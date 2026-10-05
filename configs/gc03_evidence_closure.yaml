@@ -1,0 +1,128 @@
+# Step 9.9B: GC-03 evidence closure (analysis-only).
+#
+# Records the evidence-closure results for GC-03 only. It does not select,
+# rank or score any candidate, and it does not create research_gap.md.
+# Report: research/gap_analysis/gc03_evidence_closure.md
+# Evidence rows: research/gap_analysis/counterexample_candidates.csv
+# Searches: research/gap_analysis/targeted_search_log.md (S46-S57)
+
+step: "9.9B"
+status: "Pending researcher review"
+candidate_id: GC-03
+# Must equal configs/gap_evaluation.yaml candidates.GC-03 exactly.
+candidate_wording: "Limited evidence of an integrated resource-aware smartphone visual-inspection system that combines runtime adaptation with confidence-aware downstream verification within the reviewed corpus."
+
+frozen_corpus:
+  path: research/literature/papers.csv
+  sha256: c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521
+  records: 54
+  columns: 31
+
+# A full counterexample requires every criterion to be Yes.
+full_counterexample_criteria: [smartphone, visual_inspection, resource_awareness, adaptive_inference, confidence_gating]
+
+# Strength rules used in this step (Step 9.9B task, Part VI), applied with the
+# Step 9.8 vocabulary in configs/gap_evaluation.yaml.
+strength_rules:
+  full: "All five criteria Yes."
+  potential: "No criterion clearly failed, and one or more criteria Unknown at the available evidence level."
+  partial: "At least one criterion clearly failed (explicit No)."
+  not_counterexample: "Verified not to concern the GC-03 combination (wrong task, platform and mechanism)."
+
+# Priority papers (Part III). Evidence levels follow the locked Step 9.8 levels.
+priority_papers:
+  P001:
+    full_text_accessed: false
+    access_attempts: ["onlinelibrary.wiley.com (blocked)", "repository search (hits are a different 2019 Sensors paper)", "Consensus abstract"]
+    evidence_level: abstract_only
+    status: unresolved
+    counterexample_strength: potential
+  P007:
+    full_text_accessed: false
+    access_attempts: ["onlinelibrary.wiley.com (blocked)", "downloads.hindawi.com (blocked)", "structurae.de (blocked)"]
+    evidence_level: abstract_only
+    status: unresolved
+    counterexample_strength: partial
+  PMC11435656:
+    full_text_accessed: true
+    review_mode: full_text_read_end_to_end
+    source: "PubMed Central PMC11435656 (doi 10.3390/s24185921)"
+    evidence_level: verified_full_text
+    counterexample_strength: partial
+    findings:
+      smartphone: "No: three Raspberry Pi 4 edge devices plus a cloud server"
+      visual_inspection: "Yes: camera video stream of PCBs"
+      resource_awareness: "No: routing is driven by detection confidence only; the three-device split is design-time"
+      adaptive_inference: "Yes: low-confidence samples follow a different computation path (Pi B, then cloud YoloV5s)"
+      confidence_gating: "Yes: confidence below 0.6 triggers re-detection and cloud review"
+  ActiveInspect:
+    id: "doi:10.3390/s26154932"
+    full_text_accessed: true
+    review_mode: full_text_read_end_to_end
+    source: "PubMed Central PMC13468834"
+    evidence_level: verified_full_text
+    counterexample_strength: partial
+    findings:
+      smartphone: "No: one A100 80 GB for inference, pre-acquired observation pools"
+      visual_inspection: "Yes: RGB and geometric renderings of industrial parts"
+      resource_awareness: "No: the observation budget is a fixed task hyperparameter; no device state is used"
+      adaptive_inference: "Yes: sample-adaptive number of views and VLM calls"
+      confidence_gating: "Unknown (researcher decision): confidences enter the learned policy's memory and correlate with action A3, but no explicit trigger rule exists"
+    researcher_decision_required: "Whether confidence that informs a learned policy without an explicit trigger counts as confidence_gating (Decision B 'explicitly informs' vs Step 9.9B 'explicitly triggers'). Either reading leaves the paper partial."
+
+# Gate answers for GC-03 only. Allowed values are listed per question.
+gate_answers:
+  Q2:
+    question: "Is the remaining Unknown burden acceptable?"
+    allowed: [acceptable, conditionally_acceptable, not_acceptable]
+    result: conditionally_acceptable
+  Q8:
+    question: "Can the potential contribution be distinguished from merely combining existing components?"
+    allowed: [distinct_enough, conditionally_distinct, not_sufficiently_distinct]
+    result: conditionally_distinct
+  Q10:
+    question: "Could additional literature reasonably overturn GC-03?"
+    allowed: [low, moderate, high]
+    result: moderate
+
+# Remaining papers that could realistically overturn GC-03.
+overturn_candidates: [P001, "arXiv:2601.04734", "IEEE TVT 2026 (Choi et al.)", "Adv. Bridge Eng. 2022 (Zakaria et al.)", "Electronics 15(17):3915"]
+
+# Searches performed in Step 9.9B (counted against the 12-search cap).
+searches:
+  ids: [S46, S47, S48, S49, S50, S51, S52, S53, S54, S55, S56, S57]
+  database_access:
+    IEEE Xplore: "blocked; substitute WebSearch restricted to ieeexplore.ieee.org (3)"
+    ACM Digital Library: "blocked; substitute WebSearch restricted to dl.acm.org (3)"
+    Scopus: "blocked; substitute Consensus (3)"
+    Web of Science: "blocked; substitute PubMed (3)"
+
+# Dataset feasibility for GC-03 (13 Step 9.9 Phase A entries). Access and
+# licence are never assumed: every entry stays verification_required or unknown.
+dataset_availability_values: [verification_required, unknown]
+datasets:
+  - {name: MVTec AD, visual_defect: "Yes", smartphone_captured: Unknown, multi_view_or_recapture: Unknown, custom_capture_needed: "for smartphone realism", access_licence: verification_required}
+  - {name: Real-IAD, visual_defect: "Yes", smartphone_captured: Unknown, multi_view_or_recapture: "multi-view (5 fixed RGB viewpoints)", custom_capture_needed: "for recapture", access_licence: verification_required}
+  - {name: MANTA, visual_defect: "Yes", smartphone_captured: Unknown, multi_view_or_recapture: "multi-view (5 viewpoints)", custom_capture_needed: "for recapture", access_licence: verification_required}
+  - {name: MVTec3D-AD and Eyecandies, visual_defect: "Yes", smartphone_captured: Unknown, multi_view_or_recapture: "RGB + 3D; multi-view per P043", custom_capture_needed: "for smartphone realism", access_licence: verification_required}
+  - {name: DeepPCB / public PCB defect dataset, visual_defect: "Yes", smartphone_captured: Unknown, multi_view_or_recapture: Unknown, custom_capture_needed: "for multi-view or recapture", access_licence: verification_required}
+  - {name: CAXTON, visual_defect: "Yes", smartphone_captured: "No", multi_view_or_recapture: "No", custom_capture_needed: "for smartphone, multi-view or recapture", access_licence: verification_required}
+  - {name: P016 stringing dataset, visual_defect: "Yes", smartphone_captured: "No", multi_view_or_recapture: "No", custom_capture_needed: "yes", access_licence: unknown}
+  - {name: P020 layer images, visual_defect: "Yes", smartphone_captured: "No", multi_view_or_recapture: "No", custom_capture_needed: "yes", access_licence: unknown}
+  - {name: VisA, visual_defect: "Yes", smartphone_captured: Unknown, multi_view_or_recapture: Unknown, custom_capture_needed: "for multi-view or recapture", access_licence: verification_required}
+  - {name: KolektorSDD2, visual_defect: "Yes", smartphone_captured: Unknown, multi_view_or_recapture: Unknown, custom_capture_needed: "for multi-view or recapture", access_licence: verification_required}
+  - {name: NEU-DET, visual_defect: "Yes", smartphone_captured: Unknown, multi_view_or_recapture: Unknown, custom_capture_needed: "for multi-view or recapture", access_licence: verification_required}
+  - {name: MMS dataset, visual_defect: "Yes", smartphone_captured: "No", multi_view_or_recapture: "No (cross-device, same objects)", custom_capture_needed: "yes", access_licence: verification_required}
+  - {name: Phone-captured 3D-printed-part set, visual_defect: "Yes (by design)", smartphone_captured: "Yes (by design)", multi_view_or_recapture: "Yes (by design)", custom_capture_needed: "yes (Proposed idea)", access_licence: unknown}
+
+# Candidate baselines for the minimum viable experiment (Proposed idea; no results).
+candidate_baselines:
+  B1: "Static best model (full-capacity configuration, no downgrade, no verification)"
+  B2: "Static lightweight model (no downgrade, no verification)"
+  B3: "Resource-aware adaptation without confidence verification"
+  B4: "Confidence verification without resource adaptation (static configuration plus the same verification action)"
+  B5: "Resource-aware adaptation plus confidence-aware verification (full system)"
+
+selection:
+  selected_candidate: null
+  research_gap_file_created: false
