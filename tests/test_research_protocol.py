@@ -332,15 +332,24 @@ class TestResearchProtocol(unittest.TestCase):
         self.assertEqual(len(self.cfg["baselines"]), 5)
         self.assertEqual(self.cfg["ablation_variants"]["B5-F"]["parent"], "B5")
 
-    # 15-16. no implementation files, no datasets, no results created
+    # 15-16. no implementation files, no datasets, no results created (narrowed for Step 10D characterization allow-list)
     def test_no_implementation_datasets_or_results(self):
-        for module in ("acquisition", "adaptation", "inference", "inspection", "monitoring", "quality", "uncertainty"):
+        for module in ("acquisition", "adaptation", "inference", "inspection", "quality", "uncertainty"):
             files = sorted(p.name for p in (ROOT / "src" / module).iterdir() if p.name != "__pycache__")
             self.assertEqual(files, ["README.md", "__init__.py"], module)
-        for folder in ("mobile", "experiments", "models", "backend"):
+        # monitoring allows Step 10D characterization package
+        mon_files = sorted(p.name for p in (ROOT / "src" / "monitoring").iterdir() if p.name != "__pycache__")
+        self.assertLessEqual(set(mon_files) - {"README.md", "__init__.py"}, {"characterization"})
+        for folder in ("experiments", "models", "backend"):
             self.assertEqual(sorted(p.name for p in (ROOT / folder).iterdir()), ["README.md"], folder)
-        for folder in ("results", "figures", "tables", "manuscript_data"):
+        # mobile allows Step 10D characterization module
+        mob_files = sorted(p.name for p in (ROOT / "mobile").iterdir())
+        self.assertLessEqual(set(mob_files) - {"README.md"}, {"characterization"})
+        for folder in ("figures", "tables", "manuscript_data"):
             self.assertEqual(sorted(p.name for p in (ROOT / "research" / folder).iterdir()), ["README.md"], folder)
+        # research/results allows Step 10D device_characterization
+        res_files = sorted(p.name for p in (ROOT / "research" / "results").iterdir())
+        self.assertLessEqual(set(res_files) - {"README.md"}, {"device_characterization"})
         # research/experiments holds only the README and the Step 10C protocol documents (no runs, no results)
         step_10c_docs = {"experimental_protocol.md", "resource_states.md", "model_selection_protocol.md",
                          "confidence_verification_protocol.md", "measurement_protocol.md",

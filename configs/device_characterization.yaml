@@ -1,0 +1,58 @@
+# Step 10D: Device Characterization Procedural Configuration.
+#
+# Defines procedural parameters, probe paths, and collector configurations
+# for characterizing the experimental platform (OPPO A5 2020, 3 GB RAM).
+#
+# Procedure settings only; contains no model thresholds, model ladder,
+# benchmark latency, or performance results.
+
+step: "10D"
+status: "implementation_configured"
+
+device_unit_id: "OPPO_A5_2020_UNIT_01"
+
+known_specification:
+  manufacturer: "OPPO"
+  model: "OPPO A5 2020"
+  ram_variant: "3 GB"
+  excluded_variants:
+    - "4 GB"
+    - "6 GB"
+  storage: "64 GB"
+  soc: "Qualcomm Snapdragon 665"
+  gpu: "Adreno 610"
+  android_launch_version: "Android 9 / ColorOS"
+  source: "researcher-provided manufacturer specification"
+
+procedural_parameters:
+  polling_interval_ms: 1000          # 1 Hz sampling for observation windows
+  observation_window_seconds: 30     # 30-second window per telemetry check
+  repeat_runs_required: 2            # Two characterization runs required
+  repeat_min_separation_hours: 12    # Separate days / reboot between runs
+  adb_timeout_seconds: 15            # ADB shell command timeout
+
+enabled_collectors:
+  - device_identity
+  - android_capability
+  - battery_telemetry
+  - memory_telemetry
+  - cpu_telemetry
+  - gpu_telemetry
+  - thermal_telemetry
+  - camera_capability
+  - inference_backend_capability
+  - profiling_capability
+  - energy_measurement_checker
+
+probes:
+  kgsl_sysfs_paths:
+    - "/sys/class/kgsl/kgsl-3d0/gpuclk"
+    - "/sys/class/kgsl/kgsl-3d0/gpubusy"
+    - "/sys/class/devfreq/1c00000.qcom,kgsl-3d0/cur_freq"
+  cpufreq_sysfs_pattern: "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq"
+  thermal_sysfs_pattern: "/sys/class/thermal/thermal_zone%d"
+
+output:
+  results_directory: "research/results/device_characterization"
+  schema_path: "research/experiments/device_characterization_schema.json"
+  matrix_path: "research/experiments/device_capability_matrix.md"
