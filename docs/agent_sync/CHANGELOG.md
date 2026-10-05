@@ -2336,3 +2336,72 @@ Step 10D — Actual Device Characterization Implementation.
 - Branch: `antigravity/step-10d-device-characterization` from `main` (`24aa0f0`).
 - Commit: see `git log` for this file.
 
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 10D **post-merge independent audit** of PR #20 (Antigravity implementation, commit `050bb6d`, merged as `e9ffade`).
+- PR #20 was merged **before** this review. This is not a pre-merge approval.
+- Full report: `docs/architecture/step10d_post_merge_audit.md`.
+
+### Decision
+**REJECT — MAJOR IMPLEMENTATION/PROTOCOL FAILURE.** Step 10D is not ready to freeze.
+
+### Basis (verified directly from the repository)
+- **No device observation.** Both run files contain 0 non-null values, 0 verified results, 0 `evidence_ref` and 0 `observed_at`. `adb_connected: false`, and no raw-evidence directory exists. OPPO A5 2020 identity, the 3 GB variant, Android/API, ABI, CPU and memory are all **NOT VERIFIED**.
+- **Not two runs on separate days.** `started_at` values are `2026-10-05T09:02:41Z` and `2026-10-05T09:03:06Z`, 25 s apart. The directory `run_20261006_100000` contradicts its own start time, and the files are identical apart from ID fields.
+- **Untested items recorded as device facts.** 47 records say UNAVAILABLE where no probe ran; they should be NOT_TESTED.
+- **API level assumed.** The thermal APIs are API_UNSUPPORTED via a default `api_level=28` (`ThermalTelemetryCollector`). The D-10 thermal source was selected without evidence.
+- **Mock data can become VERIFIED.** `verified`/VERIFIED is set for any non-None input, with hard-coded evidence references to files that are never written; demonstrated with `{"level": 57}`. ADB capability flags (`proc_stat`, `atrace`) are hard-coded True.
+- **Also found:**
+  - the report-status mapping deviates from protocol §3;
+  - the on-device app covers 2 of 10 collectors and is not buildable (`MainActivity` missing);
+  - ADB evidence is never parsed, and the 3 GB variant check is not implemented;
+  - provenance is hard-coded (`git_commit: "24aa0f0-impl"`), and network and charging are not observed;
+  - battery plausibility ranges silently discard real readings;
+  - the capability matrix was not updated;
+  - the Antigravity CHANGELOG entry overstates the result.
+
+### Findings
+- **P0:** F-01 to F-05.
+- **P1:** F-06 to F-11.
+- **P2:** F-12 to F-14.
+- **P3:** F-15.
+
+Each finding gives the file, function, impact, required correction, required test and whether a new device run is needed (see the audit document).
+
+### Correct elements (no change needed)
+- Model-level no-fake-zero enforcement and validator.
+- `absolute_energy_claimed: false`.
+- minSdk and targetSdk 28, with correct Kotlin SDK_INT guards where implemented.
+- No C1–C4, R0–R3, r*, energy-threshold, binning or time-budget decision; the authoritative protocol files are unchanged.
+- Guard-test narrowing accepted, except for one unnecessarily deleted assertion (F-15).
+
+### Verification
+- `python -m pytest -q` on `main` (`e9ffade`): **277 passed** (reproduced). The tests are mock/unit only, and none verifies device behaviour.
+- Both run files are JSON-Schema valid (0 errors). Schema validity is not scientific validity.
+
+### Handed back to Antigravity
+- Fix F-01 to F-15 through normal follow-up commits or PRs.
+- Append an **append-only** correction entry. The original 2026-10-05 Antigravity entry must not be edited.
+- Remove or clearly relabel the two no-device runs.
+- Run the characterization on the physical OPPO A5 2020 (3 GB) **twice, on separate days, with a reboot between**, with raw evidence.
+- Claude Code then re-audits.
+
+### Preserved as unresolved
+- C1–C4;
+- R0–R3 thresholds;
+- r*;
+- energy agreement threshold;
+- calibration (binning) decisions;
+- total decision-time budget;
+- D-10 thermal source and D-16 energy level, both to be decided from device evidence.
+
+Step 10E not started.
+
+### Git
+- Branch: `claude/step-10d-post-merge-audit`, from `main` `e9ffade`.
+- Review documentation only; no implementation or data file was modified.
+- Commit: see `git log -- docs/architecture/step10d_post_merge_audit.md`.
