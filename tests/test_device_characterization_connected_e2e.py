@@ -1128,3 +1128,54 @@ def test_p505_dry_run_status(tmp_path):
     with patch("scripts.device_characterization.adb_collector.ADBCollector.get_connection_status", return_value="NO_DEVICE"):
         _, run_dict = run_characterization(Path("configs/device_characterization.yaml"), dry_run=True, results_dir=tmp_path)
     assert run_dict["run_status"] == "DRY_RUN"
+
+
+# ---------------------------------------------------------------------------
+# Camera evidence observability (physical-device follow-up, 2026-10-05)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("probe_state, err", [("ERROR", "CameraAccessException: CAMERA_ERROR"), ("UNAVAILABLE", None)])
+def test_app_camera_probe_non_available_state_is_preserved(tmp_path, probe_state, err):
+    """The app's camera_probe state (ERROR, or UNAVAILABLE when no CameraManager service exists)
+    reaches the report unchanged through the real pipeline; it is never NOT_TESTED or a value."""
+    camera = [_app_item("camera_probe", probe_state, error_message=err)]
+    _, data, observed = _run_synthetic(tmp_path, _app_json(camera=camera))
+    hw = _all_results(data)["camera_0_hardware_level"]
+    assert hw["state"] == probe_state
+    assert hw["value"] is None
+    assert hw["verified"] is False
+    assert hw["evidence_ref"] == "evidence/android_app_evidence.json#camera_probe"
+    if err:
+        assert hw["error_message"] == err
+    assert "camera_count" not in observed
+
+
+def test_app_artifact_path_contract_between_android_app_and_host():
+    """The device file the app writes is the one the host retrieves, and the host stores it under
+    the name every app evidence_ref cites (evidence/android_app_evidence.json)."""
+    import re
+    kotlin_dir = Path("mobile/characterization/src/main/kotlin/org/pocketinspect/characterization")
+    formatter = (kotlin_dir / "AppJsonLogFormatter.kt").read_text(encoding="utf-8")
+    activity = (kotlin_dir / "MainActivity.kt").read_text(encoding="utf-8")
+    collectors_kt = (kotlin_dir / "Collectors.kt").read_text(encoding="utf-8")
+    host = Path("scripts/device_characterization/adb_collector.py").read_text(encoding="utf-8")
+    gradle = Path("mobile/characterization/build.gradle.kts").read_text(encoding="utf-8")
+
+    file_name = re.search(r'OUTPUT_FILE_NAME = "([^"]+)"', formatter).group(1)
+    host_copy = re.search(r'HOST_EVIDENCE_PATH = "([^"]+)"', formatter).group(1)
+    package = re.search(r'applicationId = "([^"]+)"', gradle).group(1)
+
+    # The app writes the report to filesDir and getExternalFilesDir under OUTPUT_FILE_NAME ...
+    assert "File(filesDir, AppJsonLogFormatter.OUTPUT_FILE_NAME)" in activity
+    assert "File(extDir, AppJsonLogFormatter.OUTPUT_FILE_NAME)" in activity
+    # ... and the host reads exactly those paths.
+    assert f'"run-as", "{package}", "cat", "files/{file_name}"' in host
+    assert f'"/sdcard/Android/data/{package}/files/{file_name}"' in host
+    # The host stores the retrieved bytes under the name the app's evidence_refs cite.
+    assert host_copy == "evidence/android_app_evidence.json"
+    assert f'"relative_path": "{host_copy}"' in host
+    refs = set(re.findall(r'evidence_ref = "([^"#]+)#', collectors_kt))
+    assert refs == {host_copy}
+    # The whole report is no longer logged as one (truncatable) logcat entry.
+    assert 'Log.i("POCKETINSPECT_APP_JSON", jsonOutput)' not in activity
+    assert "AppJsonLogFormatter.formatLines(jsonOutput, writtenPaths)" in activity

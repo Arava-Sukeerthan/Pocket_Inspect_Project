@@ -1405,11 +1405,15 @@ class CameraCapabilityCollector:
                 val_hw = None
                 err_hw = app_hw.get("error_message")
                 ev_hw = f"{APP_EVIDENCE}#camera_{cid}_hardware_level" if is_real else None
-            elif hw_level is None and app_cam_probe and app_cam_probe.get("state") == RuntimeState.ERROR.value:
-                # P5-03: the app's camera probe failed as a whole (e.g. CameraAccessException)
-                state_hw = RuntimeState.ERROR.value
+            elif hw_level is None and app_cam_probe and app_cam_probe.get("state") in {s.value for s in RuntimeState}:
+                # P5-03: the app's camera probe did not succeed as a whole, e.g. ERROR
+                # (CameraAccessException) or UNAVAILABLE (no CameraManager service); keep that state.
+                state_hw = app_cam_probe["state"]
                 val_hw = None
-                err_hw = app_cam_probe.get("error_message") or "Android app camera probe failed"
+                if state_hw == RuntimeState.ERROR.value:
+                    err_hw = app_cam_probe.get("error_message") or "Android app camera probe failed"
+                else:
+                    err_hw = app_cam_probe.get("error_message")
                 ev_hw = f"{APP_EVIDENCE}#camera_probe" if is_real else None
             elif hw_level is None:
                 if probe_err_cam:
