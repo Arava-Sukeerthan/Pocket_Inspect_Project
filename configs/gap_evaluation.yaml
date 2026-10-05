@@ -1,0 +1,308 @@
+# Step 9.8 candidate-gap evaluation framework.
+#
+# Declarative configuration for evaluating the Step 9.7 candidate gaps
+# (GC-01, GC-02, GC-03). It defines the evaluation dimensions, the allowed
+# vocabularies of the Step 9.8 evidence files, and the guard-rails used by
+# src/literature/gap_evaluation.py and tests/test_gap_evaluation.py.
+#
+# This file does NOT rank, score, weight or select candidates. Assessments are
+# qualitative statements. Final research-gap selection is a researcher decision
+# outside Step 9.8.
+
+step: "9.8"
+status: "Pending researcher review"
+
+frozen_corpus:
+  path: research/literature/papers.csv
+  records: 54
+  columns: 31
+  sha256: c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521
+
+# Narrowed candidate wording (Step 9.8 controlled methodology correction,
+# researcher-approved). Candidates remain unordered, unranked, unselected,
+# corpus-bounded and provisional.
+candidates:
+  GC-01: "Limited evidence of resource-driven runtime adaptation for visual inspection specifically on resource-constrained smartphones within the reviewed corpus."
+  GC-02: "Limited direct joint evaluation of energy and thermal behavior for resource-adaptive visual inspection on resource-constrained smartphones within the reviewed corpus."
+  GC-03: "Limited evidence of an integrated resource-aware smartphone visual-inspection system that combines runtime adaptation with confidence-aware downstream verification within the reviewed corpus."
+
+# Original Step 9.7 wording, kept for traceability only. The Step 9.7 artefacts
+# (configs/gap_analysis.yaml, gap_candidates.md, gap_matrix.csv) are not rewritten.
+step_9_7_wording:
+  GC-01: "Limited representation of runtime resource-aware/adaptive inference in smartphone visual inspection within the reviewed corpus"
+  GC-02: "Limited direct evaluation of energy/thermal behaviour in smartphone or edge visual inspection within the reviewed corpus"
+  GC-03: "Limited evidence of integrated smartphone visual inspection combining runtime adaptation with confidence-aware downstream decisions within the reviewed corpus"
+
+# What each narrowed candidate does NOT claim.
+candidate_not_claimed:
+  GC-01:
+    - "that adaptive inference is generally missing"
+    - "that adaptive inference in edge visual inspection is missing"
+    - "that content-driven cascades are missing"
+  GC-02:
+    - "that edge energy evaluation is absent"
+    - "that visual-inspection energy evaluation is absent"
+    - "that energy evaluation is generally absent"
+  GC-03:
+    - "that confidence-aware inspection is generally absent"
+    - "that active view selection is absent"
+    - "that adaptive visual inspection is absent"
+    - "that edge systems do not combine adaptation and confidence-aware actions"
+
+# Researcher-approved operational definitions (Step 9.8 correction). They govern
+# the coding of external papers in counterexample_candidates.csv. They do not
+# recode papers.csv.
+operational_definitions:
+  A_content_driven_cascades:
+    decision: "Content-driven cascades count as adaptive inference."
+    adaptive_inference: "Yes if the executed computational path, model, cascade stage, depth, width or inference configuration changes at runtime based on input content or scene complexity."
+    resource_awareness: "Yes only when device/resource state (battery, temperature, CPU/RAM, memory, compute availability or another device-resource condition) actually drives the adaptation. Content-driven adaptation alone is No unless resource-driven adaptation is separately demonstrated; Unknown when not established."
+    note: "Deployment-time choices made to fit a device budget are recorded in notes but are not resource-driven runtime adaptation."
+  B_learned_view_selection:
+    decision: "A learned view-selection policy does not automatically count as confidence gating."
+    confidence_gating: "Yes only when confidence, uncertainty, prediction quality or an equivalent inspection-quality signal explicitly informs or triggers the downstream action (e.g. low confidence -> additional view -> re-inference). Learned view selection without such a signal is No; Unknown when the role of such a signal is not established."
+  C_in_sensor_processors:
+    decision: "In-sensor processors count as edge computing for GC-02."
+    edge_device: "Yes when meaningful computation occurs locally at or immediately adjacent to the sensing source."
+    smartphone: "No for in-sensor processing unless the actual computing platform is a smartphone."
+
+# Researcher-confirmed partial counterexamples (never to be upgraded to full).
+confirmed_partial_counterexamples:
+  "arXiv:2603.16451": {name: TinyGLASS, candidates: [GC-02], evidence_level: verified_full_text}
+  "PMC11435656": {name: Cloud-Edge Collaborative Defect Detection, candidates: [GC-01, GC-03], evidence_level: verified_full_text}
+  "doi:10.3390/s26154932": {name: ActiveInspect, candidates: [GC-03], evidence_level: verified_full_text}
+  "arXiv:2608.14727": {name: Low Cost Two-Stage Fabric Defect Detection at the Edge, candidates: [GC-01, GC-03], evidence_level: verified_full_text}
+
+# A row may be classified "full" only if every listed field is Yes (narrowed
+# wording). "Resource-driven runtime adaptation" requires both
+# resource_awareness = Yes (Decision A) and adaptive_inference = Yes.
+full_counterexample_criteria:
+  GC-01: [smartphone, visual_inspection, resource_awareness, adaptive_inference]
+  GC-02: [smartphone, visual_inspection, resource_awareness, adaptive_inference, energy_evaluation, thermal_evaluation]
+  GC-03: [smartphone, visual_inspection, resource_awareness, adaptive_inference, confidence_gating]
+
+# Evidence levels that must not be upgraded by this correction.
+locked_evidence_levels:
+  "arXiv:2603.16451": verified_full_text
+  "arXiv:2608.14727": verified_full_text
+  "arXiv:2608.21967": verified_full_text
+  "PMC11435656": verified_full_text
+  "doi:10.3390/s26154932": verified_full_text
+  "Electronics 15(17):3915": search_snippet_only
+  "ebpj.e-iph.co.uk/6822": unresolved
+  "P001": abstract_only
+  "P007": abstract_only
+
+files:
+  counterexamples: research/gap_analysis/counterexample_candidates.csv
+  search_log: research/gap_analysis/targeted_search_log.md
+  matrix: research/gap_analysis/candidate_gap_matrix.csv
+  evaluation: research/gap_analysis/candidate_gap_evaluation.md
+
+counterexample_fields:
+  - candidate_id
+  - candidate_gap
+  - paper_id_or_external_id
+  - title
+  - year
+  - venue
+  - source_url
+  - smartphone
+  - visual_inspection
+  - resource_awareness
+  - adaptive_inference
+  - energy_evaluation
+  - thermal_evaluation
+  - confidence_gating
+  - multi_view
+  - relevance_to_candidate
+  - evidence_level
+  - counterexample_strength
+  - reason
+  - verification_status
+  - notes
+
+characteristic_fields:
+  - smartphone
+  - visual_inspection
+  - resource_awareness
+  - adaptive_inference
+  - energy_evaluation
+  - thermal_evaluation
+  - confidence_gating
+  - multi_view
+
+characteristic_values: ["Yes", "No", "Unknown"]
+
+evidence_levels:
+  - verified_full_text
+  - legitimate_full_text_alternative
+  - abstract_only
+  - search_snippet_only
+  - unresolved
+
+counterexample_strengths:
+  full: "Meets every component of the candidate (would directly refute it)."
+  partial: "Meets some components with verified evidence; at least one component is absent or out of scope."
+  potential: "Could meet the candidate, but key components are Unknown at the available evidence level."
+  not_counterexample: "Verified or clearly indicated not to meet the candidate (wrong task, platform or missing component)."
+
+verification_statuses:
+  - verified_by_full_text_read
+  - verified_by_full_text_keyword_scan
+  - corpus_record_reproduced
+  - abstract_or_snippet_only
+  - not_accessed
+
+matrix_fields:
+  - candidate_id
+  - criterion
+  - evidence
+  - evidence_level
+  - supporting_papers
+  - counterexamples
+  - unknown_burden
+  - assessment
+  - confidence
+  - limitations
+
+# Qualitative vocabularies (no numeric scores).
+assessment_values:
+  - supports_candidate
+  - weakens_candidate
+  - mixed
+  - unresolved
+  - feasible
+  - feasible_with_conditions
+  - difficult
+  - not_applicable
+confidence_values: ["low", "moderate", "high"]
+unknown_burden_values: ["low", "moderate", "high", "not_applicable"]
+
+# Evaluation dimensions. For each: the evidence required, what counts as strong
+# evidence, what counts as weak evidence, and what disqualifies or weakens a candidate.
+dimensions:
+  - id: literature_evidence_strength
+    name: Literature evidence strength
+    evidence_required: "Corpus Yes/No/Unknown counts for the candidate's fields within the visual-inspection scope, with the evidence level behind each value."
+    strong_evidence: "Most in-scope values are full-text-verified No for the candidate's missing component, and the candidate's components are each present in verified Yes records."
+    weak_evidence: "In-scope values are mostly Unknown or abstract-level; the observation rests on a few verified records."
+    disqualifying_or_weakening: "Verified in-scope Yes records for every component (a full counterexample), or Unknown so dominant that the observation is a coding artefact."
+  - id: unknown_burden
+    name: Unknown burden
+    evidence_required: "Share of in-scope records with Unknown for the candidate's fields, and whether full text could resolve them."
+    strong_evidence: "Unknowns are few, or are confined to records whose full text was checked and still does not report the field."
+    weak_evidence: "Unknowns dominate the in-scope set and are abstract-level."
+    disqualifying_or_weakening: "Any Unknown record that, if resolved to Yes, would make a full counterexample."
+  - id: counterexample_risk
+    name: Counterexample risk
+    evidence_required: "Results of the targeted disproof searches: full, partial and potential counterexamples, with evidence levels."
+    strong_evidence: "Targeted searches found no full counterexample, and the partial ones are verified and differ in a named component."
+    weak_evidence: "Searches were narrow or access-limited, or potential counterexamples remain unresolved."
+    disqualifying_or_weakening: "A verified full counterexample; several partial counterexamples that differ only in a minor component."
+  - id: pocketinspect_alignment
+    name: Direct PocketInspect alignment
+    evidence_required: "Mapping of the candidate's components to modules and phases in PROJECT_SPEC.md."
+    strong_evidence: "Every component maps to a specified module and phase."
+    weak_evidence: "Only some components map, or they map to later or optional phases."
+    disqualifying_or_weakening: "The candidate requires capabilities outside the project scope."
+  - id: research_feasibility
+    name: Research feasibility
+    evidence_required: "Whether the question can be answered within the project's resources and constraints (no heavy training without approval; smartphone hardware)."
+    strong_evidence: "The question can be studied with available devices, public data and lightweight models."
+    weak_evidence: "Feasibility depends on unconfirmed hardware access, data or instrumentation."
+    disqualifying_or_weakening: "Requires resources the project cannot obtain."
+  - id: smartphone_measurability
+    name: Smartphone measurability
+    evidence_required: "Whether the candidate's outcome variables can be measured on an Android smartphone with documented instruments or APIs."
+    strong_evidence: "Outcomes are measurable with standard Android facilities or external instruments described in the literature."
+    weak_evidence: "Measurement depends on vendor-specific counters of uncertain accuracy."
+    disqualifying_or_weakening: "Key outcomes cannot be measured on the device."
+  - id: dataset_feasibility
+    name: Dataset feasibility
+    evidence_required: "Availability of public optical inspection datasets and the need for project-captured data."
+    strong_evidence: "Public datasets exist for the components, and missing parts can be captured with a phone."
+    weak_evidence: "The required data (multi-view captures, recapture sequences) must be collected from scratch."
+    disqualifying_or_weakening: "No feasible data source for an essential component."
+  - id: experimental_feasibility
+    name: Experimental feasibility
+    evidence_required: "Whether controlled experiments (conditions, repetitions, measurements) can be designed and run."
+    strong_evidence: "Controlled conditions and repeated measurements are practical."
+    weak_evidence: "Experiments are sensitive to uncontrolled factors (ambient temperature, background load, user handling)."
+    disqualifying_or_weakening: "No reproducible protocol is possible."
+  - id: baseline_availability
+    name: Baseline availability
+    evidence_required: "Existence of comparable static, non-adaptive or non-gated baselines and of published methods to compare against."
+    strong_evidence: "Static baselines are trivial to define and published comparators exist."
+    weak_evidence: "Only self-defined baselines are possible."
+    disqualifying_or_weakening: "No meaningful baseline."
+  - id: ablation_potential
+    name: Ablation potential
+    evidence_required: "Whether components can be removed or varied to attribute effects."
+    strong_evidence: "Each component can be switched off independently."
+    weak_evidence: "Components are entangled."
+    disqualifying_or_weakening: "No component can be isolated."
+  - id: quantitative_evaluation_potential
+    name: Quantitative evaluation potential
+    evidence_required: "Availability of quantitative outcome measures (accuracy, latency, energy, temperature, referral rate)."
+    strong_evidence: "Several standard, reproducible measures apply."
+    weak_evidence: "Measures are ad hoc or noisy."
+    disqualifying_or_weakening: "Only qualitative outcomes."
+  - id: engineering_complexity
+    name: Expected engineering complexity
+    evidence_required: "Components to build (models, runtime controller, measurement harness, app) relative to the project plan."
+    strong_evidence: "Builds on components already planned in PROJECT_SPEC.md."
+    weak_evidence: "Requires several new subsystems."
+    disqualifying_or_weakening: "Complexity beyond the project timeline."
+  - id: contribution_depth
+    name: Potential contribution depth
+    evidence_required: "What kind of contribution the candidate could support (measurement study, method, system integration), stated without novelty claims."
+    strong_evidence: "Admits a clearly defined, testable research question with measurable outcomes."
+    weak_evidence: "Admits mainly an engineering integration or a single measurement."
+    disqualifying_or_weakening: "The question is already answered by verified literature."
+  - id: publication_relevance
+    name: Publication relevance
+    evidence_required: "Venues and communities where the verified related work appears."
+    strong_evidence: "Related verified work appears in established venues, and the candidate fits their scope."
+    weak_evidence: "Relevance relies on preprints or grey literature."
+    disqualifying_or_weakening: "No identifiable venue."
+
+guards:
+  forbidden_candidate_keys: ["score", "rank", "ranking", "priority", "final", "selected", "weight", "winner"]
+  forbidden_phrases:
+    - "no prior work"
+    - "no existing work"
+    - "no existing research"
+    - "first to"
+    - "the first"
+    - "novel contribution"
+    - "is novel"
+    - "unprecedented"
+    - "never been studied"
+    - "never been done"
+    - "has not been studied"
+    - "research gap is"
+    - "final research gap"
+    - "selected gap"
+    - "recommended candidate"
+    - "we recommend gc"
+    - "ranked first"
+    - "best candidate"
+    - "strongest candidate"
+    - "winner"
+    - "preferred candidate"
+    - "recommended gap"
+    - "final gap"
+    - "first study"
+    - "first work"
+    - "first system"
+  # Phrases allowed only because they negate a selection.
+  allowed_negations:
+    - "no candidate is ranked"
+    - "no candidate was selected or ranked"
+    - "does not select the final research gap"
+    - "no final research gap"
+    - "no final gap"
+  required_closing_sentence: "Final research-gap selection remains a researcher decision and is outside Step 9.8."
+  forbidden_files:
+    - research/gap_analysis/research_gap.md

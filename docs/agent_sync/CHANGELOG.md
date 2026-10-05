@@ -1214,3 +1214,242 @@ Step 9.7 final methodology correction before PR #9 review. Builds on `8622c90`. 
 - Branch: `claude/affectionate-ride-9uem3p` (PR #9). Previous commit: `8622c90`.
 - Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
 - Push status: pushed to the branch; not merged; `main` not modified.
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.8: evaluation of candidate gaps GC-01, GC-02 and GC-03, with a targeted search for counterexamples. The step evaluates the candidates only. It does not select, rank or score them, and it creates no `research_gap.md`.
+
+### Changes
+- **`configs/gap_evaluation.yaml` (new).**
+  - Frozen-corpus record and candidate wording, taken verbatim from Step 9.7.
+  - The 14 evaluation dimensions. Each defines the evidence required, strong evidence, weak evidence, and what disqualifies or weakens a candidate.
+  - Allowed vocabularies for evidence levels, counterexample strengths, verification statuses and qualitative assessments.
+  - Guard-rails: forbidden ranking keys and novelty phrases, the required closing sentence, and the forbidden `research_gap.md`.
+- **`src/literature/gap_evaluation.py` (new).** A read-only `GapEvaluationValidator` that checks:
+  - the frozen corpus;
+  - the counterexample file: vocabularies, exact reproduction of corpus records, and no `No` from snippet-level evidence without a stated basis;
+  - search-log completeness;
+  - matrix coverage (each candidate × 14 criteria) and that it holds no ranking;
+  - the 15 evaluation sections and the closing sentence;
+  - forbidden language.
+- **`research/gap_analysis/counterexample_candidates.csv` (new).** 39 candidate–paper rows:
+  - 9 corpus records, with values reproduced unchanged (P001, P007, P011 ×2, P016, P029, P031, P033, P034);
+  - 30 rows for external papers (23 distinct sources). None was added to `papers.csv`.
+- **`research/gap_analysis/targeted_search_log.md` (new).** 27 logged searches (S01–S27), each with date, candidate, exact query, engine, results returned, relevant results inspected, strongest papers, potential counterexamples, unresolved items and limitations:
+  - 24 WebSearch queries (8 per candidate, as specified);
+  - 2 alphaXiv discovery searches;
+  - 1 verification lookup.
+- **`research/gap_analysis/candidate_gap_matrix.csv` (new).** 42 rows (3 candidates × 14 criteria), using qualitative labels only.
+- **`research/gap_analysis/candidate_gap_evaluation.md` (new).** The 15 required sections, ending with the required closing sentence.
+- **`research/gap_analysis/README.md`.** A short pointer to the Step 9.8 files.
+- **`tests/test_gap_evaluation.py` (new).** 28 tests:
+  - checks on the committed artefacts;
+  - sandbox tests that plant violations, which the validator must reject: a ranking column, a numeric assessment, Unknown→No, a missing evidence level, missing limitations, novelty language, a missing closing sentence, `research_gap.md`, and an external paper added to the corpus.
+
+### Research decisions
+- **No full counterexample** was found for any candidate in these searches. This describes the searches only.
+- **Verified partial counterexamples (external).**
+  - GC-01:
+    - arXiv 2608.14727, an edge input-dependent cascade on a Jetson Nano; content-driven;
+    - PMC11435656, Raspberry Pi 4 PCB inspection with confidence-triggered cloud escalation.
+  - GC-02: arXiv 2603.16451 (TinyGLASS). In-sensor edge visual anomaly detection reporting 4.0 mJ per inference. No thermal results; not a smartphone.
+  - GC-03:
+    - PMC11435656, which meets 3 of 4 components but not smartphone;
+    - ActiveInspect (Sensors 26(15):4932; learned additional-view selection; A100 GPUs);
+    - arXiv 2608.14727.
+- **Potential (unresolved) counterexamples.**
+  - P001 (GC-01, GC-03);
+  - P007 (GC-02);
+  - Electronics 15(17):3915 (snippet only);
+  - the FOMO/Edge Impulse paper (not opened);
+  - arXiv 2608.21967 (uncertainty-based referral; online evaluation not yet done).
+- **Coding of external papers** follows `research/literature/README.md`:
+  - cascades and per-sample dynamic offloading = `adaptive_inference` Yes;
+  - deployment-time resource choices = `resource_awareness` Yes, flagged "deployment time only";
+  - non-confidence trigger scores and learned policies = `confidence_gating` Unknown;
+  - phone-as-product = `smartphone` Unknown unless the inference platform is named.
+- **Assessments.** Each candidate gets qualitative labels per criterion, without aggregation. Common to all three:
+  - literature evidence: `supports_candidate`, confidence low;
+  - Unknown burden: `weakens_candidate`.
+- **Counterexample risk.**
+  - GC-01: `mixed`.
+  - GC-02 and GC-03: `weakens_candidate`.
+- **No candidate was selected or ranked.** No novelty is claimed.
+
+### Verification
+- `python -m pytest -q`: 91 passed (63 existing + 28 new).
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 31 columns; 0 duplicate IDs.
+- `papers.csv` SHA-256 `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521`, unchanged. `git diff -- research/literature/` is empty.
+- `GapEvaluationValidator.validate()` returns no errors on the committed artefacts.
+- `research_gap.md` does not exist.
+
+### Uncertain items
+- Researcher confirmation of the partial-counterexample classifications: TinyGLASS, PMC11435656, ActiveInspect and arXiv 2608.14727.
+- **Definitional questions** (evaluation §8 and §14):
+  - whether content-driven cascades count against GC-01;
+  - whether learned view selection counts as a confidence-aware decision;
+  - whether in-sensor processors count as "edge" for GC-02.
+- **Access limits.**
+  - PMC11435656 and ActiveInspect were keyword-scanned, not read end to end.
+  - Electronics 15(17):3915, the FOMO paper, P001 and P007 remain unresolved.
+  - WebFetch was blocked for ACM, MDPI, Wiley, Frontiers, NCBI direct and doi.org.
+- **Search coverage.** One results page per query; English-only; no Scopus, Web of Science, IEEE Xplore or ACM DL.
+
+### Remaining work
+- Researcher review of the Step 9.8 evaluation and the counterexample classifications.
+- Researcher decision on candidate wording: keep, narrow or reject.
+- Final research-gap selection remains a researcher decision and is outside Step 9.8.
+
+### Git
+- Branch: `claude/step-9-8-gap-evaluation` (from `origin/main` `6c47b4b`).
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
+- Push status: pushed to the branch; not merged; `main` not modified.
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.8 controlled methodology correction, following researcher review of PR #10 (not merged). The task confirms four partial-counterexample classifications, formalises three operational-definition decisions and narrows the wording of GC-01, GC-02 and GC-03. It is a methodology correction only. The candidates remain unordered, unranked, unselected, corpus-bounded and provisional.
+
+### Changes
+- **`configs/gap_evaluation.yaml`.**
+  - Narrowed candidate wording.
+  - `step_9_7_wording` (original wording, kept for traceability).
+  - `candidate_not_claimed`.
+  - `operational_definitions` (Decisions A–C).
+  - `confirmed_partial_counterexamples`.
+  - `locked_evidence_levels`.
+  - Further forbidden phrases: "preferred candidate", "recommended gap", "final gap", "first study", "first work", "first system".
+- **`src/literature/gap_evaluation.py`.**
+  - Rule functions `code_adaptive_inference`, `code_resource_awareness`, `code_confidence_gating` and `code_platform`.
+  - `check_corrections()`: confirmed partials stay partial, and locked evidence levels are not upgraded. It is included in `validate()`.
+- **`research/gap_analysis/counterexample_candidates.csv`.**
+  - `candidate_gap` text replaced with the narrowed wording in all 39 rows.
+  - Decision A applied to external rows only. `resource_awareness` changed from Yes to No for arXiv 2608.14727 (3 rows), arXiv 2603.16451 (TinyGLASS), arXiv 2309.00022 (2 rows) and arXiv 2505.07119. Each change is noted in its row ("Step 9.8 correction"), and each paper was read in full text.
+  - Reasons and notes updated for the four confirmed partials and for the Decision B and C notes.
+  - No other coded value changed, no corpus record changed, and no evidence level changed.
+- **`research/gap_analysis/candidate_gap_matrix.csv`.** Eight rows updated: evidence, limitations and the narrowed scope for literature evidence strength and counterexample risk of all three candidates, plus GC-02 research feasibility, engineering complexity and contribution depth.
+  - Counterexample risk for GC-02 and GC-03 changed from `weakens_candidate` to `mixed`. The confirmed partials weaken the broad Step 9.7 wording, which is why it was narrowed; against the narrowed wording they are close neighbours that do not meet it. GC-01 was already `mixed`.
+  - GC-02 engineering complexity changed from `feasible` to `feasible_with_conditions`, because the narrowed candidate needs a resource-adaptive workload.
+- **`research/gap_analysis/candidate_gap_evaluation.md`.**
+  - New §3.4: the decisions, the confirmed-partials table and the documented recodings.
+  - The narrowed wording and "Not claimed" statements in §1 and §4–§6.
+  - Counterexample interpretations rewritten as observations.
+  - §8, §13, §14 and §15 updated (definitional questions resolved; remaining decisions listed).
+- **`research/gap_analysis/targeted_search_log.md`.** A note that the searches were designed against the Step 9.7 wording and that the four partials were confirmed. No search entry was altered, and no new search was run.
+- **`research/gap_analysis/README.md`.** A pointer to the correction.
+- **`tests/test_gap_evaluation.py`.** 44 tests (previously 28), covering:
+  - Decision A: cascade → adaptive Yes, and not automatically resource-aware;
+  - Decision B: learned view selection alone ≠ gating; confidence-triggered selection = gating;
+  - Decision C: in-sensor = edge Yes and smartphone No;
+  - the four partials remain partial, and an upgrade to full is rejected;
+  - locked evidence levels, and an upgrade is rejected;
+  - the exact narrowed wording of GC-01, GC-02 and GC-03, with the Step 9.7 wording preserved;
+  - the existing ranking, final-gap, `research_gap.md`, frozen-corpus, Unknown and novelty-wording guards.
+
+### Research decisions
+- **Confirmed partial counterexamples** (none upgraded to full; evidence levels unchanged):
+  - TinyGLASS, arXiv 2603.16451 (GC-02);
+  - PMC11435656 (GC-01, GC-03);
+  - ActiveInspect, doi 10.3390/s26154932 (GC-03);
+  - arXiv 2608.14727 (GC-01, GC-03).
+- **Decision A.** Content-driven cascades are `adaptive_inference` Yes. `resource_awareness` is Yes only when device/resource state drives the adaptation.
+- **Decision B.** A learned view-selection policy alone is not `confidence_gating`. It qualifies only if confidence, uncertainty or prediction quality explicitly triggers the action. ActiveInspect stays Unknown.
+- **Decision C.** In-sensor processors count as `edge_device` Yes, and are smartphone No unless the computing platform is a smartphone.
+- **Narrowed wording.**
+  - GC-01: "Limited evidence of resource-driven runtime adaptation for visual inspection specifically on resource-constrained smartphones within the reviewed corpus."
+  - GC-02: "Limited direct joint evaluation of energy and thermal behavior for resource-adaptive visual inspection on resource-constrained smartphones within the reviewed corpus."
+  - GC-03: "Limited evidence of an integrated resource-aware smartphone visual-inspection system that combines runtime adaptation with confidence-aware downstream verification within the reviewed corpus."
+- **Step 9.7 artefacts unchanged.** `configs/gap_analysis.yaml`, `gap_candidates.md` and `gap_matrix.csv` keep the original wording as the historical record.
+- **No candidate was selected or ranked.** No final gap was created, and no novelty is claimed.
+
+### Verification
+- `pytest` on `tests/test_gap_evaluation.py`, `test_gap_analysis.py`, `test_literature.py` and `test_literature_data.py`: 106 passed. Full suite: 107 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 31 columns; 0 duplicate IDs.
+- `papers.csv` SHA-256 `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521`, verified before and after. `git diff -- research/literature/` is empty.
+- `GapEvaluationValidator.validate()` returns no errors.
+- `research/gap_analysis/research_gap.md` does not exist.
+
+### Uncertain items
+- Unresolved by keyword scan only:
+  - whether ActiveInspect's step-level confidences drive its view selection (`confidence_gating` Unknown);
+  - whether PMC11435656 uses any device-resource signal (`resource_awareness` Unknown).
+- How TinyGLASS obtained its energy figure.
+- **Unresolved sources:** P001, P007 (abstract only); Electronics 15(17):3915 (snippet only); FOMO/Edge Impulse paper (unresolved).
+- The targeted searches were designed against the Step 9.7 wording. The narrowed forms, in particular GC-02's joint energy + thermal + resource-adaptive form, were not searched as one query.
+- High corpus Unknown burden (about 23 of the 27 in-scope records per relevant field).
+
+### Remaining work
+- Researcher review of the correction (PR #10).
+- Final research-gap selection remains a researcher decision and is outside Step 9.8.
+
+### Git
+- Branch: `claude/step-9-8-gap-evaluation` (PR #10; not merged). Previous commit: `e13eea9`.
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
+- Push status: pushed to the branch; not merged; `main` not modified.
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.8 final narrowed-claim falsification check (PR #10; not merged). A small, targeted search against the exact narrowed wording of GC-01, GC-02 and GC-03, looking for a full counterexample. No broad review, no ranking or selection, and no `research_gap.md`.
+
+### Changes
+- **`research/gap_analysis/targeted_search_log.md`.** New section with 18 searches, S28–S45 (6 per candidate, WebSearch, 2026-10-05). Each entry records the exact query, the result count taken from the tool output (8–10 per query), the relevant results inspected, the strongest papers, potential counterexamples, unresolved items and limitations. The section ends with an outcome table. S01–S27 are unchanged.
+- **`research/gap_analysis/counterexample_candidates.csv`.** 9 rows appended (48 in total); the existing 39 rows are byte-identical:
+  - SAEC, arXiv 2509.17136 (GC-01, GC-02, GC-03: partial);
+  - arXiv 2603.26603 (GC-02: partial, outside the visual-inspection scope);
+  - RobustDefect-LLM, arXiv 2608.08589 (GC-03: partial);
+  - arXiv 2010.06291 (GC-02: not_counterexample);
+  - arXiv 2606.24173 (GC-03: not_counterexample);
+  - ApproxDet, arXiv 2010.10754, and Mobiprox, arXiv 2303.11291 (GC-01: not_counterexample, title level).
+- **`research/gap_analysis/candidate_gap_matrix.csv`.** The counterexample-risk rows of GC-01, GC-02 and GC-03 now include the check results. Assessment labels are unchanged (`mixed`).
+- **`research/gap_analysis/candidate_gap_evaluation.md`.**
+  - New §3.5 (the falsification check).
+  - Results added to §4–§6.
+  - New partial-counterexample row and evidence levels in §7.
+  - Search-alignment note in §14 updated.
+  - The 15-section structure and the closing sentence are unchanged.
+- **`configs/gap_evaluation.yaml`.** `full_counterexample_criteria` added: every listed field must be Yes for a `full` classification. Resource-driven runtime adaptation requires both `resource_awareness` and `adaptive_inference` to be Yes.
+- **`src/literature/gap_evaluation.py`.**
+  - `meets_full_criteria()` and `check_full_criteria()` added and included in `validate()`.
+  - The search-log parser now stops at the next heading, so the outcome table is not read as part of S45. These are technically necessary support changes for the new test.
+- **`tests/test_gap_evaluation.py`.** 51 tests (previously 44). New tests:
+  - 18 new searches, 6 per candidate, each with limitations;
+  - the no-full-counterexample statement, without any "no such work exists" claim;
+  - a full counterexample requires every criterion;
+  - classification and evidence levels of the new hits;
+  - no row is classified `full`;
+  - sandbox rejection of a `full` row that lacks criteria, and of an all-criteria row not marked `full`.
+
+### Research decisions
+- **No full counterexample was identified in this targeted falsification search.** Each narrowed candidate survived this bounded check. This is an observation about 18 searches and the hits verified from them, not a claim that no such work exists.
+- **Partial counterexamples (`verified_full_text`).**
+  - SAEC: industrial visual inspection with scene-complexity/confidence-driven edge/cloud routing, reporting energy, on a Xeon CPU + A100. It is not resource-driven (Decision A), reports no thermal results and does not use a smartphone.
+  - arXiv 2603.26603: energy and temperature measured on a Samsung Galaxy S25 Ultra, but for LLM summarization, not inspection, and without adaptation.
+  - RobustDefect-LLM: confidence/margin-triggered human review with a mobile client. Inference runs in a backend, and it has no adaptation.
+- **Previously confirmed partials** (TinyGLASS, PMC11435656, ActiveInspect, arXiv 2608.14727) remain partial. No evidence level was upgraded. No candidate was ranked or selected.
+
+### Verification
+- `pytest` on `tests/test_gap_evaluation.py`, `test_gap_analysis.py`, `test_literature.py` and `test_literature_data.py`: 113 passed. Full suite: 114 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 31 columns; 0 duplicate IDs.
+- `papers.csv` SHA-256 `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521`, unchanged. No diff under `research/literature/`.
+- `GapEvaluationValidator.validate()` returns no errors. `research/gap_analysis/research_gap.md` does not exist.
+
+### Uncertain items
+- Title-only hits not verified:
+  - Electronics 14(11):2188;
+  - DMS;
+  - arXiv 1904.09814;
+  - PMC10280690;
+  - arXiv 2603.23640 and EnerInfer (arXiv 2606.23001; LLM workloads).
+- Earlier unresolved items remain: P001, P007, Electronics 15(17):3915 and the FOMO/Edge Impulse paper.
+- One results page per query; English only; no indexed databases (Scopus, Web of Science, IEEE Xplore, ACM DL).
+
+### Remaining work
+- Researcher review of PR #10.
+- Final research-gap selection remains a researcher decision and is outside Step 9.8.
+
+### Git
+- Branch: `claude/step-9-8-gap-evaluation` (PR #10; not merged). Previous commit: `fb5b9a5`.
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
+- Push status: pushed to the branch; not merged; `main` not modified.
