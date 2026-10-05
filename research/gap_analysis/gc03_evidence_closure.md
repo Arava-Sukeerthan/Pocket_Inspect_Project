@@ -308,11 +308,13 @@ This checks only the 13 Step 9.9 Phase A dataset entries; no broad dataset surve
 | MMS | Yes | No | No (cross-device) | yes | verification_required |
 | Phone-captured 3D-printed-part set | Yes (by design) | Yes (by design) | Yes (by design) | yes (Proposed idea) | unknown |
 
-1. **Visual defect inspection:** all 13 entries.
-2. **Smartphone inference:** any image set can be replayed through an on-phone model, so all 13 can drive on-device *inference*. No existing entry is verified as *smartphone-captured*.
-3. **Multi-view / recapture:** multi-view exists in Real-IAD, MANTA and MVTec3D-AD/Eyecandies, all pending access verification. No entry supports *physical recapture*.
-4. **Custom capture required:** for physical recapture and for smartphone-domain realism (the phone-captured set, a Proposed idea).
-5. **Unknown access/licence:** all 13. No licence or access term is asserted here.
+_Step 9.9C wording correction:_ The reviewed dataset candidates appear technically suitable for visual-defect inspection experiments, but access, licensing, smartphone suitability, and multi-view/recapture suitability require dataset-specific verification. No entry is claimed to be available, licensed or smartphone-captured.
+
+1. **Existing visual inspection datasets:** all 13 entries describe visual-defect inspection data, as recorded in the repository (technical suitability only; not verified).
+2. **Datasets suitable for replay:** in principle, any image set could be replayed through an on-phone model for on-device *inference*. This is unverified for every entry. No existing entry is verified as *smartphone-captured*.
+3. **Multi-view-capable datasets / recapture:** multi-view exists in Real-IAD, MANTA and MVTec3D-AD/Eyecandies, all pending access verification. No entry supports *physical recapture*.
+4. **Datasets requiring custom smartphone capture:** for physical recapture and for smartphone-domain realism (the phone-captured set, a Proposed idea).
+5. **Dataset access/licence status:** unverified for all 13 (`verification_required` or `unknown`). No licence or access term is asserted here.
 
 ## 15. Minimum viable experiment
 

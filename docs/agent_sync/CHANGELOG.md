@@ -1627,3 +1627,78 @@ Not a broad survey. No selection, no ranking, no `research_gap.md`, no merge.
 - Branch: `claude/step-9-9b-gc03-evidence-closure` (from `origin/main` `f8e0d2e`).
 - Commit: see `git log -- research/gap_analysis/gc03_evidence_closure.md`.
 - Push status: pushed to the branch; not merged; `main` not modified.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.9C: reconcile Step 9.9 Phase A and Step 9.9B into one gap-selection state, and prepare the GC-03 researcher approval gate.
+
+This is not implementation, not a literature survey and not a selection. GC-03 is **not** selected.
+
+### Changes
+- **Reconciliation.**
+  - Branch `claude/step-9-9c-gap-selection-reconciliation`, created from `origin/main` `f8e0d2e`.
+  - Merged Step 9.9 Phase A `d8894d9` (merge commit `e8764ce`, clean) and Step 9.9B `f9187fd` (merge commit `6979f29`).
+  - The only conflicts were the appended CHANGELOG entries and `research/gap_analysis/README.md`, resolved as a union in chronological order.
+  - Neither branch lost a line, and no file was overwritten.
+- **`configs/gap_selection.yaml`.**
+  - GC-03 gate Q2/Q8/Q10: `unresolved` → `partially_satisfied`, with the exact Step 9.9B wording and all limitations in the rationale.
+  - `selection.selection_status: researcher_approval_required` added; `selected_candidate: null`.
+  - GC-03-RQ1 replaced by the approval-ready RQ, with independent and dependent variables and a mediator. The Phase A text is kept as `phase_a_text`.
+  - GC-03 hypotheses replaced by H1–H5 ("CANDIDATE — NOT YET TESTED"); H-GC03-1 is now H4, and H-GC03-2 is now H2/H5.
+  - GC-03 candidate contribution set and labelled `requires_empirical_validation`; existing components extended with the Step 9.9B findings.
+  - New blocks: `evidence_closure` (GC-03 complete; GC-01 and GC-02 not performed) and `approval_ready.GC-03` (wording, baselines B1–B5, dataset statement, pending decision).
+  - `files.approval_document` added.
+- **`research/gap_analysis/final_gap_selection_matrix.csv`.** Six GC-03 rows updated (A, B, C, G, M, Q); CRLF preserved; still 51 rows.
+  - B (`weakens` → `mixed`), M and Q (`unresolved` → `mixed`) now reflect Step 9.9B. Confidence is kept low where the result rests on substitutes or untested Hypotheses.
+  - The approval-ready status (not selected) is recorded in the existing text fields. No new column was added.
+- **`research/gap_analysis/final_gap_selection.md`.**
+  - New unnumbered section "GC-03 Evidence Closure Status", kept outside the validator's 16 numbered sections.
+  - §7 facts updated (PMC11435656 and ActiveInspect `resource_awareness` No); new RQ1 and H1–H5.
+  - §10 RQ table, §12 dataset qualification, §13 contribution, §15 status notes, and §16 GC-03 gate rows plus outcome text updated.
+  - The required sentence on GC-03 as the strongest approval-ready candidate is included verbatim, with a scope note: it describes evidence-closure status and is not a ranking of merit.
+- **`research/gap_analysis/gc03_evidence_closure.md`.** §14 dataset wording corrected to the five required categories and the qualification sentence.
+- **`research/gap_analysis/research_gap_approval.md` (new).** The exact 14-section approval document. §14 reads "DECISION: PENDING EXPLICIT RESEARCHER APPROVAL".
+- **`research/gap_analysis/README.md`.** Pointer to the approval gate.
+- **Tests.**
+  - `tests/test_gap_selection_reconciliation.py` (new): 15 tests covering the 22 required checks.
+  - `tests/test_gap_selection.py`: one assertion updated. GC-03 Q2/B now reflect the closure; GC-01 and GC-02 still pinned `unresolved`/`weakens`.
+
+### Research decisions
+- **GC-03 evidence closure.** Complete.
+  - Q2: conditionally acceptable. Q8: conditionally distinct. Q10: moderate.
+  - **Full counterexamples: 0.**
+  - None of these is absolute proof; all are corpus-bounded.
+- **Unresolved evidence.**
+  - P001 (potential); AIVD, arXiv 2601.04734 (potential); Choi et al. 2026 (potential); Zakaria et al. 2022 and Electronics 15(17):3915 (potential).
+  - ActiveInspect `confidence_gating` (operational-definition issue).
+  - Substituted database access; English-only; one results page per search; remaining Unknown burden.
+- **Approval-ready wording (corpus-bounded).** "Within the reviewed literature corpus, there is limited evidence of an integrated resource-aware smartphone visual-inspection system in which device-state-driven runtime adaptation is coupled with confidence-aware downstream verification, particularly for recovering inspection performance under resource-induced model/configuration degradation." The evaluated Step 9.8 wording is kept as the source of truth for the evidence rows.
+- **No selection.**
+  - `selected_candidate` remains null, and `can_select()` is False for all candidates.
+  - `research_gap.md` was not created.
+  - No ranking was introduced; GC-01 and GC-02 remain candidate gaps with their Phase A gate status.
+- **No implementation.** No implementation, experiment, device measurement or Step 10 work was started.
+
+### Verification
+- `python -m pytest -q`: 172 passed (157 after reconciliation + 15 new).
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 31 columns; 0 duplicate IDs.
+- `GapSelectionValidator.validate()` and `GapEvaluationValidator.validate()` both return no errors.
+- `papers.csv` SHA-256 is `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521` before and after.
+- `research/gap_analysis/research_gap.md` does not exist.
+
+### Uncertain items
+- Full texts of P001, AIVD and Choi et al. 2026.
+- Researcher decision on ActiveInspect `confidence_gating`.
+- Whether the researcher accepts the approval-ready wording, or selects or re-scopes another candidate.
+
+### Remaining work
+- **Explicit researcher decision.** Nothing proceeds until the researcher writes "Approve GC-03 as the final research gap." (or decides otherwise).
+
+### Git
+- Branch: `claude/step-9-9c-gap-selection-reconciliation`.
+- Commits reconciled: `d8894d9` (Step 9.9 Phase A) and `f9187fd` (Step 9.9B).
+- Commit: see `git log -- research/gap_analysis/research_gap_approval.md`.
+- Push status: pushed to the branch; not merged; `main` not modified.

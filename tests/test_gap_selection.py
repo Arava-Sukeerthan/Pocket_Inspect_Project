@@ -173,8 +173,15 @@ class TestCommittedSelectionFramework(unittest.TestCase):
             self.assertTrue(row["unknowns"].strip(), row["criterion"])
         for cid in CANDIDATES:
             b = next(r for r in v.matrix() if r["candidate_id"] == cid and r["criterion"].startswith("B."))
-            self.assertEqual(b["assessment"], "weakens")
-            self.assertEqual(v.config["selection_gate"][cid]["Q2"][0], "unresolved")
+            if cid == "GC-03":
+                # Step 9.9C: Q2 closed by the Step 9.9B evidence closure (conditionally acceptable)
+                self.assertEqual(b["assessment"], "mixed")
+                self.assertEqual(v.config["selection_gate"][cid]["Q2"][0], "partially_satisfied")
+                for name in ("P001", "AIVD", "Choi 2026"):
+                    self.assertIn(name, b["unknowns"])
+            else:
+                self.assertEqual(b["assessment"], "weakens")
+                self.assertEqual(v.config["selection_gate"][cid]["Q2"][0], "unresolved")
 
     # 11. counterexamples correctly represented
     def test_counterexamples_represented(self):

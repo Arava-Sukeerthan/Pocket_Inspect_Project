@@ -1,6 +1,6 @@
 # Step 9.9 Phase A: Final Research-Gap Selection Framework
 
-**Status.** Pending researcher review. Phase A only.
+**Status.** Pending researcher review. Phase A framework, reconciled in Step 9.9C with the Step 9.9B GC-03 evidence closure. `selection_status: researcher_approval_required`; `selected_candidate: null`.
 
 **What this document does.**
 - Builds a transparent selection framework.
@@ -18,6 +18,42 @@
 **Epistemic labels** (as in [`RESEARCH_RULES.md`](../../RESEARCH_RULES.md)): **Fact**, **Assumption**, **Hypothesis**, **Proposed idea**. Nothing in this document is an experimental result.
 
 **Ordering.** Candidates are listed in ID order throughout. ID order implies no ordering of merit.
+
+---
+
+## GC-03 Evidence Closure Status
+
+_Added in Step 9.9C. It reconciles Step 9.9 Phase A (`d8894d9`) with the Step 9.9B evidence closure (`f9187fd`). Full record: [`gc03_evidence_closure.md`](gc03_evidence_closure.md). Approval document: [`research_gap_approval.md`](research_gap_approval.md)._
+
+Evidence closure is complete for GC-03, but final research-gap selection requires explicit researcher approval.
+
+| Gate question | Phase A status | Step 9.9B result | Status now recorded |
+| :-- | :-- | :-- | :-- |
+| Q2. Unknown burden | unresolved | **Conditionally acceptable** | partially_satisfied |
+| Q8. Contribution distinguishable from integration | unresolved | **Conditionally distinct** | partially_satisfied |
+| Q10. Literature overturn risk | unresolved | **Moderate** | partially_satisfied |
+
+- **Q2: Conditionally acceptable.** The remaining Unknown burden is acceptable for a corpus-bounded candidate-gap statement, provided unresolved high-impact papers such as P001 and AIVD are explicitly retained as limitations. The evidence does not justify a universal claim that no counterexample exists.
+- **Q8: Conditionally distinct.** The individual mechanisms already exist in the literature, and integration alone is not sufficient novelty. The potentially distinctive contribution is the experimentally testable question of whether confidence-aware verification can recover inspection performance lost when resource-driven adaptation downgrades a smartphone inspection configuration, including whether confidence calibration changes across configurations.
+- **Q10: Moderate.** Additional literature could overturn the candidate if a single study demonstrates smartphone-based optical inspection, device-state-driven runtime configuration changes, and confidence-triggered downstream recapture or escalation in one system. P001, AIVD, and Choi 2026 remain particularly important unresolved evidence.
+- **Full counterexamples identified: 0.**
+  - Partial counterexamples (all fail the smartphone criterion, and most also fail resource awareness): PMC11435656, SAEC, RobustDefect-LLM, ActiveInspect, arXiv 2608.14727, P011, P016, P007, Yan et al. 2025, RAMS, HAPI.
+- **Remaining unresolved evidence:**
+  - P001 full text (potential);
+  - AIVD, arXiv 2601.04734 (potential; snippet only);
+  - Choi et al. 2026 (potential; abstract only);
+  - Zakaria et al. 2022 and Electronics 15(17):3915 (potential);
+  - ActiveInspect `confidence_gating`, an operational-definition issue (Decision B "explicitly informs" vs "explicitly triggers");
+  - database access was substituted rather than direct;
+  - English-only search; one results page per search;
+  - the remaining corpus Unknown burden.
+- **These results are not absolute proof.** They are corpus-bounded and depend on the limitations above.
+- **Q3 caveat superseded.** The Q3 rationale below ("keyword-scanned") predates Step 9.9B. Both papers have since been read end to end; the Q3 status itself was left as Phase A recorded it.
+- **Researcher approval required.**
+
+At this stage, GC-03 is the strongest approval-ready candidate based on the completed evidence closure, but it has NOT been formally selected. Final selection requires explicit researcher approval.
+
+_Scope of that sentence: it describes evidence-closure status. GC-03 is the only candidate whose Q2, Q8 and Q10 have been closed; GC-01 and GC-02 did not undergo an evidence-closure pass and keep their Phase A gate status. It is not a ranking of merit, and GC-01 and GC-02 remain candidate gaps._
 
 ---
 
@@ -236,8 +272,8 @@ Labels are not converted to numbers and are not aggregated.
 
 **Candidate (Step 9.8 wording).** Limited evidence of an integrated resource-aware smartphone visual-inspection system that combines runtime adaptation with confidence-aware downstream verification within the reviewed corpus.
 
-- **PMC11435656 (partial; Fact).** Raspberry Pi 4 PCB inspection in which low-confidence samples escalate to a cloud model. This is runtime adaptation plus confidence-triggered verification. It does not use a smartphone, and `resource_awareness` is Unknown.
-- **ActiveInspect (partial; Fact).** Learned selection of additional views/modalities on A100 GPUs. Under Decision B, learned view selection alone is not confidence gating (Unknown).
+- **PMC11435656 (partial; Fact).** Raspberry Pi 4 PCB inspection in which low-confidence samples escalate to a cloud model. This is runtime adaptation plus confidence-triggered verification. It does not use a smartphone, and `resource_awareness` is **No** (Step 9.9B end-to-end read: confidence-only routing; the three-device split is design-time).
+- **ActiveInspect (partial; Fact).** Learned selection of additional views/modalities on A100 GPUs. `resource_awareness` is **No** (Step 9.9B end-to-end read: fixed observation budget). Under Decision B, learned view selection alone is not confidence gating; `confidence_gating` stays Unknown as an operational-definition issue.
 - **SAEC (partial; Fact).** Edge predictions are accepted only if probability, margin and entropy thresholds hold; otherwise they escalate. The routing is content/confidence-driven, not resource-driven, and does not run on a smartphone.
 - **arXiv 2608.14727 (partial; Fact).** Content-driven cascade at the edge, positioned as triage. Its trigger score is not described as confidence.
 - **RobustDefect-LLM (partial; Fact).** Confidence/margin-triggered human review with a mobile client. Inference runs in a backend, and there is no adaptation.
@@ -276,8 +312,11 @@ Labels are not converted to numbers and are not aggregated.
 
 **Candidate research questions and hypotheses.**
 
-- **GC-03-RQ1 (primary; Candidate research question (not final)).** Under resource-driven runtime downgrades on a resource-constrained smartphone, does a confidence-triggered verification action (recapture, additional view, or escalation to a larger on-device model) recover defect recall to within a pre-registered tolerance of the full-capacity configuration, and at what added latency and energy cost?
-  - *Measurable outcomes:* defect recall; verification trigger rate; added latency per item; added energy per item.
+- **GC-03-RQ1 (primary; Candidate research question (not final)).** Can confidence-aware downstream verification recover inspection accuracy lost when a resource-constrained smartphone dynamically downgrades its inference configuration under changing device conditions? _(Step 9.9C approval-ready wording. The Phase A wording is kept in `configs/gap_selection.yaml` as `phase_a_text`.)_
+  - *Independent variables:* resource/device state; selected inference configuration; adaptation state.
+  - *Dependent variables:* recall; precision; F1; mAP where appropriate; calibration/error; latency; energy/power; temperature; memory; recapture rate; escalation rate.
+  - *Potential mediating variable:* confidence threshold / uncertainty.
+  - *Measurable outcomes:* recall; precision; F1; mAP where appropriate; calibration error; latency; energy/power; temperature; memory; recapture rate; escalation rate.
   - *Falsified if:* Confidence-triggered verification does not recover recall beyond the downgraded baseline, or recovers it only at a cost equal to running the full-capacity configuration.
 - **GC-03-RQ2 (secondary; Candidate research question (not final)).** Does the confidence calibration of the inspection model change across resource-adaptive configurations, and does per-configuration threshold recalibration change verification trigger rates and residual error?
   - *Measurable outcomes:* expected calibration error per configuration; risk-coverage curves; trigger rate; residual error rate.
@@ -285,9 +324,12 @@ Labels are not converted to numbers and are not aggregated.
 - **GC-03-RQ3 (evaluation; Candidate research question (not final)).** What are the risk-coverage and operator-workload trade-offs of combining resource-driven adaptation with confidence-aware verification, compared with each component alone?
   - *Measurable outcomes:* risk-coverage curve; referral rate; recall at fixed referral rate; latency; energy.
   - *Falsified if:* The combination is not distinguishable from the better single component on any measured trade-off.
-- **Candidate hypotheses.**
-  - H-GC03-1 (Hypothesis): Confidence calibration degrades under resource-driven downgrades, so thresholds calibrated at full capacity mis-trigger verification.
-  - H-GC03-2 (Hypothesis): Confidence-triggered verification recovers part of the recall lost under downgrades at lower average cost than always running full capacity.
+- **Candidate hypotheses** (Step 9.9C; they replace H-GC03-1, now H4, and H-GC03-2, now H2 and H5). All are **CANDIDATE — NOT YET TESTED**:
+  - H1: Resource-driven runtime downgrading decreases inspection performance relative to the best static configuration under equivalent task conditions.
+  - H2: Confidence-aware downstream verification recovers a measurable portion of the performance degradation introduced by resource-driven downgrading.
+  - H3: Confidence-aware verification introduces measurable computational and/or energy/latency overhead.
+  - H4: Confidence distributions and calibration characteristics differ between inference configurations operating under different resource conditions.
+  - H5: A joint resource-adaptation + confidence-verification policy provides a more favorable accuracy–efficiency trade-off than either mechanism alone.
 
 ## 8. Comparative strengths
 
@@ -341,7 +383,7 @@ All RQs below are **candidate research questions (not final)**. Final PocketInsp
 | GC-02-RQ1 | GC-02 | primary | energy per inspected item; device/battery temperature trajectory; time to thermal throttling; sustained throughput | Energy-only and joint energy-thermal evaluations select the same configurations under all tested sustained workloads. |
 | GC-02-RQ2 | GC-02 | secondary | energy per inspected item; peak and mean temperature; time to throttling; accuracy | No measurable difference in energy or thermal trajectory between static and adaptive configurations beyond run-to-run variance. |
 | GC-02-RQ3 | GC-02 | evaluation | agreement between software and external energy estimates; bias and variance across runs | Not a hypothesis test in itself; it establishes the measurement validity required by RQ1 and RQ2. |
-| GC-03-RQ1 | GC-03 | primary | defect recall; verification trigger rate; added latency per item; added energy per item | Confidence-triggered verification does not recover recall beyond the downgraded baseline, or recovers it only at a cost equal to running the full-capacity configuration. |
+| GC-03-RQ1 | GC-03 | primary | recall; precision; F1; mAP where appropriate; calibration error; latency; energy/power; temperature; memory; recapture rate; escalation rate | Confidence-triggered verification does not recover recall beyond the downgraded baseline, or recovers it only at a cost equal to running the full-capacity configuration. |
 | GC-03-RQ2 | GC-03 | secondary | expected calibration error per configuration; risk-coverage curves; trigger rate; residual error rate | Calibration error and trigger behaviour are unchanged across configurations within variance. |
 | GC-03-RQ3 | GC-03 | evaluation | risk-coverage curve; referral rate; recall at fixed referral rate; latency; energy | The combination is not distinguishable from the better single component on any measured trade-off. |
 
@@ -377,6 +419,8 @@ Hypothetical minimum viable experiments (**Proposed idea**). Nothing here has be
 Repository-derived entries come from `papers.csv` records (read-only) or from Step 9.8 verified external papers, as marked. No external dataset search was performed in Step 9.9.
 
 Availability is `verification_required` or `unknown` for every entry. Access, licence and download were **not** verified in this step.
+
+**Step 9.9C qualification.** The reviewed dataset candidates appear technically suitable for visual-defect inspection experiments, but access, licensing, smartphone suitability, and multi-view/recapture suitability require dataset-specific verification. None of the 13 entries is claimed to be available, licensed or smartphone-captured.
 
 | Dataset | Source | Modality | Task | Defects / size (as recorded) | Smartphone-captured | Multi-view | Availability | Relevant to |
 | :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
@@ -437,9 +481,12 @@ Availability is `verification_required` or `unknown` for every entry. Access, li
   - Confidence/margin-triggered human review with a mobile client (backend inference) (RobustDefect-LLM arXiv 2608.08589).
   - Learned additional-view selection (GPU) (ActiveInspect doi 10.3390/s26154932).
   - Confidence-gated action on an edge 3D-print monitor (P016).
+  - Confidence-based early exit in visual defect inspection, not on a smartphone (Yan et al. 2025; abstract level, Step 9.9B).
+  - Resource-adaptive and confidence-conditioned switching outside inspection (RAMS, HAPI at snippet level; Choi et al. 2026 at abstract level; Step 9.9B).
+  - Resource-aware inference and energy/thermal monitoring on smartphones, non-inspection (P029, P031, P033, P034; arXiv 2603.26603).
 - *Potential research contribution (requires empirical validation; not a finding):*
+  - **CANDIDATE CONTRIBUTION — REQUIRES EXPERIMENTAL VALIDATION:** An empirical investigation of whether confidence-aware downstream verification can recover inspection performance degraded by resource-driven runtime configuration changes on a resource-constrained smartphone, including analysis of accuracy, calibration, latency, energy, thermal behavior, and verification overhead.
   - Evidence on whether confidence calibration shifts under resource-driven downgrades and whether per-configuration recalibration is needed.
-  - Measured cost-recall trade-off of confidence-triggered verification (recapture/additional view/escalation) under resource-driven adaptation on smartphones.
 - *What would have to be technically new or experimentally meaningful:* evidence about the interaction between resource-driven downgrades and confidence-aware verification (e.g. calibration shift and the cost–recall trade-off). The combination alone is not enough.
 
 ## 14. Risk analysis
@@ -459,8 +506,8 @@ Qualitative levels (low/moderate/high) with reasons. The levels are not combined
 
 ## 15. Evidence still required
 
-1. Full texts of P001 and P007, the main unresolved corpus records that could flip a candidate.
-2. End-to-end reads of PMC11435656 (`resource_awareness`) and ActiveInspect (`confidence_gating`).
+1. Full texts of P001 and P007, the main unresolved corpus records that could flip a candidate. _(Step 9.9B: attempted; both publisher hosts blocked; still unresolved.)_
+2. End-to-end reads of PMC11435656 (`resource_awareness`) and ActiveInspect (`confidence_gating`). _(Step 9.9B: done. PMC11435656 `resource_awareness` is No. ActiveInspect `confidence_gating` remains an operational-definition issue.)_
 3. Resolution of title-only hits:
    - Electronics 14(11):2188;
    - DMS;
@@ -470,7 +517,7 @@ Qualitative levels (low/moderate/high) with reasons. The levels are not combined
    - PMC10280690;
    - Electronics 15(17):3915;
    - the FOMO/Edge Impulse paper.
-4. An indexed-database search (IEEE Xplore, ACM DL, Scopus) for each narrowed wording.
+4. An indexed-database search (IEEE Xplore, ACM DL, Scopus) for each narrowed wording. _(Step 9.9B, GC-03 only: 12 searches, S46–S57, through labelled substitutes because the databases were blocked. GC-01 and GC-02 not searched.)_
 5. Dataset licence, access and class-balance verification (§12).
 6. Confirmation of the available Android devices and of read access to thermal/battery state.
 7. For GC-02: validation of on-device energy logging against an external measurement.
@@ -483,19 +530,19 @@ Qualitative levels (low/moderate/high) with reasons. The levels are not combined
 | Gate question | GC-01 | GC-02 | GC-03 |
 | :-- | :-- | :-- | :-- |
 | Q1. Is the evidence strong enough? | **partially_satisfied**: Corpus observation holds (resource_awareness/adaptive_inference Yes 0 in scope) and survived 15 targeted searches, but rests on 4 verified No records and 1 verified smartphone visual-inspection paper (P011). | **partially_satisfied**: No in-scope or core paper is coded Yes for both energy and thermal; survived 15 targeted searches; evidence rests on 4 verified No records. | **partially_satisfied**: No in-corpus paper meets three of the Step 9.7 components; survived 16 targeted searches; confidence_gating evidence in scope is Yes 1 (P016). |
-| Q2. Is the Unknown burden acceptable? | **unresolved**: 23/27 in-scope records Unknown per runtime field; acceptable only under the corpus-bounded framing; P001 unresolved. | **unresolved**: 23/27 in-scope records Unknown for energy and for thermal; P007 unresolved. | **unresolved**: confidence_gating Unknown for 24/27 in-scope records; runtime fields 23/27; the most Unknown-dependent candidate. |
+| Q2. Is the Unknown burden acceptable? | **unresolved**: 23/27 in-scope records Unknown per runtime field; acceptable only under the corpus-bounded framing; P001 unresolved. | **unresolved**: 23/27 in-scope records Unknown for energy and for thermal; P007 unresolved. | **partially_satisfied** (Step 9.9B: conditionally acceptable): acceptable for a corpus-bounded statement provided P001 and AIVD are retained as limitations; no universal claim that no counterexample exists. |
 | Q3. Are counterexamples sufficiently understood? | **satisfied**: Partial counterexamples (arXiv 2608.14727, PMC11435656, SAEC) are characterised: content- or confidence-driven, not smartphone. | **satisfied**: TinyGLASS (edge energy only), SAEC (energy, no thermal, not smartphone) and arXiv 2603.26603 (smartphone energy + temperature, LLM workload) are characterised. | **partially_satisfied**: Five partial counterexamples characterised; PMC11435656 and ActiveInspect were keyword-scanned, so some fields remain Unknown. |
 | Q4. Is the gap precise? | **satisfied**: Narrowed wording fixes platform (smartphone), task (visual inspection) and trigger (device/resource state). | **satisfied**: Narrowed wording requires joint energy and thermal measurement of resource-adaptive smartphone inspection. | **satisfied**: Narrowed wording names five components. |
 | Q5. Is the research question testable? | **satisfied**: Candidate RQs compare resource-driven, content-driven and static policies on measurable outcomes. | **satisfied**: Candidate RQs test whether energy-only and thermal-aware evaluation lead to different conclusions; falsifiable. | **partially_satisfied**: Testable with a rig or scripted recapture; user-in-the-loop recapture adds variability. |
 | Q6. Is the dataset feasible? | **partially_satisfied**: Public optical datasets exist in the repository record; no smartphone-captured inspection dataset is identified; licences/access not verified. | **partially_satisfied**: Energy/thermal behaviour is workload-driven, so public datasets can drive the workload; inspection accuracy on phone-captured data needs custom capture. | **partially_satisfied**: Multi-view datasets exist (Real-IAD, MANTA, P037/P038); smartphone recapture or multi-view data are not identified and would need custom acquisition. |
 | Q7. Is smartphone experimentation feasible? | **partially_satisfied**: Android exposes thermal/battery state (Assumption to verify on the target device); device availability is an Assumption. | **partially_satisfied**: BatteryManager-based logging is shown on an unrooted phone (arXiv 2603.26603, LLM workload); accuracy versus an external meter is unverified for the target device. | **partially_satisfied**: Same device Assumptions as GC-01, plus an acquisition-feedback loop (app UI or rig). |
-| Q8. Can the contribution be distinguished from prior integration? | **unresolved**: Resource-driven adaptation mechanisms exist on smartphones outside inspection (P029, P033, P034); whether inspection changes the problem is a Hypothesis. | **unresolved**: Risk that the contribution is primarily benchmarking unless the joint measurement changes a design conclusion (Hypothesis). | **unresolved**: Edge systems already combine adaptation with confidence-triggered escalation (PMC11435656, SAEC); a contribution requires a question beyond integration (Hypothesis: calibration shift under resource-driven downgrades). |
+| Q8. Can the contribution be distinguished from prior integration? | **unresolved**: Resource-driven adaptation mechanisms exist on smartphones outside inspection (P029, P033, P034); whether inspection changes the problem is a Hypothesis. | **unresolved**: Risk that the contribution is primarily benchmarking unless the joint measurement changes a design conclusion (Hypothesis). | **partially_satisfied** (Step 9.9B: conditionally distinct): mechanisms exist and integration alone is insufficient; the distinctive element is the testable recovery-under-downgrade and calibration-shift question. |
 | Q9. Can the study produce quantitative evidence? | **satisfied**: Accuracy, latency, throttling and resource traces are quantitative. | **satisfied**: Energy per inspected item, temperature trajectories and time-to-throttling are quantitative. | **satisfied**: Recall at fixed review rate, referral/recapture rates, calibration error, latency and resource use are quantitative. |
-| Q10. Could additional literature reasonably overturn the candidate? | **unresolved**: Plausible: generic mobile adaptive-inference literature is large and indexed databases were not searched. | **unresolved**: Plausible: mobile energy/thermal measurement studies are numerous; an inspection-specific study could exist in unsearched venues. | **unresolved**: Plausible: close partial counterexamples exist; indexed databases were not searched. |
+| Q10. Could additional literature reasonably overturn the candidate? | **unresolved**: Plausible: generic mobile adaptive-inference literature is large and indexed databases were not searched. | **unresolved**: Plausible: mobile energy/thermal measurement studies are numerous; an inspection-specific study could exist in unsearched venues. | **partially_satisfied** (Step 9.9B: moderate): a single study combining smartphone optical inspection, device-state-driven configuration changes and confidence-triggered recapture/escalation would overturn it; P001, AIVD and Choi 2026 unresolved. |
 
 **Gate outcome (Fact about this assessment).**
 - No candidate satisfies all ten gate questions without qualification.
-- For all three, Q2 (Unknown burden), Q8 (contribution distinguishable from prior integration) and Q10 (risk of being overturned by more literature) are `unresolved`.
+- In Phase A, Q2 (Unknown burden), Q8 (contribution distinguishable from prior integration) and Q10 (risk of being overturned by more literature) were `unresolved` for all three. Step 9.9B closed them for GC-03 only (now `partially_satisfied`, with the limitations stated in the GC-03 Evidence Closure Status section). They remain `unresolved` for GC-01 and GC-02.
 - These are documented reasons for not making a selection in Phase A. They are **not** grounds for eliminating any candidate. No candidate is eliminated because it is harder, and none is preferred because it aligns with the current PocketInspect architecture.
 
 **Decisions for the researcher.**
@@ -503,6 +550,6 @@ Qualitative levels (low/moderate/high) with reasons. The levels are not combined
 2. Which candidate, if any, to select. A combination or re-scoping is also possible (e.g. GC-01 as a foundation with GC-02 or GC-03 elements); any such combination would need its own gate check.
 3. What would make the contribution distinguishable (§13) for the chosen candidate.
 
-**Selection state.** `selected_candidate: null` (see `configs/gap_selection.yaml`). No candidate was ranked or selected. No final gap was created, and `research_gap.md` does not exist.
+**Selection state.** `selection_status: researcher_approval_required`; `selected_candidate: null` (see `configs/gap_selection.yaml`). The approval document is [`research_gap_approval.md`](research_gap_approval.md); its decision field reads "DECISION: PENDING EXPLICIT RESEARCHER APPROVAL". No candidate was ranked or selected. No final gap was created, and `research_gap.md` does not exist.
 
 Step 9.9 Phase A is complete. Final research-gap selection requires explicit researcher approval and is not automatically performed by this workflow.
