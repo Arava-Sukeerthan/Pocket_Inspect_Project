@@ -1453,3 +1453,252 @@ Step 9.8 final narrowed-claim falsification check (PR #10; not merged). A small,
 - Branch: `claude/step-9-8-gap-evaluation` (PR #10; not merged). Previous commit: `fb5b9a5`.
 - Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
 - Push status: pushed to the branch; not merged; `main` not modified.
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.9 Phase A started: the final research-gap selection framework. The task builds a transparent, evidence-based framework and evaluates the three Step 9.8 candidates (GC-01, GC-02, GC-03, with the narrowed wording) against it. Phase B (selection) is **not** performed; it requires explicit researcher approval. No candidate is ranked, scored or selected, and `research_gap.md` is not created.
+
+### Changes
+- **`configs/gap_selection.yaml` (new).**
+  - Frozen-corpus record.
+  - Candidate source: `configs/gap_evaluation.yaml`.
+  - The 12 selection principles and criteria A–Q.
+  - Qualitative assessment and confidence vocabularies.
+  - The ten selection-gate questions, with a per-candidate status and rationale.
+  - `selection` set to null (researcher-controlled).
+  - Candidate RQ1–RQ3 per candidate, with measurable outcomes and falsification conditions, labelled "Candidate research question (not final)"; candidate hypotheses.
+  - 13 dataset entries, each sourced to a corpus record, a Step 9.8 external paper, or a proposed custom set, with availability `verification_required` or `unknown`.
+  - Contribution analysis: existing components are `demonstrated_in_literature`; potential contributions are `requires_empirical_validation`.
+  - Guard-rails.
+- **`src/literature/gap_selection.py` (new).** A read-only `GapSelectionValidator` that checks:
+  - the frozen corpus;
+  - the candidate set and exact wording;
+  - matrix structure and vocabularies;
+  - no rank, score or weight;
+  - document sections and the closing sentence;
+  - forbidden language;
+  - selection state;
+  - candidate RQs;
+  - dataset availability;
+  - contribution labels;
+  - counterexample representation;
+  - the gate.
+
+  It also provides `can_select()`, which is False without researcher approval and a fully satisfied gate.
+- **`research/gap_analysis/final_gap_selection_matrix.csv` (new).** 51 rows (3 candidates × criteria A–Q), with supporting and weakening evidence, Unknowns, counterexamples, assessment, confidence and the verification needed.
+- **`research/gap_analysis/final_gap_selection.md` (new).** The 16 required sections, ending with the required closing sentence.
+- **`research/gap_analysis/README.md`.** A pointer to the Step 9.9 files.
+- **`tests/test_gap_selection.py` (new).** 28 tests covering the 14 required checks, plus sandbox rejection of:
+  - a selected candidate, and selection without approval or a satisfied gate;
+  - `research_gap.md`;
+  - score columns and numeric assessments;
+  - winner or novelty wording;
+  - an RQ without a falsification condition, or labelled final;
+  - a dataset marked available;
+  - an existing component labelled novel;
+  - changed wording;
+  - missing Unknowns;
+  - a dropped counterexample.
+
+### Research decisions
+- **Candidates evaluated (unordered).** GC-01, GC-02 and GC-03, using the exact Step 9.8 wording.
+- **Gate outcome.** No candidate satisfies all ten gate questions without qualification. For all three, Q2 (Unknown burden), Q8 (contribution distinguishable from prior integration) and Q10 (risk of being overturned by further literature) are `unresolved`. These are documented as reasons for not selecting in Phase A, not as grounds for eliminating a candidate.
+- **Contribution principle applied.** Integration of known components is not automatically a novel contribution. Each candidate's distinguishing element is stated as a Hypothesis that needs empirical validation:
+  - GC-01: inspection-specific effects of device-state-driven adaptation;
+  - GC-02: whether joint energy-thermal evaluation changes configuration conclusions;
+  - GC-03: calibration shift under resource-driven downgrades.
+- **Datasets.** No external dataset search was performed. No smartphone-captured or smartphone-recapture inspection dataset was identified in the repository record; a custom phone-captured set is a Proposed idea.
+- **No candidate was selected or ranked.** No final gap was created, and no novelty is claimed.
+
+### Verification
+- `pytest` on `test_gap_selection.py`, `test_gap_evaluation.py`, `test_gap_analysis.py`, `test_literature.py` and `test_literature_data.py`: 141 passed. Full suite: 142 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 31 columns; 0 duplicate IDs.
+- `papers.csv` SHA-256 `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521`, unchanged. No diff under `research/literature/` against `origin/main`.
+- `GapSelectionValidator.validate()` returns no errors, and `can_select()` is False for all candidates.
+- `research_gap.md` does not exist.
+
+### Uncertain items
+- **Evidence still required** (selection document §15):
+  - P001 and P007 full texts;
+  - end-to-end reads of PMC11435656 and ActiveInspect;
+  - title-only hits from Step 9.8;
+  - an indexed-database search for each narrowed wording;
+  - dataset licence, access and class-balance verification;
+  - Android device availability and thermal/battery API access;
+  - validation of on-device energy logging (GC-02);
+  - a calibration-shift pilot (GC-03).
+- Device models, tolerances, session lengths and run counts are Assumptions or to be pre-registered in `configs/`.
+
+### Remaining work
+- Researcher review of Step 9.9 Phase A.
+- Phase B (final selection and `research_gap.md`) only after explicit researcher approval.
+
+### Git
+- Branch: `claude/step-9-9-gap-selection-framework` (from `origin/main` `f8e0d2e`).
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.9B: a final, targeted evidence-closure pass for **GC-03 only**. It resolves the three GC-03 gate questions left `unresolved` in Step 9.9 Phase A:
+- Q2: the Unknown burden;
+- Q8: whether a contribution is distinguishable from integration;
+- Q10: the risk of being overturned by further literature.
+
+Not a broad survey. No selection, no ranking, no `research_gap.md`, no merge.
+
+### Changes
+- **`research/gap_analysis/gc03_evidence_closure.md` (new).** The 17 required sections, ending with the required closing sentence.
+- **`configs/gc03_evidence_closure.yaml` (new).** Declarative record of:
+  - criteria and strength rules;
+  - priority-paper findings;
+  - gate answers;
+  - overturn candidates and searches;
+  - dataset feasibility for the 13 Phase A entries (access/licence `verification_required` or `unknown`);
+  - candidate baselines B1–B5;
+  - null selection.
+- **`research/gap_analysis/counterexample_candidates.csv`.** 4 rows updated and 10 appended (48 → 58). CRLF line endings preserved.
+  - PMC11435656 (GC-01/02/03 rows): `resource_awareness` Unknown → No, after an end-to-end full-text read.
+  - ActiveInspect: `resource_awareness` Unknown → No; `confidence_gating` kept Unknown and flagged.
+  - Both: `verification_status` → `verified_by_full_text_read`. Evidence levels are locked and strengths unchanged (partial).
+  - New GC-03 rows:
+    - P001 (potential, corpus-reproduced) and P007 (partial, corpus-reproduced);
+    - PMC10280690 (not_counterexample, full text);
+    - AIVD, arXiv 2601.04734 (potential, snippet);
+    - Choi et al. 2026 (potential, abstract);
+    - Zakaria et al. 2022 (potential, abstract);
+    - Yan et al. 2025 (partial, abstract);
+    - RAMS and HAPI (partial, snippet);
+    - Electronics 15(17):3915 (potential, snippet).
+- **`research/gap_analysis/targeted_search_log.md`.** New section with S46–S57, an outcome table and the separately listed verification lookups. S01–S45 are unchanged.
+- **`research/gap_analysis/README.md`.** Pointer to the closure document.
+- **`tests/test_gc03_evidence_closure.py` (new).** 15 tests covering the 15 required checks.
+- **`tests/test_gap_evaluation.py`.** Two assertions updated to the new evidence:
+  - PMC11435656 `resource_awareness` is now No, with a full-text basis (it was pinned Unknown);
+  - entries after S45 must belong to the Step 9.9B section (it was "no S46").
+
+### Research decisions
+- **Evidence checked.**
+  - Full-text reads via PubMed Central: PMC11435656, PMC13468834 (ActiveInspect) and PMC10280690.
+  - **P001:** Wiley is blocked by the egress proxy, and the repository hits are a different 2019 *Sensors* paper. The full text stays unresolved: `abstract_only`, potential.
+  - **P007:** Wiley, Hindawi and structurae are blocked. The full text stays unresolved: `abstract_only`, partial (the abstract places inference on OAK-D/Raspberry Pi).
+  - **PMC11435656:** routing is driven by confidence only (threshold 0.6 → re-detection → cloud). The platform is Raspberry Pi 4 edge devices, not a smartphone, and the three-device split is design-time. **Partial.**
+  - **ActiveInspect:** the budget is a fixed hyperparameter, and inference runs on an A100 over pre-acquired pools. Confidence informs a learned policy but triggers nothing explicitly. **Partial.** The `confidence_gating` coding needs a researcher decision: Decision B "explicitly informs" versus this task's "explicitly triggers".
+- **Searches.**
+  - 12 (S46–S57). IEEE Xplore, ACM DL, Scopus and Web of Science were all blocked, so legitimate substitutes were used and labelled:
+    - WebSearch restricted to `ieeexplore.ieee.org` (3) and `dl.acm.org` (3);
+    - Consensus (3);
+    - PubMed (3).
+  - No results were fabricated.
+- **No full counterexample** was identified in the searches and papers read. This is an observation, not a claim about the literature as a whole. No record meets four criteria with the fifth unresolved.
+- **Q2: `conditionally_acceptable`.** Acceptable for the corpus-bounded wording, provided P001 and AIVD are read or named as limitations.
+- **Q8: `conditionally_distinct`.**
+  - Every component is already demonstrated, including resource-adaptive plus confidence-conditioned switching outside inspection (RAMS, HAPI, Choi 2026), so integration alone is not distinctive.
+  - The downgrade-recovery and calibration-shift question is quantitatively testable (B1–B5).
+  - Distinctiveness depends on untested Hypotheses and on full reads of Choi 2026 and AIVD.
+- **Q10: `moderate`.** The overturning paper type is specified in §13 of the closure document.
+- **Datasets.**
+  - All 13 entries support visual defect inspection, and all can drive on-device inference by replay.
+  - None is verified as smartphone-captured.
+  - Multi-view exists in Real-IAD, MANTA and MVTec3D-AD/Eyecandies; physical recapture needs custom capture.
+  - No access or licence is asserted.
+- **Minimum viable experiment.** A defensible minimum experiment (Proposed idea) exists, conditional on dataset, device and API verification. No results are claimed.
+- **Branch base.** Step 9.9 Phase A (`d8894d9`) is not on `main`. Its files were read from its branch and not modified. The Q2/Q8/Q10 results are documented to replace Phase A's `unresolved` GC-03 gate entries once the branches are reconciled.
+
+### Verification
+- `python -m pytest -q`: 129 passed (114 existing + 15 new).
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 31 columns; 0 duplicate IDs.
+- `GapEvaluationValidator.validate()` returns no errors; 57 search entries are parsed.
+- `papers.csv` SHA-256 is `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521` before and after, and `git diff -- research/literature/` is empty.
+- `research/gap_analysis/research_gap.md` does not exist.
+
+### Uncertain items
+- Full texts of AIVD (arXiv 2601.04734), P001 and Choi et al. 2026 are needed. arXiv and alphaXiv were unreachable.
+- The DOIs of the Consensus-sourced records (Yan 2025, Choi 2026, Zakaria 2022) were not verified.
+- Researcher decision on ActiveInspect `confidence_gating`.
+- Reconciliation with the Step 9.9 Phase A branch.
+
+### Remaining work
+- Researcher review of Step 9.9B. **No final research gap was selected or approved.** GC-03 is not selected, no candidate is ranked, and Step 10 has not started.
+
+### Git
+- Branch: `claude/step-9-9b-gc03-evidence-closure` (from `origin/main` `f8e0d2e`).
+- Commit: see `git log -- research/gap_analysis/gc03_evidence_closure.md`.
+- Push status: pushed to the branch; not merged; `main` not modified.
+
+---
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.9C: reconcile Step 9.9 Phase A and Step 9.9B into one gap-selection state, and prepare the GC-03 researcher approval gate.
+
+This is not implementation, not a literature survey and not a selection. GC-03 is **not** selected.
+
+### Changes
+- **Reconciliation.**
+  - Branch `claude/step-9-9c-gap-selection-reconciliation`, created from `origin/main` `f8e0d2e`.
+  - Merged Step 9.9 Phase A `d8894d9` (merge commit `e8764ce`, clean) and Step 9.9B `f9187fd` (merge commit `6979f29`).
+  - The only conflicts were the appended CHANGELOG entries and `research/gap_analysis/README.md`, resolved as a union in chronological order.
+  - Neither branch lost a line, and no file was overwritten.
+- **`configs/gap_selection.yaml`.**
+  - GC-03 gate Q2/Q8/Q10: `unresolved` → `partially_satisfied`, with the exact Step 9.9B wording and all limitations in the rationale.
+  - `selection.selection_status: researcher_approval_required` added; `selected_candidate: null`.
+  - GC-03-RQ1 replaced by the approval-ready RQ, with independent and dependent variables and a mediator. The Phase A text is kept as `phase_a_text`.
+  - GC-03 hypotheses replaced by H1–H5 ("CANDIDATE — NOT YET TESTED"); H-GC03-1 is now H4, and H-GC03-2 is now H2/H5.
+  - GC-03 candidate contribution set and labelled `requires_empirical_validation`; existing components extended with the Step 9.9B findings.
+  - New blocks: `evidence_closure` (GC-03 complete; GC-01 and GC-02 not performed) and `approval_ready.GC-03` (wording, baselines B1–B5, dataset statement, pending decision).
+  - `files.approval_document` added.
+- **`research/gap_analysis/final_gap_selection_matrix.csv`.** Six GC-03 rows updated (A, B, C, G, M, Q); CRLF preserved; still 51 rows.
+  - B (`weakens` → `mixed`), M and Q (`unresolved` → `mixed`) now reflect Step 9.9B. Confidence is kept low where the result rests on substitutes or untested Hypotheses.
+  - The approval-ready status (not selected) is recorded in the existing text fields. No new column was added.
+- **`research/gap_analysis/final_gap_selection.md`.**
+  - New unnumbered section "GC-03 Evidence Closure Status", kept outside the validator's 16 numbered sections.
+  - §7 facts updated (PMC11435656 and ActiveInspect `resource_awareness` No); new RQ1 and H1–H5.
+  - §10 RQ table, §12 dataset qualification, §13 contribution, §15 status notes, and §16 GC-03 gate rows plus outcome text updated.
+  - The required sentence on GC-03 as the strongest approval-ready candidate is included verbatim, with a scope note: it describes evidence-closure status and is not a ranking of merit.
+- **`research/gap_analysis/gc03_evidence_closure.md`.** §14 dataset wording corrected to the five required categories and the qualification sentence.
+- **`research/gap_analysis/research_gap_approval.md` (new).** The exact 14-section approval document. §14 reads "DECISION: PENDING EXPLICIT RESEARCHER APPROVAL".
+- **`research/gap_analysis/README.md`.** Pointer to the approval gate.
+- **Tests.**
+  - `tests/test_gap_selection_reconciliation.py` (new): 15 tests covering the 22 required checks.
+  - `tests/test_gap_selection.py`: one assertion updated. GC-03 Q2/B now reflect the closure; GC-01 and GC-02 still pinned `unresolved`/`weakens`.
+
+### Research decisions
+- **GC-03 evidence closure.** Complete.
+  - Q2: conditionally acceptable. Q8: conditionally distinct. Q10: moderate.
+  - **Full counterexamples: 0.**
+  - None of these is absolute proof; all are corpus-bounded.
+- **Unresolved evidence.**
+  - P001 (potential); AIVD, arXiv 2601.04734 (potential); Choi et al. 2026 (potential); Zakaria et al. 2022 and Electronics 15(17):3915 (potential).
+  - ActiveInspect `confidence_gating` (operational-definition issue).
+  - Substituted database access; English-only; one results page per search; remaining Unknown burden.
+- **Approval-ready wording (corpus-bounded).** "Within the reviewed literature corpus, there is limited evidence of an integrated resource-aware smartphone visual-inspection system in which device-state-driven runtime adaptation is coupled with confidence-aware downstream verification, particularly for recovering inspection performance under resource-induced model/configuration degradation." The evaluated Step 9.8 wording is kept as the source of truth for the evidence rows.
+- **No selection.**
+  - `selected_candidate` remains null, and `can_select()` is False for all candidates.
+  - `research_gap.md` was not created.
+  - No ranking was introduced; GC-01 and GC-02 remain candidate gaps with their Phase A gate status.
+- **No implementation.** No implementation, experiment, device measurement or Step 10 work was started.
+
+### Verification
+- `python -m pytest -q`: 172 passed (157 after reconciliation + 15 new).
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 31 columns; 0 duplicate IDs.
+- `GapSelectionValidator.validate()` and `GapEvaluationValidator.validate()` both return no errors.
+- `papers.csv` SHA-256 is `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521` before and after.
+- `research/gap_analysis/research_gap.md` does not exist.
+
+### Uncertain items
+- Full texts of P001, AIVD and Choi et al. 2026.
+- Researcher decision on ActiveInspect `confidence_gating`.
+- Whether the researcher accepts the approval-ready wording, or selects or re-scopes another candidate.
+
+### Remaining work
+- **Explicit researcher decision.** Nothing proceeds until the researcher writes "Approve GC-03 as the final research gap." (or decides otherwise).
+
+### Git
+- Branch: `claude/step-9-9c-gap-selection-reconciliation`.
+- Commits reconciled: `d8894d9` (Step 9.9 Phase A) and `f9187fd` (Step 9.9B).
+- Commit: see `git log -- research/gap_analysis/research_gap_approval.md`.
+- Push status: pushed to the branch; not merged; `main` not modified.
