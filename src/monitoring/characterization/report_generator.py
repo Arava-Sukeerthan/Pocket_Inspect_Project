@@ -7,6 +7,7 @@ prevents silent run overwrites, validates evidence file existence,
 and enforces two-run separate-day and reboot stability criteria.
 """
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -30,7 +31,7 @@ def validate_characterization_record(
     output_dir: Optional[Path] = None
 ) -> List[str]:
     """Validates a characterization run record against the schema, null-value rule,
-    and evidence file existence. Returns a list of validation error strings (empty if valid).
+    evidence file existence, and manifest SHA-256 evidence integrity.
     """
     errors: List[str] = []
 
@@ -76,7 +77,6 @@ def validate_characterization_record(
 
             # Check if evidence file actually exists on disk
             if output_dir and ev_ref:
-                # ev_ref format: evidence/file.txt#section or evidence/file.json
                 rel_path = ev_ref.split("#")[0]
                 full_ev_path = output_dir / rel_path
                 if not full_ev_path.exists():
@@ -93,11 +93,35 @@ def validate_characterization_record(
                 _scan(item, f"{path}[{idx}]")
 
     _scan(record, "root")
+
+    # 4. P-05: Manifest SHA-256 evidence integrity verification
+    if output_dir:
+        manifest_file = output_dir / "evidence" / "manifest.json"
+        if manifest_file.exists():
+            try:
+                manifest_entries = json.loads(manifest_file.read_text(encoding="utf-8"))
+                for entry in manifest_entries:
+                    rel_p = entry.get("relative_path")
+                    expected_sha = entry.get("sha256")
+                    if rel_p and expected_sha:
+                        full_p = output_dir / rel_p
+                        if not full_p.exists():
+                            errors.append(f"Manifest evidence file missing: {rel_p}")
+                        else:
+                            actual_sha = hashlib.sha256(full_p.read_bytes()).hexdigest()
+                            if actual_sha != expected_sha:
+                                errors.append(
+                                    f"Evidence integrity failure for '{rel_p}': SHA-256 mismatch "
+                                    f"(expected {expected_sha}, got {actual_sha})"
+                                )
+            except Exception as e:
+                errors.append(f"Failed to read/verify evidence manifest: {str(e)}")
+
     return errors
 
 
 class CharacterizationReportGenerator:
-    """Generates schema-valid characterization outputs and updates device_capability_matrix.md."""
+    """Generates schema-valid characterization outputs without mutating authoritative research specs."""
 
     def __init__(self, schema_path: Optional[Path] = None, matrix_path: Optional[Path] = None):
         self.schema_path = schema_path or SCHEMA_PATH
@@ -109,9 +133,8 @@ class CharacterizationReportGenerator:
         output_dir: Path,
         overwrite: bool = False
     ) -> Dict[str, Any]:
-        """Validates run record, saves schema-valid JSON files, and checks repeatability.
-        F-14: Refuses to overwrite an existing characterization.json file unless overwrite=True.
-        R-11: Prevents corrupt/partial run files on validation failure.
+        """Validates run record and saves schema-valid JSON files in output_dir.
+        P-01: A single characterization run NEVER mutates the authoritative device_capability_matrix.md.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         run_file = output_dir / "characterization.json"
@@ -131,9 +154,8 @@ class CharacterizationReportGenerator:
             with open(readme_file, "w", encoding="utf-8") as f:
                 f.write(self._generate_markdown_summary(run_record))
 
-            # Update capability matrix if device evidence present
-            if run_record.get("conditions", {}).get("adb_connected"):
-                self.update_device_capability_matrix(run_record)
+            # P-01: Do NOT call self.update_device_capability_matrix(run_record) automatically!
+            # Matrix mutation is forbidden for single runs. Run outputs remain isolated in output_dir.
 
             return {
                 "status": "VALID",

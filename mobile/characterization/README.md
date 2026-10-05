@@ -2,6 +2,22 @@
 
 Android Kotlin module for on-device capability checks and telemetry collection on the OPPO A5 2020 experimental platform.
 
+## Environmental Prerequisites (R-05)
+
+To build this Android module from source, the environment requires:
+- **JDK Version**: Java Development Kit (JDK) 17 (`JAVA_HOME` pointing to JDK 17)
+- **Android SDK**: `ANDROID_HOME` or `ANDROID_SDK_ROOT` environment variable configured
+- **SDK Platforms & Build Tools**: Android SDK Platform 34, SDK Build-Tools 34.0.0
+- **Gradle Version**: Gradle 8.5 (managed via `./gradlew` standard wrapper)
+- **Android Gradle Plugin (AGP)**: Version 8.2.2
+- **Kotlin Version**: 1.9.22
+
+Build Commands:
+```bash
+./gradlew --version
+./gradlew clean assembleDebug
+```
+
 ## Architecture
 
 - `minSdk` <= 28
@@ -24,3 +40,4 @@ Android Kotlin module for on-device capability checks and telemetry collection o
 10. `ProfilingCapabilityCollector.kt`
 11. `EnergyMeasurementCapabilityChecker.kt`
 12. `CharacterizationRunner.kt`
+

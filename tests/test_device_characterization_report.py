@@ -157,4 +157,4 @@ def test_f02_date_mismatch_rejection(tmp_path):
     cfg_path = ROOT / "configs" / "device_characterization.yaml"
     # Passing run_id with future date (e.g. 20991231) raises ValueError
     with pytest.raises(ValueError, match="does not match actual start time date"):
-        run_characterization(cfg_path, run_id="run_20991231_100000", dry_run=True)
+        run_characterization(cfg_path, run_id="run_20991231_100000", dry_run=True, results_dir=tmp_path)

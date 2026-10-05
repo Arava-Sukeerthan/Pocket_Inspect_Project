@@ -71,8 +71,13 @@ def run_characterization(
     dry_run: bool = False,
     require_device: bool = False,
     overwrite: bool = False,
+    results_dir: Optional[Path] = None,
+    device_serial: Optional[str] = None,
 ) -> Tuple[Path, dict]:
     """Runs a characterization pass and writes schema-valid output."""
+    if require_device and dry_run:
+        raise ValueError("CLI argument conflict: --require-device cannot be used with --dry-run (P-06).")
+
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
@@ -93,7 +98,7 @@ def run_characterization(
             )
 
     unit_id = cfg.get("device_unit_id", "OPPO_A5_2020_UNIT_01")
-    results_base = ROOT / cfg.get("output", {}).get("results_directory", "research/results/device_characterization")
+    results_base = results_dir or (ROOT / cfg.get("output", {}).get("results_directory", "research/results/device_characterization"))
     output_dir = results_base / run_id
 
     # F-14 / R-11: Silent overwrite guard
@@ -102,7 +107,7 @@ def run_characterization(
         raise FileExistsError(f"Run directory '{output_dir}' already contains characterization.json. Silent overwrite refused (F-14).")
 
     # ADB check & raw evidence collection
-    adb = ADBCollector()
+    adb = ADBCollector(device_id=device_serial)
     conn_status = adb.get_connection_status()
 
     # R-03 / R-10: Connection state handling and device requirement check
@@ -170,6 +175,7 @@ def run_characterization(
             "usb_connected": adb_connected,
             "adb_connected": adb_connected,
             "adb_connection_status": conn_status,
+            "device_serial": device_serial,
             "boot_id": boot_id,
             "is_dry_run": not adb_connected,
         },
@@ -191,6 +197,7 @@ def main():
     parser.add_argument("--repeat-index", type=int, default=1, help="Repeat index (1 or 2)")
     parser.add_argument("--dry-run", action="store_true", help="Execute dry run without connected device")
     parser.add_argument("--require-device", action="store_true", help="Fail if connected device is unavailable (prevent dry-run fallback)")
+    parser.add_argument("--serial", type=str, default=None, help="Specific Android device serial number")
     parser.add_argument("--overwrite", action="store_true", help="Force overwrite existing run directory")
     args = parser.parse_args()
 
@@ -201,6 +208,7 @@ def main():
         repeat_index=args.repeat_index,
         dry_run=args.dry_run,
         require_device=args.require_device,
+        device_serial=args.serial,
         overwrite=args.overwrite
     )
     print(f"Characterization run completed successfully.")

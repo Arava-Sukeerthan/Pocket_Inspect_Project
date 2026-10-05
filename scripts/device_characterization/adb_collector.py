@@ -94,14 +94,15 @@ class ADBCollector:
         if not lines:
             return "NO_DEVICE"
 
-        if len(lines) > 1 and not self.device_id:
-            return "MULTIPLE_DEVICES"
-
-        target_line = lines[0]
         if self.device_id:
             matching = [l for l in lines if l.startswith(self.device_id)]
-            if matching:
-                target_line = matching[0]
+            if not matching:
+                return "NO_DEVICE"
+            target_line = matching[0]
+        else:
+            if len(lines) > 1:
+                return "MULTIPLE_DEVICES"
+            target_line = lines[0]
 
         parts = target_line.split()
         if len(parts) >= 2:
@@ -259,6 +260,51 @@ class ADBCollector:
                 return "ONLINE", ev_file
         return None, ev_file
 
+    def retrieve_android_app_output(
+        self, ev_dir: Path, manifest_entries: List[Dict[str, Any]]
+    ) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """Host retrieves on-device Android app output via ADB, saves evidence, and computes SHA-256 hash.
+
+        Status flow:
+          - APP_OUTPUT_COLLECTED: Output file retrieved and valid JSON
+          - APP_OUTPUT_MISSING: Output file does not exist on device
+          - APP_OUTPUT_ERROR: Command error or invalid JSON content
+        """
+        code, out, err = self._adb_cmd(
+            ["shell", "run-as", "org.pocketinspect.characterization", "cat", "files/characterization_output.json"]
+        )
+        if code != 0 or not out.strip() or "No such file" in err or "Permission denied" in err:
+            code, out, err = self._adb_cmd(
+                ["shell", "cat", "/sdcard/Android/data/org.pocketinspect.characterization/files/characterization_output.json"]
+            )
+
+        if code != 0 or not out.strip() or "No such file" in out or "No such file" in err:
+            return "APP_OUTPUT_MISSING", None
+
+        try:
+            parsed = json.loads(out)
+            p = ev_dir / "android_app_evidence.json"
+            data_bytes = out.encode("utf-8")
+            p.write_bytes(data_bytes)
+            manifest_entries.append({
+                "relative_path": "evidence/android_app_evidence.json",
+                "size_bytes": len(data_bytes),
+                "sha256": hashlib.sha256(data_bytes).hexdigest(),
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            })
+            return "APP_OUTPUT_COLLECTED", parsed
+        except Exception:
+            p_err = ev_dir / "android_app_evidence_raw.txt"
+            data_bytes = out.encode("utf-8")
+            p_err.write_bytes(data_bytes)
+            manifest_entries.append({
+                "relative_path": "evidence/android_app_evidence_raw.txt",
+                "size_bytes": len(data_bytes),
+                "sha256": hashlib.sha256(data_bytes).hexdigest(),
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            })
+            return "APP_OUTPUT_ERROR", None
+
     def collect_raw_evidence_and_observations(self, output_dir: Path) -> Tuple[List[Path], Dict[str, Any]]:
         """Collects raw evidence text files, writes observed_props.json & manifest.json."""
         ev_dir = output_dir / "evidence"
@@ -269,9 +315,9 @@ class ADBCollector:
 
         def _save_evidence(filename: str, content: str) -> Path:
             p = ev_dir / filename
-            p.write_text(content, encoding="utf-8")
-            files_saved.append(p)
             data_bytes = content.encode("utf-8")
+            p.write_bytes(data_bytes)
+            files_saved.append(p)
             sha256 = hashlib.sha256(data_bytes).hexdigest()
             manifest_entries.append({
                 "relative_path": f"evidence/{filename}",
@@ -281,7 +327,15 @@ class ADBCollector:
             })
             return p
 
-        # 1. getprop
+        # 1. proc cpuinfo (parsed early for SoC fallback)
+        ok_cpu, out_cpu = self.read_file("/proc/cpuinfo")
+        cpu_parsed = {}
+        if ok_cpu:
+            _save_evidence("cpuinfo_evidence.txt", out_cpu)
+            cpu_parsed = self.parse_proc_cpuinfo(out_cpu)
+            observed_props.update(cpu_parsed)
+
+        # 2. getprop with P-04 SoC property fallback provenance
         code, out_prop, _ = self._adb_cmd(["shell", "getprop"])
         if code == 0:
             _save_evidence("getprop_evidence.txt", out_prop)
@@ -292,22 +346,28 @@ class ADBCollector:
             sdk_str = props.get("ro.build.version.sdk")
             observed_props["api_level"] = int(sdk_str) if sdk_str and sdk_str.isdigit() else None
             observed_props["cpu_abi"] = props.get("ro.product.cpu.abi")
-            observed_props["soc_model"] = props.get("ro.soc.model") or props.get("ro.board.platform")
             observed_props["build_fingerprint"] = props.get("ro.build.fingerprint")
 
-        # 2. dumpsys meminfo / proc meminfo
+            # P-04 SoC property fallback with explicit source property recording
+            if props.get("ro.soc.model"):
+                observed_props["soc_model"] = props.get("ro.soc.model")
+                observed_props["source_soc_prop"] = "ro.soc.model"
+            elif props.get("ro.board.platform"):
+                observed_props["soc_model"] = props.get("ro.board.platform")
+                observed_props["source_soc_prop"] = "ro.board.platform"
+            elif cpu_parsed.get("hardware"):
+                observed_props["soc_model"] = cpu_parsed.get("hardware")
+                observed_props["source_soc_prop"] = "Hardware (/proc/cpuinfo)"
+            else:
+                observed_props["soc_model"] = None
+                observed_props["source_soc_prop"] = "UNAVAILABLE"
+
+        # 3. dumpsys meminfo / proc meminfo
         ok_mem, out_mem = self.read_file("/proc/meminfo")
         if ok_mem:
             _save_evidence("meminfo_evidence.txt", out_mem)
             mem_parsed = self.parse_proc_meminfo(out_mem)
             observed_props.update(mem_parsed)
-
-        # 3. proc cpuinfo
-        ok_cpu, out_cpu = self.read_file("/proc/cpuinfo")
-        if ok_cpu:
-            _save_evidence("cpuinfo_evidence.txt", out_cpu)
-            cpu_parsed = self.parse_proc_cpuinfo(out_cpu)
-            observed_props.update(cpu_parsed)
 
         # 4. proc stat check
         ok_stat, out_stat = self.read_file("/proc/stat")
@@ -382,19 +442,29 @@ class ADBCollector:
         })
         observed_props["network_state"] = net_state
 
-        # 12. Boot ID
+        # 12. On-device Android app output retrieval (P-03 integration)
+        app_status, app_parsed = self.retrieve_android_app_output(ev_dir, manifest_entries)
+        observed_props["app_output_status"] = app_status
+        if app_status == "APP_OUTPUT_COLLECTED" and app_parsed:
+            files_saved.append(ev_dir / "android_app_evidence.json")
+            # Update observed props with app-collected observations
+            for k, v in app_parsed.items():
+                if k not in observed_props or observed_props[k] is None:
+                    observed_props[k] = v
+
+        # 13. Boot ID
         observed_props["boot_id"] = self.get_boot_id()
 
-        # 13. Save command log (R-03)
+        # 14. Save command log (R-03)
         cmd_log_json = json.dumps(self.command_logs, indent=2)
         _save_evidence("commands.log", cmd_log_json)
 
-        # 14. Write observed_props.json (R-01)
+        # 15. Write observed_props.json (R-01)
         observed_props["source_evidence_manifest"] = manifest_entries
         observed_props_json = json.dumps(observed_props, indent=2)
         _save_evidence("observed_props.json", observed_props_json)
 
-        # 15. Write manifest.json (R-01, R-07)
+        # 16. Write manifest.json (R-01, R-07)
         manifest_file = ev_dir / "manifest.json"
         manifest_file.write_text(json.dumps(manifest_entries, indent=2), encoding="utf-8")
         files_saved.append(manifest_file)
