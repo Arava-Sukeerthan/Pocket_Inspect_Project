@@ -37,6 +37,7 @@ STEP_10C_PROTOCOL_DOCS = {
     "experimental_protocol.md", "resource_states.md", "model_selection_protocol.md",
     "confidence_verification_protocol.md", "measurement_protocol.md", "generalization_framework.md",
     "experimental_matrix.csv", "log_schema.json",
+        "pre_data_collection_decision_register.md", "decision_traceability.csv",
 }
 # SHA-256 of the Step 10A artefacts as merged in PR #14 (main 544fe17).
 STEP_10A_HASHES = {
