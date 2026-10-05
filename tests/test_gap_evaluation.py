@@ -502,5 +502,103 @@ class TestConfirmedPartialCounterexamples(unittest.TestCase):
             self.assertTrue(any("locked" in e for e in sb.validator().check_corrections()))
 
 
+class TestNarrowedClaimFalsificationCheck(unittest.TestCase):
+    """Step 9.8 narrowed-claim falsification check (S28-S45)."""
+
+    NEW_SEARCHES = [f"S{n}" for n in range(28, 46)]
+
+    def test_eighteen_new_searches_logged_six_per_candidate(self):
+        entries = _validator().search_entries()
+        for sid in self.NEW_SEARCHES:
+            self.assertIn(sid, entries)
+            self.assertIn("narrowed wording", entries[sid]["Candidate"])
+            self.assertTrue(entries[sid]["Search limitations"].strip())
+            self.assertRegex(entries[sid]["Results returned"], r"^\d+")
+        self.assertNotIn("S46", entries)
+        for cid in CANDIDATES:
+            n = sum(1 for sid in self.NEW_SEARCHES if cid in entries[sid]["Candidate"])
+            self.assertEqual(n, 6, cid)
+
+    def test_no_full_counterexample_statement(self):
+        log = (GAP_DIR / "targeted_search_log.md").read_text(encoding="utf-8")
+        doc = (GAP_DIR / "candidate_gap_evaluation.md").read_text(encoding="utf-8")
+        statement = "No full counterexample was identified in this targeted falsification search."
+        self.assertIn(statement, log)
+        self.assertIn(statement, doc)
+        for text in (log, doc):
+            self.assertNotIn("no such work exists.", " ".join(text.lower().split()).replace(
+                "does not establish that no such work exists.", ""))
+
+    # full counterexample requires all criteria
+    def test_full_counterexample_requires_all_criteria(self):
+        v = _validator()
+        self.assertEqual(v.check_full_criteria(), [])
+        crit = v.config["full_counterexample_criteria"]
+        self.assertEqual(sorted(crit), CANDIDATES)
+        for cid in CANDIDATES:
+            self.assertIn("smartphone", crit[cid])
+            self.assertIn("visual_inspection", crit[cid])
+            self.assertIn("resource_awareness", crit[cid])
+            self.assertIn("adaptive_inference", crit[cid])
+        self.assertIn("energy_evaluation", crit["GC-02"])
+        self.assertIn("thermal_evaluation", crit["GC-02"])
+        self.assertIn("confidence_gating", crit["GC-03"])
+        base = {f: "Yes" for f in v.config["characteristic_fields"]}
+        for cid in CANDIDATES:
+            self.assertTrue(v.meets_full_criteria(dict(base, candidate_id=cid)))
+            for field in crit[cid]:
+                for value in ("No", "Unknown"):
+                    self.assertFalse(v.meets_full_criteria(dict(base, candidate_id=cid, **{field: value})))
+
+    def test_new_hits_classified_with_verified_evidence(self):
+        expected = {
+            ("arXiv:2509.17136", "GC-01"): "partial",
+            ("arXiv:2509.17136", "GC-02"): "partial",
+            ("arXiv:2509.17136", "GC-03"): "partial",
+            ("arXiv:2603.26603", "GC-02"): "partial",
+            ("arXiv:2608.08589", "GC-03"): "partial",
+            ("arXiv:2010.06291", "GC-02"): "not_counterexample",
+            ("arXiv:2606.24173", "GC-03"): "not_counterexample",
+        }
+        for (pid, cid), strength in expected.items():
+            row = _row(pid, cid)
+            self.assertEqual(row["counterexample_strength"], strength, pid)
+            self.assertEqual(row["evidence_level"], "verified_full_text", pid)
+        # SAEC: adaptation is content/confidence-driven, not resource-driven (Decision A)
+        self.assertEqual(_row("arXiv:2509.17136", "GC-01")["resource_awareness"], "No")
+        # smartphone energy + temperature paper is outside the visual-inspection scope
+        row = _row("arXiv:2603.26603", "GC-02")
+        self.assertEqual((row["smartphone"], row["visual_inspection"], row["energy_evaluation"],
+                          row["thermal_evaluation"]), ("Yes", "No", "Yes", "Yes"))
+        self.assertFalse(_validator().meets_full_criteria(row))
+        # title-level hits are not upgraded
+        for pid in ("arXiv:2010.10754", "arXiv:2303.11291"):
+            self.assertEqual(_row(pid, "GC-01")["evidence_level"], "search_snippet_only")
+
+    def test_no_row_classified_full(self):
+        self.assertFalse([r for r in _validator().counterexamples() if r["counterexample_strength"] == "full"])
+
+    def test_rejects_full_without_all_criteria(self):
+        with _Sandbox() as sb:
+            def mutate(fields, rows):
+                for r in rows:
+                    if r["paper_id_or_external_id"] == "arXiv:2509.17136" and r["candidate_id"] == "GC-03":
+                        r["counterexample_strength"] = "full"
+                return fields, rows
+            sb.rewrite_csv("research/gap_analysis/counterexample_candidates.csv", mutate)
+            self.assertTrue(any("does not meet every criterion" in e for e in sb.validator().check_full_criteria()))
+
+    def test_rejects_row_meeting_all_criteria_not_marked_full(self):
+        with _Sandbox() as sb:
+            def mutate(fields, rows):
+                for r in rows:
+                    if r["paper_id_or_external_id"] == "arXiv:2509.17136" and r["candidate_id"] == "GC-01":
+                        r["smartphone"] = "Yes"
+                        r["resource_awareness"] = "Yes"
+                return fields, rows
+            sb.rewrite_csv("research/gap_analysis/counterexample_candidates.csv", mutate)
+            self.assertTrue(any("meets every criterion" in e for e in sb.validator().check_full_criteria()))
+
+
 if __name__ == "__main__":
     unittest.main()

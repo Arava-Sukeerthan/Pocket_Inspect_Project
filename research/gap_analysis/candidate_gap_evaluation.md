@@ -133,6 +133,21 @@ No `Unknown` value was converted to `No`, no corpus record was changed, and no e
 
 **Matrix assessments revised with the narrowing.** The *counterexample risk* rows for GC-02 and GC-03 changed from `weakens_candidate` to `mixed`. The confirmed partial counterexamples still weaken the Step 9.7 (broad) wording, and that is why the wording was narrowed. Against the narrowed wording, they are close neighbours that do not meet it. This revision applies the same rule to all three candidates (GC-01 was already `mixed`).
 
+### 3.5 Narrowed-claim falsification check
+
+After the correction, a bounded falsification check targeted the **exact narrowed wording**. It looked for a full counterexample, i.e. a paper meeting every criterion of a narrowed candidate.
+
+- **Searches.** 18 new WebSearch queries (S28–S45; 6 per candidate) on 2026-10-05, logged in `targeted_search_log.md`. The earlier 27 searches were not repeated. Promising hits were verified in full text through the alphaXiv reader.
+- **Full-counterexample criteria.**
+  - **GC-01:** smartphone + optical visual inspection + resource/device-state-driven runtime adaptation.
+  - **GC-02:** resource-constrained smartphone + optical visual inspection + resource-adaptive inference + direct energy evaluation + direct thermal evaluation.
+  - **GC-03:** resource awareness + smartphone + visual inspection + runtime adaptation + confidence-aware downstream verification.
+- **Result.** No full counterexample was identified in this targeted falsification search. New partial counterexamples, all `verified_full_text`:
+  - SAEC (arXiv 2509.17136), for GC-01, GC-02 and GC-03;
+  - arXiv 2603.26603, for GC-02 (outside the visual-inspection scope);
+  - RobustDefect-LLM (arXiv 2608.08589), for GC-03.
+- **Survival (observation, not a gap claim).** Each narrowed candidate survived this bounded falsification check. That means only that none of the hits examined met every criterion. It does not establish that no such work exists.
+
 ## 4. GC-01 evaluation
 
 **Candidate.** Limited evidence of resource-driven runtime adaptation for visual inspection specifically on resource-constrained smartphones within the reviewed corpus.
@@ -166,6 +181,7 @@ No `Unknown` value was converted to `No`, no corpus record was changed, and no e
   | Contribution depth | mixed | low |
   | Publication relevance | feasible | moderate |
 
+- **Narrowed-claim falsification check (Fact).** S28–S33 found no full counterexample. **SAEC** (arXiv 2509.17136; `verified_full_text`) is a further partial counterexample: industrial visual inspection with runtime edge/cloud routing driven by a scene-complexity score and prediction confidence. It runs on a Xeon CPU and an A100, not a smartphone. Under Decision A it is not resource-driven. ApproxDet and Mobiprox (resource/contention-aware mobile inference) were assessed only at title level and concern generic vision, not inspection.
 - **Counterexample interpretation (observation, not a gap claim).** Adaptive inference exists in edge visual inspection, including content-driven cascades. What remains as the candidate is specifically resource-driven runtime adaptation on resource-constrained smartphones. The searches did not overturn this narrowed form.
 
 ## 5. GC-02 evaluation
@@ -206,7 +222,12 @@ No `Unknown` value was converted to `No`, no corpus record was changed, and no e
 - **Counterexample interpretation (observation, not a gap claim).**
   - Energy evaluation exists in at least one edge visual-inspection counterexample (TinyGLASS). What remains as the candidate is specifically joint energy + thermal evaluation of resource-adaptive smartphone visual inspection.
   - No thermal evaluation of a smartphone or edge visual-inspection system was found in these searches. That is a search result, not evidence of absence.
-  - The searches were designed against the Step 9.7 wording; the joint, resource-adaptive form was not searched as one query.
+  - The S09–S17 searches were designed against the Step 9.7 wording.
+- **Narrowed-claim falsification check (Fact).** S34–S39, together with the GC-01 query S33 (which surfaced arXiv 2603.26603), found no full counterexample:
+  - **SAEC** (arXiv 2509.17136) reports energy per correct prediction for adaptive edge/cloud inspection. It reports no thermal results, is not resource-driven and is not a smartphone (partial).
+  - **arXiv 2603.26603** measures energy (Android BatteryManager) and device temperature on a Samsung Galaxy S25 Ultra. Its workload is LLM summarization rather than visual inspection, and it has no runtime adaptation. This makes it a partial counterexample outside the visual-inspection scope, and a methodological near-miss for a joint measurement protocol.
+  - **arXiv 2010.06291** measures thermal throttling on a Raspberry Pi 4B for ImageNet classification (not a counterexample).
+  - Most other hits were thermography false positives.
 
 ## 6. GC-03 evaluation
 
@@ -242,6 +263,9 @@ No `Unknown` value was converted to `No`, no corpus record was changed, and no e
   | Contribution depth | mixed | low |
   | Publication relevance | feasible | moderate |
 
+- **Narrowed-claim falsification check (Fact).** S40–S45 found no full counterexample:
+  - **SAEC** (arXiv 2509.17136) accepts edge predictions only when probability, margin and entropy thresholds hold and otherwise escalates to an MLLM. It therefore combines runtime adaptation with confidence-aware verification, but without resource awareness and not on a smartphone (partial).
+  - **RobustDefect-LLM** (arXiv 2608.08589) routes predictions with confidence below 0.90 or a top-2 margin below 0.10 to HUMAN REVIEW and has a React Native mobile client. Inference runs in a backend, and it has no runtime adaptation or resource awareness (partial).
 - **Counterexample interpretation (observation, not a gap claim).** Edge systems already demonstrate combinations of adaptation, confidence-aware decisions and/or active view selection (PMC11435656, ActiveInspect, arXiv 2608.14727). What remains as the candidate is specifically their integrated, resource-aware smartphone visual-inspection realization.
 
 ## 7. Counterexample analysis
@@ -251,6 +275,7 @@ No `Unknown` value was converted to `No`, no corpus record was changed, and no e
 | Full | None found | None found | None found |
 | Partial (corpus) | P011 (no runtime component); P029, P031, P033, P034 (outside visual-inspection scope) | None in corpus | P011 (no adaptation or gating); P016 (edge; gating only) |
 | Partial (external, verified; researcher-confirmed) | arXiv 2608.14727; PMC11435656 | arXiv 2603.16451 (TinyGLASS) | PMC11435656; ActiveInspect; arXiv 2608.14727 |
+| Partial (external, verified; narrowed-claim check) | arXiv 2509.17136 (SAEC) | arXiv 2509.17136 (SAEC); arXiv 2603.26603 (outside visual-inspection scope) | arXiv 2509.17136 (SAEC); arXiv 2608.08589 (RobustDefect-LLM) |
 | Potential (unresolved) | P001; Electronics 15(17):3915 | P007; Electronics 15(17):3915; FOMO/Edge Impulse paper | P001; arXiv 2608.21967 |
 | Notable non-counterexamples | arXiv 2603.20288 (static); PMC12074420 (not inspection); smartphone-as-product screen papers | arXiv 2603.20288, 2410.11591, 2606.07659, 2512.13497 (no energy or thermal results); arXiv 2309.00022 (energy measured, not inspection); Corun (desktop GPU) | arXiv 2608.30997 and PMC12716720 (phone as product) |
 
@@ -266,6 +291,9 @@ No `Unknown` value was converted to `No`, no corpus record was changed, and no e
 | Electronics 15(17):3915 | `search_snippet_only` | |
 | FOMO/Edge Impulse paper | `unresolved` | |
 | P001, P007 | `abstract_only` | Corpus records |
+| arXiv 2509.17136 (SAEC) | `verified_full_text` | Narrowed-claim check |
+| arXiv 2603.26603 | `verified_full_text` | Narrowed-claim check; LLM workload |
+| arXiv 2608.08589 (RobustDefect-LLM) | `verified_full_text` | Narrowed-claim check; reader returned the relevant sections |
 
 **False-positive patterns observed (Fact).**
 - The smartphone is the inspected product (screen, cover glass, phone surface).
@@ -382,7 +410,10 @@ All statements below are **Hypotheses** or **Proposed ideas**, not findings.
   - whether ActiveInspect's step-level confidences drive its view selection (keyword scan only; Unknown);
   - whether PMC11435656 uses any device-resource signal (keyword scan only; Unknown);
   - how TinyGLASS obtained its energy figure.
-- **Search alignment (Fact).** The targeted searches were designed against the Step 9.7 wording. No new search was run for the narrowed wording, as instructed.
+- **Search alignment (Fact).**
+  - S01–S27 were designed against the Step 9.7 wording.
+  - The 18-query falsification check (S28–S45) targeted the narrowed wording, but was bounded to one results page per query.
+  - Several of its hits remain title-only: Electronics 14(11):2188, DMS, arXiv 1904.09814, PMC10280690, and the arXiv 2603.23640 and EnerInfer LLM papers.
 
 ## 15. Researcher decision required
 

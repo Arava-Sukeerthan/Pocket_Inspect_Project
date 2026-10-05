@@ -284,6 +284,23 @@ class GapEvaluationValidator:
                     errors.append(f"{pid}/{r['candidate_id']}: evidence_level {r['evidence_level']!r} != locked {level!r}")
         return errors
 
+    def meets_full_criteria(self, row: Dict[str, str]) -> bool:
+        """True only if every criterion of the row's narrowed candidate is Yes."""
+        fields = self.config["full_counterexample_criteria"][row["candidate_id"]]
+        return all(row[f] == YES for f in fields)
+
+    def check_full_criteria(self) -> List[str]:
+        """'full' requires every criterion; a row meeting every criterion must be 'full'."""
+        errors = []
+        for r in self.counterexamples():
+            where = f"{r['paper_id_or_external_id']}/{r['candidate_id']}"
+            meets = self.meets_full_criteria(r)
+            if r["counterexample_strength"] == "full" and not meets:
+                errors.append(f"{where}: classified full but does not meet every criterion")
+            if meets and r["counterexample_strength"] != "full":
+                errors.append(f"{where}: meets every criterion but is classified {r['counterexample_strength']!r}")
+        return errors
+
     def external_rows(self) -> List[Dict[str, str]]:
         return [r for r in self.counterexamples() if not CORPUS_ID_PATTERN.match(r["paper_id_or_external_id"])]
 
@@ -302,7 +319,7 @@ class GapEvaluationValidator:
         matches = list(SEARCH_HEADING_PATTERN.finditer(text))
         for idx, match in enumerate(matches):
             end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
-            block = text[match.end():end].split("\n---", 1)[0]
+            block = re.split(r"\n---|\n#{2,3} ", text[match.end():end], maxsplit=1)[0]
             fields = {}
             for line in block.splitlines():
                 m = TABLE_ROW_PATTERN.match(line.strip())
@@ -422,6 +439,7 @@ class GapEvaluationValidator:
         errors += self.check_frozen_corpus()
         errors += self.check_counterexamples()
         errors += self.check_corrections()
+        errors += self.check_full_criteria()
         errors += self.check_search_log()
         errors += self.check_matrix()
         errors += self.check_no_ranking()

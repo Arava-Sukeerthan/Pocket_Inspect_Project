@@ -475,3 +475,296 @@ These searches were designed and run against the **Step 9.7 wording** of GC-01, 
 The four partial counterexamples above were confirmed by the researcher in the Step 9.8 methodology correction and remain partial.
 
 "None" for full counterexamples describes these searches only. It is not a claim about the literature as a whole.
+
+---
+
+## Narrowed-claim falsification check (S28–S45)
+
+**Purpose.** After the methodology correction, 18 further searches (6 per candidate) were run against the **exact narrowed wording**, to look for a full counterexample. The earlier 27 searches were not repeated. Full-text verification of hits used the alphaXiv reader. These reads are verification of returned hits, not additional searches.
+
+**Full-counterexample criteria.**
+- **GC-01:** smartphone + optical visual inspection + resource/device-state-driven runtime adaptation.
+- **GC-02:** resource-constrained smartphone + optical visual inspection + resource-adaptive inference + direct energy evaluation + direct thermal evaluation.
+- **GC-03:** resource awareness + smartphone + visual inspection + runtime adaptation + confidence-aware downstream verification. Learned view selection alone does not count (Decision B).
+
+### S28
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-01 (narrowed wording) |
+| Exact query | `resource-aware adaptive inference smartphone visual inspection` |
+| Database / engine | WebSearch |
+| Results returned | 10 |
+| Relevant results inspected | 3: Mobiprox (title); ApproxDet (title); Ombrulla article (already read in S02) |
+| Strongest relevant papers | None meeting all three GC-01 criteria. ApproxDet and Mobiprox describe resource/contention-aware adaptive inference on mobiles for generic vision, not inspection |
+| Potential counterexamples | None (ApproxDet, Mobiprox: not_counterexample at title level) |
+| Unresolved items | "A Unified and Resource-Aware Framework for Adaptive Inference Acceleration on Edge and Embedded Platforms" (Electronics 14(11):2188): title only; no indication of smartphone or inspection |
+| Search limitations | This project's GitHub repository was returned and excluded. Vendor text in the Ombrulla article describes battery/temperature-based model selection as a possibility, not an evaluated system |
+
+### S29
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-01 (narrowed wording) |
+| Exact query | `resource-driven runtime adaptation smartphone inspection` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 0 |
+| Strongest relevant papers | None: results are self-adaptive software-engineering papers and OODIn (mobile inference optimisation), none on inspection |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | "Inspection" did not retrieve visual-inspection work; results were runtime-verification and Android analysis papers |
+
+### S30
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-01 (narrowed wording) |
+| Exact query | `resource-aware smartphone defect detection adaptive inference` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 2: arXiv 2606.24173 (full text); smartphone-screen defect papers (already classified, phone as product) |
+| Strongest relevant papers | arXiv 2606.24173 has a confidence-gated adaptive cascade, but on tabular sensor data |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | Phone-as-product false positives dominated (CE-SGNet, MSAdaNet, DY-YOLO) |
+
+### S31
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-01 (narrowed wording) |
+| Exact query | `dynamic resource-aware inference mobile visual inspection` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 1: DMS: Dynamic Model Scaling for Quality-Aware Deep Learning Inference in Mobile and Embedded Devices (title only) |
+| Strongest relevant papers | None meeting all criteria; DMS and the dynamic-DNN runtime-management papers address generic mobile inference |
+| Potential counterexamples | None |
+| Unresolved items | DMS (ResearchGate): title only; no indication of an inspection task |
+| Search limitations | This project's GitHub repository was returned and excluded. PMC13363810 concerns chemical-plant risk inference from scene graphs, not mobile |
+
+### S32
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-01 (narrowed wording) |
+| Exact query | `smartphone industrial inspection resource-aware model selection` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 3: SAEC, arXiv 2509.17136 (full text); Smart-Inspect, arXiv 2010.00741 (title); RK3568 phone-surface paper (already classified) |
+| Strongest relevant papers | SAEC: industrial visual inspection with runtime edge/cloud routing driven by scene complexity and confidence; Xeon CPU + A100, not a smartphone |
+| Potential counterexamples | SAEC (partial) |
+| Unresolved items | None |
+| Search limitations | Smart-Inspect inspects smartphone glass (phone as product). Patents were not assessed |
+
+### S33
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-01 (narrowed wording) |
+| Exact query | `smartphone visual inspection battery temperature adaptive inference` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 1: arXiv 2603.26603 (full text; previously unresolved) |
+| Strongest relevant papers | arXiv 2603.26603: smartphone energy and temperature measurement during on-device LLM inference; no inspection, no runtime adaptation |
+| Potential counterexamples | None for GC-01 |
+| Unresolved items | None |
+| Search limitations | Results were battery-temperature prediction and smartphone thermal-behaviour papers without an inspection task |
+
+### S34
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-02 (narrowed wording) |
+| Exact query | `smartphone visual inspection energy thermal adaptive inference` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 2: arXiv 2010.06291 (full text); arXiv 2603.26603 (full text) |
+| Strongest relevant papers | arXiv 2603.26603 (smartphone, energy + temperature, LLM workload); arXiv 2010.06291 (Raspberry Pi 4B thermal throttling, ImageNet classification) |
+| Potential counterexamples | arXiv 2603.26603 (partial, outside visual-inspection scope) |
+| Unresolved items | "LLM Inference at the Edge: Mobile, NPU, and GPU Performance Efficiency Trade-offs Under Sustained Load" (arXiv 2603.23640) and EnerInfer (arXiv 2606.23001): titles/snippets only; both concern LLM workloads, not inspection |
+| Search limitations | Smartphone thermal-imaging pages are false positives (thermal camera as inspection modality) |
+
+### S35
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-02 (narrowed wording) |
+| Exact query | `smartphone defect inspection energy thermal evaluation` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 0 |
+| Strongest relevant papers | None: smartphone-based fluorescence thermography and thermal-camera accessories (thermography as inspection modality) |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | All results are thermography false positives or battery-safety inspection |
+
+### S36
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-02 (narrowed wording) |
+| Exact query | `mobile visual inspection energy thermal resource adaptive` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 0 |
+| Strongest relevant papers | None: infrared inspection services, patents and mobile-robot thermal analytics |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | Thermography false positives; patents not assessed |
+
+### S37
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-02 (narrowed wording) |
+| Exact query | `smartphone industrial inspection power temperature adaptive` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 1: "Power and Thermal Analysis of Commercial Mobile Platforms: Experiments and Case Studies" (arXiv 1904.09814, title only) |
+| Strongest relevant papers | None: arXiv 1904.09814 characterises mobile platforms in general, not an inspection system |
+| Potential counterexamples | None |
+| Unresolved items | arXiv 1904.09814: title only |
+| Search limitations | Remaining results were smartphone thermal-camera products |
+
+### S38
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-02 (narrowed wording) |
+| Exact query | `resource adaptive smartphone inspection energy temperature` |
+| Database / engine | WebSearch |
+| Results returned | 10 |
+| Relevant results inspected | 0 |
+| Strongest relevant papers | None: generic smartphone power/thermal management (eTEC, iOS thermal states) and temperature-sensing papers |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | No inspection task appeared in the results |
+
+### S39
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-02 (narrowed wording) |
+| Exact query | `mobile defect detection joint energy thermal evaluation` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 0 |
+| Strongest relevant papers | None: "joint" retrieved solder/polymer joint thermography |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | Query wording attracted welded/solder-joint inspection by thermography |
+
+### S40
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording) |
+| Exact query | `resource-aware smartphone visual inspection confidence adaptive` |
+| Database / engine | WebSearch |
+| Results returned | 8 |
+| Relevant results inspected | 0 |
+| Strongest relevant papers | None: driver-behaviour super-resolution, medical smartphone screening and audio-visual QA papers |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | This project's GitHub repository was returned and excluded |
+
+### S41
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording) |
+| Exact query | `smartphone visual inspection resource adaptive confidence gating` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 0 |
+| Strongest relevant papers | None: phone-as-product screen inspection, medical screening, generic confidence-gating topic page |
+| Potential counterexamples | None |
+| Unresolved items | None |
+| Search limitations | "Adaptive confidence gating" topic aggregator (emergentmind) is grey literature |
+
+### S42
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording) |
+| Exact query | `smartphone defect inspection confidence-triggered recapture` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 1: RK3568 phone-surface paper (already classified) |
+| Strongest relevant papers | None |
+| Potential counterexamples | None |
+| Unresolved items | "Automated Evaluation of Smartphone Screen Damage" (bonviewpress): title only; phone as product |
+| Search limitations | "Recapture" again matched capture-recapture statistics and image-recapture forensics |
+
+### S43
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording) |
+| Exact query | `smartphone industrial inspection adaptive inference confidence` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 2: RobustDefect-LLM, arXiv 2608.08589 (full text); "Adaptive visual detection of industrial product defects" (PMC10280690, title only) |
+| Strongest relevant papers | RobustDefect-LLM: confidence/margin-triggered HUMAN REVIEW with a mobile client; inference in a backend, no runtime adaptation |
+| Potential counterexamples | RobustDefect-LLM (partial) |
+| Unresolved items | PMC10280690: title only; platform and confidence use unknown |
+| Search limitations | Smartphone-grading and orthopedic-tray papers do not run inference on a phone |
+
+### S44
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording) |
+| Exact query | `mobile visual inspection resource-aware confidence verification` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 2: arXiv 2608.21967 (already read in S18); isaacyanney/confidence-aware-visual-inspection (GitHub, snippet) |
+| Strongest relevant papers | arXiv 2608.21967 (unchanged: potential) |
+| Potential counterexamples | None new |
+| Unresolved items | None |
+| Search limitations | The GitHub portfolio project is grey literature (FastAPI service), not a smartphone system. This project's GitHub repository was returned and excluded |
+
+### S45
+
+| Field | Value |
+| :-- | :-- |
+| Date | 2026-10-05 |
+| Candidate | GC-03 (narrowed wording) |
+| Exact query | `smartphone inspection low confidence additional view adaptive` |
+| Database / engine | WebSearch |
+| Results returned | 9 |
+| Relevant results inspected | 1: arXiv 2608.30997 (already classified, phone as product) |
+| Strongest relevant papers | None |
+| Potential counterexamples | None |
+| Unresolved items | "Adaptive texture and low-light feature learning in enhanced MobileNetV4 for industrial packaging quality inspection" (PMC13458609): title only; "adaptive" appears to describe feature learning |
+| Search limitations | Medical smartphone screening and low-vision aids were off-task |
+
+### Outcome of S28–S45
+
+| Candidate | Full counterexamples | Partial (verified) | Potential / unresolved | Not counterexamples (verified or title-level) |
+| :-- | :-- | :-- | :-- | :-- |
+| GC-01 | None | SAEC (arXiv 2509.17136): visual inspection + content/confidence-driven adaptation; not resource-driven; not a smartphone | Electronics 14(11):2188 (title only); DMS (title only) | ApproxDet, Mobiprox (generic mobile vision, title level) |
+| GC-02 | None | SAEC (visual inspection + adaptation + energy; no thermal; not a smartphone); arXiv 2603.26603 (smartphone + energy + temperature; LLM workload, not inspection; no adaptation) | arXiv 1904.09814 (title only) | arXiv 2010.06291 (thermal only; RPi4; not inspection) |
+| GC-03 | None | SAEC (visual inspection + adaptation + confidence-triggered escalation; no resource awareness; not a smartphone); RobustDefect-LLM (visual inspection + confidence-triggered human review; inference not on the phone; no adaptation) | PMC10280690 (title only) | arXiv 2606.24173 (confidence-gated cascade on tabular sensor data) |
+
+No full counterexample was identified in this targeted falsification search.
+
+This describes 18 bounded web searches (one results page each) and the hits verified from them. It is not a statement about the literature as a whole.

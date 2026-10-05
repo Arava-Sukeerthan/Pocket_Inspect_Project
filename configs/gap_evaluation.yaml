@@ -73,6 +73,14 @@ confirmed_partial_counterexamples:
   "doi:10.3390/s26154932": {name: ActiveInspect, candidates: [GC-03], evidence_level: verified_full_text}
   "arXiv:2608.14727": {name: Low Cost Two-Stage Fabric Defect Detection at the Edge, candidates: [GC-01, GC-03], evidence_level: verified_full_text}
 
+# A row may be classified "full" only if every listed field is Yes (narrowed
+# wording). "Resource-driven runtime adaptation" requires both
+# resource_awareness = Yes (Decision A) and adaptive_inference = Yes.
+full_counterexample_criteria:
+  GC-01: [smartphone, visual_inspection, resource_awareness, adaptive_inference]
+  GC-02: [smartphone, visual_inspection, resource_awareness, adaptive_inference, energy_evaluation, thermal_evaluation]
+  GC-03: [smartphone, visual_inspection, resource_awareness, adaptive_inference, confidence_gating]
+
 # Evidence levels that must not be upgraded by this correction.
 locked_evidence_levels:
   "arXiv:2603.16451": verified_full_text

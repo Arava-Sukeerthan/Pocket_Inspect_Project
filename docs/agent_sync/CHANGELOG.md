@@ -1387,3 +1387,69 @@ Step 9.8 controlled methodology correction, following researcher review of PR #1
 - Branch: `claude/step-9-8-gap-evaluation` (PR #10; not merged). Previous commit: `e13eea9`.
 - Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
 - Push status: pushed to the branch; not merged; `main` not modified.
+
+## 2026-10-05 — Claude Code
+
+### Task
+Step 9.8 final narrowed-claim falsification check (PR #10; not merged). A small, targeted search against the exact narrowed wording of GC-01, GC-02 and GC-03, looking for a full counterexample. No broad review, no ranking or selection, and no `research_gap.md`.
+
+### Changes
+- **`research/gap_analysis/targeted_search_log.md`.** New section with 18 searches, S28–S45 (6 per candidate, WebSearch, 2026-10-05). Each entry records the exact query, the result count taken from the tool output (8–10 per query), the relevant results inspected, the strongest papers, potential counterexamples, unresolved items and limitations. The section ends with an outcome table. S01–S27 are unchanged.
+- **`research/gap_analysis/counterexample_candidates.csv`.** 9 rows appended (48 in total); the existing 39 rows are byte-identical:
+  - SAEC, arXiv 2509.17136 (GC-01, GC-02, GC-03: partial);
+  - arXiv 2603.26603 (GC-02: partial, outside the visual-inspection scope);
+  - RobustDefect-LLM, arXiv 2608.08589 (GC-03: partial);
+  - arXiv 2010.06291 (GC-02: not_counterexample);
+  - arXiv 2606.24173 (GC-03: not_counterexample);
+  - ApproxDet, arXiv 2010.10754, and Mobiprox, arXiv 2303.11291 (GC-01: not_counterexample, title level).
+- **`research/gap_analysis/candidate_gap_matrix.csv`.** The counterexample-risk rows of GC-01, GC-02 and GC-03 now include the check results. Assessment labels are unchanged (`mixed`).
+- **`research/gap_analysis/candidate_gap_evaluation.md`.**
+  - New §3.5 (the falsification check).
+  - Results added to §4–§6.
+  - New partial-counterexample row and evidence levels in §7.
+  - Search-alignment note in §14 updated.
+  - The 15-section structure and the closing sentence are unchanged.
+- **`configs/gap_evaluation.yaml`.** `full_counterexample_criteria` added: every listed field must be Yes for a `full` classification. Resource-driven runtime adaptation requires both `resource_awareness` and `adaptive_inference` to be Yes.
+- **`src/literature/gap_evaluation.py`.**
+  - `meets_full_criteria()` and `check_full_criteria()` added and included in `validate()`.
+  - The search-log parser now stops at the next heading, so the outcome table is not read as part of S45. These are technically necessary support changes for the new test.
+- **`tests/test_gap_evaluation.py`.** 51 tests (previously 44). New tests:
+  - 18 new searches, 6 per candidate, each with limitations;
+  - the no-full-counterexample statement, without any "no such work exists" claim;
+  - a full counterexample requires every criterion;
+  - classification and evidence levels of the new hits;
+  - no row is classified `full`;
+  - sandbox rejection of a `full` row that lacks criteria, and of an all-criteria row not marked `full`.
+
+### Research decisions
+- **No full counterexample was identified in this targeted falsification search.** Each narrowed candidate survived this bounded check. This is an observation about 18 searches and the hits verified from them, not a claim that no such work exists.
+- **Partial counterexamples (`verified_full_text`).**
+  - SAEC: industrial visual inspection with scene-complexity/confidence-driven edge/cloud routing, reporting energy, on a Xeon CPU + A100. It is not resource-driven (Decision A), reports no thermal results and does not use a smartphone.
+  - arXiv 2603.26603: energy and temperature measured on a Samsung Galaxy S25 Ultra, but for LLM summarization, not inspection, and without adaptation.
+  - RobustDefect-LLM: confidence/margin-triggered human review with a mobile client. Inference runs in a backend, and it has no adaptation.
+- **Previously confirmed partials** (TinyGLASS, PMC11435656, ActiveInspect, arXiv 2608.14727) remain partial. No evidence level was upgraded. No candidate was ranked or selected.
+
+### Verification
+- `pytest` on `tests/test_gap_evaluation.py`, `test_gap_analysis.py`, `test_literature.py` and `test_literature_data.py`: 113 passed. Full suite: 114 passed.
+- `python scripts/manage_literature.py validate`: 54 records, VALID; 31 columns; 0 duplicate IDs.
+- `papers.csv` SHA-256 `c8fac51d5d80abd25f09816eace1ab840c498af76ade913ce7f7f1ecdc7da521`, unchanged. No diff under `research/literature/`.
+- `GapEvaluationValidator.validate()` returns no errors. `research/gap_analysis/research_gap.md` does not exist.
+
+### Uncertain items
+- Title-only hits not verified:
+  - Electronics 14(11):2188;
+  - DMS;
+  - arXiv 1904.09814;
+  - PMC10280690;
+  - arXiv 2603.23640 and EnerInfer (arXiv 2606.23001; LLM workloads).
+- Earlier unresolved items remain: P001, P007, Electronics 15(17):3915 and the FOMO/Edge Impulse paper.
+- One results page per query; English only; no indexed databases (Scopus, Web of Science, IEEE Xplore, ACM DL).
+
+### Remaining work
+- Researcher review of PR #10.
+- Final research-gap selection remains a researcher decision and is outside Step 9.8.
+
+### Git
+- Branch: `claude/step-9-8-gap-evaluation` (PR #10; not merged). Previous commit: `fb5b9a5`.
+- Commit: see `git log -- docs/agent_sync/CHANGELOG.md`.
+- Push status: pushed to the branch; not merged; `main` not modified.
