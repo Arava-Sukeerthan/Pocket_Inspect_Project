@@ -3055,3 +3055,90 @@ Step 10E not started.
 - Implementation commit: `a1ba2ae`. This CHANGELOG entry is a separate follow-up commit.
 
 Step 10E not started.
+
+---
+
+## 2026-10-06 — Claude Code
+
+### Task
+Step 10D, R-08 implementation: the RAM variant check now uses the nearest-nominal rule from protocol §2. The researcher approved the specification on 2026-10-06, after Claude Code's R-08 specification audit. That audit changed no files and is recorded here for the first time. Scope is R-08 only.
+
+### Approved R-08 specification (researcher decision)
+- **Nominal capacities** (classification references, not measured RAM): 3 GB = 3072, 4 GB = 4096, 6 GB = 6144, in MiB.
+- **Unit:** MiB. The existing field `total_ram_mb` keeps its name, and its value is documented as MiB:
+  - host: `floor(MemTotal_kB / 1024)`;
+  - app: `floor(totalMem / 1,048,576)`.
+  
+  Both conversions are unchanged.
+- **Rule:** the candidate variant is the nominal at the smallest absolute distance. An exact midpoint tie (3584 or 5120 MiB) is **AMBIGUOUS** and is not assigned to either variant.
+- **Outcomes:**
+  - nearest is 3 GB on a real-device run with valid evidence → AVAILABLE / VERIFIED / `verified: true`;
+  - nearest is 4 GB or 6 GB → **MISMATCH**: AVAILABLE / AVAILABLE / `verified: false`, not ERROR;
+  - non-positive or non-numeric RAM → the variant check is ERROR;
+  - RAM not observed → NOT_TESTED (existing semantics).
+  
+  A MISMATCH, a tie or an ERROR blocks Step 10D sign-off. No upper sanity bound was added: a value above 6144 is classified as nearest 6 GB.
+- **Sign-off:** requires `variant_check` VERIFIED with nearest variant equal to 3 GB. `run_status` keeps its execution/probe-completion meaning.
+
+### Files changed (implementation commit `e66c800`)
+- `configs/device_characterization.yaml`: new `ram_variant_check` block (unit, `required_variant`, `nominal_ram_mib`), with the full rule documented in comments. This is the single source of the values.
+- `src/monitoring/characterization/ram_variant.py` (new): `load_ram_variant_spec()`, `validate_ram_variant_spec()` and `classify_ram_variant()`, returning MATCH, MISMATCH, AMBIGUOUS or INVALID. It contains no numeric constants.
+- `src/monitoring/characterization/collectors.py`:
+  - `DeviceIdentityCollector` reads the spec from the config, or from the `ram_variant_spec` argument;
+  - the undocumented `2700 <= total_ram_mb <= 3300` window is removed;
+  - `variant_check.value` is now a structured value: `classification`, `nearest_variant`, `observed_ram_mib`, `nominal_ram_mib`, `required_variant`, `unit` (and `tied_variants` for a tie). No schema change was needed, because `value` already accepts any JSON;
+  - evidence still cites the source that supplied the RAM (P5-01): `meminfo_evidence.txt#ram_variant_check`, or `android_app_evidence.json#total_ram_mb` when the app supplied it.
+- `src/monitoring/characterization/report_generator.py`:
+  - new `evaluate_variant_signoff()`;
+  - `process_run()` returns `variant_signoff`;
+  - the run's README shows the variant check row and a "Step 10D Sign-off Gate" line (ALLOWED or BLOCKED);
+  - `compare_repeat_runs()` adds `variant_signoff` and `signoff_allowed`, while `stable` keeps its repeatability meaning.
+- `scripts/device_characterization/run_characterization.py`: passes `cfg["ram_variant_check"]` to the collector.
+- `research/experiments/device_characterization_protocol.md` §2: one new bullet stating the approved parameters and pointing to the config. Nothing else in the protocol changed.
+  - The first wording ("3584 or 5120 MiB") failed the existing guard `test_no_fake_values`, which rejects measured-looking values in protocol documents.
+  - The bullet was reworded ("Nominal capacities, in MiB: …"; "an observed value of 3584 or 5120") rather than weakening the guard.
+- `tests/test_device_characterization_ram_variant.py` (new, 52 test cases):
+  - **classification:** the exact nominals; the boundaries 3583/3584/3585 and 5119/5120/5121; 2642; values below 3072; 6145 and 12288; invalid inputs;
+  - **collector records:** VERIFIED versus MISMATCH, AMBIGUOUS and ERROR; host versus app evidence; non-real runs not verified; missing RAM NOT_TESTED;
+  - **sign-off gate:** including the repeat-run comparison;
+  - **end to end:** synthetic ADB → production pipeline → `characterization.json` and README. These cover 2642 MiB → VERIFIED 3 GB with sign-off ALLOWED; a 4 GB mismatch → sign-off BLOCKED with `run_status` COMPLETE; and a meminfo failure → NOT_TESTED rather than a mismatch;
+  - **consistency:** the config, the protocol and the code agree, and no fixed window remains.
+
+### Tests executed and results
+- Full suite run twice: 367 passed, 367 passed (315 existing plus 52 new). `git status` was clean after both runs, `research/results/device_characterization/` is unchanged, and the capability matrix is unchanged.
+- Mutation checks: each change below was made temporarily, and every one made tests fail.
+
+  | Mutation | Tests failed |
+  |---|---|
+  | Tie assigned to the first variant | 6 |
+  | Old 2700–3300 window restored | 12 |
+  | 3 GB nominal taken as 3000 | 13 |
+  | Sign-off gate ignores the verified flag | 2 |
+  | Mismatch reported as VERIFIED | 9 |
+  | Variant evidence always cites `meminfo` | 4 |
+  | Invalid RAM treated as a mismatch | 3 |
+
+- Round 6 regression: all P5-01 to P5-06 tests pass unchanged.
+
+### Research methodology impact
+- None. No change to GC-03, the RQs, the hypotheses, R0–R3, C1–C4, the model ladder, confidence verification, energy, thermal, the dataset or the decision register.
+- The only protocol change is the §2 bullet recording the researcher-approved variant-check parameters. The variant check itself was already part of protocol §2 and §9.
+
+### Historical run
+- `run_20261005_181140` (observed `total_ram_mb` = 2642, classified DISAGREEMENT under the old 2700–3300 window) was not edited, regenerated or reinterpreted. It is not in the repository.
+- Its DISAGREEMENT classification is **not** "corrected" by this change.
+
+### Physical-device status
+- Not performed. The new rule has not been run on the OPPO.
+- A fresh physical characterization run is required: rebuild/install, then run with `--require-device`.
+- The new run must be kept separately and compared with `run_20261005_181140`.
+
+### Next action
+- Independent review of this change; it was implemented by Claude Code.
+- Then the researcher or Antigravity performs the fresh physical run.
+
+### Git
+- Branch: `claude/step-10d-r08-nearest-variant`, from `main` `d9a9223`.
+- Implementation commit: `e66c800`. This CHANGELOG entry is a separate follow-up commit.
+
+Step 10E not started.
