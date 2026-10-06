@@ -3142,3 +3142,36 @@ Step 10D, R-08 implementation: the RAM variant check now uses the nearest-nomina
 - Implementation commit: `e66c800`. This CHANGELOG entry is a separate follow-up commit.
 
 Step 10E not started.
+
+---
+
+## 2026-10-06 — Claude Code
+
+### Task
+Step 10D, R-08 follow-up: a test-guard correction found after the R-08 CHANGELOG commit (`e90a5ff`).
+
+### Problem observed
+- The test counts in the R-08 entry ("367 passed, 367 passed") were recorded **before** that CHANGELOG entry was appended.
+- With the entry in place, `tests/test_device_characterization_protocol.py::test_roles_and_handoff` failed (1 failed, 366 passed).
+- Commit `e90a5ff` was pushed despite the failure, because the commit command checked the exit status of `tail` instead of `pytest`. That was a process error on Claude Code's part.
+
+### Root cause
+- The guard required the newest CHANGELOG entry header to start with the literal date `2026-10-05`.
+- Any correctly dated later entry (here 2026-10-06) therefore fails, whatever its content.
+
+### Correction
+- `tests/test_device_characterization_protocol.py`: the header check now accepts `YYYY-MM-DD — Antigravity|Claude Code` with a date of 2026-10-05 or later. All other assertions are unchanged: the agent names, "Step 10D", and the "Antigravity" mention.
+- The guard still rejects an unknown agent and an earlier date (checked on synthetic headers).
+- No production code, configuration or protocol change.
+
+### Tests executed and results
+- Full suite run twice after the correction: 367 passed, 367 passed.
+
+### Research methodology impact
+- None.
+
+### Next action
+- Unchanged from the R-08 entry: an independent review (not Claude Code), then the researcher or Antigravity performs a fresh physical run.
+- `run_20261005_181140` stays untouched.
+
+Step 10E not started.
