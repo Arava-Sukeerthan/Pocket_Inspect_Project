@@ -52,6 +52,29 @@ probes:
   cpufreq_sysfs_pattern: "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq"
   thermal_sysfs_pattern: "/sys/class/thermal/thermal_zone%d"
 
+# RAM variant check (R-08, specification approved by the researcher on 2026-10-06; protocol §2).
+# Nominal capacities are classification references only, never measured RAM.
+# Unit: MiB (1 MiB = 1,048,576 bytes). The observed value is the existing `total_ram_mb` field,
+# whose value is MiB despite the name: host floor(MemTotal_kB / 1024), app floor(totalMem / 1,048,576).
+# Rule: the candidate variant is the nominal capacity at the smallest absolute distance from the
+# observed RAM (midpoints: 3584 MiB between 3 GB and 4 GB, 5120 MiB between 4 GB and 6 GB).
+# - Nearest is the required variant (no tie): MATCH; VERIFIED on a real-device run with valid evidence.
+# - Nearest is another variant: MISMATCH; AVAILABLE, not verified; blocks Step 10D sign-off.
+#   The 4 GB and 6 GB variants are never substitutes for the required variant.
+# - Exact tie between two nominals: AMBIGUOUS; not verified; blocks Step 10D sign-off.
+# - Non-positive or non-numeric RAM: ERROR on the variant check; blocks sign-off.
+# - RAM not observed: the existing NOT_TESTED semantics apply.
+# No upper sanity bound: a value above 6144 MiB is still classified as nearest 6 GB.
+# Sign-off: Step 10D sign-off requires variant_check VERIFIED with nearest_variant equal to
+# required_variant. run_status (execution/probe completion) is not affected by this check.
+ram_variant_check:
+  unit: "MiB"
+  required_variant: "3 GB"
+  nominal_ram_mib:
+    "3 GB": 3072
+    "4 GB": 4096
+    "6 GB": 6144
+
 # Run status rules (P5-05).
 # Research protocol requirement: a characterization must establish the observed device identity
 # (protocol §2) and the RAM needed for the 3 GB variant check (protocol §2, §9 sign-off

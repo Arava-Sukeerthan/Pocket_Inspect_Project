@@ -5,6 +5,10 @@ Validates run output records against `device_characterization_schema.json`,
 maps runtime states to report statuses, updates `device_capability_matrix.md`,
 prevents silent run overwrites, validates evidence file existence,
 and enforces two-run separate-day and reboot stability criteria.
+
+Step 10D sign-off gate (R-08, protocol §2 and §9 criterion 2): `evaluate_variant_signoff()` allows
+sign-off only when `variant_check` is VERIFIED and its nearest variant is the required variant.
+A MISMATCH, AMBIGUOUS, ERROR or NOT_TESTED variant check blocks sign-off. run_status is not changed.
 """
 
 import hashlib
@@ -16,6 +20,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import jsonschema
 
+from src.monitoring.characterization.ram_variant import MATCH as RAM_MATCH, load_ram_variant_spec
+
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 SCHEMA_PATH = ROOT / "research" / "experiments" / "device_characterization_schema.json"
 MATRIX_PATH = ROOT / "research" / "experiments" / "device_capability_matrix.md"
@@ -25,6 +31,39 @@ def load_schema() -> Dict[str, Any]:
     """Loads device_characterization_schema.json."""
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def evaluate_variant_signoff(run_record: Dict[str, Any], required_variant: Optional[str] = None) -> Dict[str, Any]:
+    """R-08 sign-off gate for one run. Allowed only for a VERIFIED variant_check whose nearest
+    variant is the required variant (from configs/device_characterization.yaml)."""
+    required = required_variant or load_ram_variant_spec()["required_variant"]
+    vc = (run_record.get("device_identity") or {}).get("variant_check") or {}
+    value = vc.get("value") if isinstance(vc.get("value"), dict) else {}
+    classification = value.get("classification")
+    nearest = value.get("nearest_variant")
+    allowed = (
+        vc.get("verified") is True
+        and vc.get("report_status") == "VERIFIED"
+        and classification == RAM_MATCH
+        and nearest == required
+    )
+    if allowed:
+        reason = f"variant_check VERIFIED: nearest nominal variant is the required {required}."
+    elif not vc:
+        reason = "variant_check missing."
+    elif vc.get("state") != "AVAILABLE":
+        reason = f"variant_check state is {vc.get('state')}; the required {required} variant is not confirmed."
+    elif classification and classification != RAM_MATCH:
+        reason = f"variant_check is {classification} (nearest: {nearest}); the required {required} variant is not confirmed."
+    else:
+        reason = f"variant_check is not VERIFIED; the required {required} variant is not confirmed."
+    return {
+        "signoff_allowed": allowed,
+        "required_variant": required,
+        "classification": classification,
+        "nearest_variant": nearest,
+        "reason": reason,
+    }
 
 
 def validate_characterization_record(
@@ -199,6 +238,7 @@ class CharacterizationReportGenerator:
                 "run_file": str(run_file),
                 "readme_file": str(readme_file),
                 "errors": [],
+                "variant_signoff": evaluate_variant_signoff(run_record),
             }
         except Exception:
             if tmp_run_file.exists():
@@ -240,10 +280,22 @@ class CharacterizationReportGenerator:
 
         for item in run_record.get("device_identity", {}).get("observed", []):
             _format_row(item)
+        variant_check = run_record.get("device_identity", {}).get("variant_check")
+        if variant_check:
+            _format_row(variant_check)
         for t in run_record.get("telemetry", []):
             for res in t.get("results", []):
                 _format_row(res)
 
+        gate = evaluate_variant_signoff(run_record)
+        lines += [
+            "",
+            "## Step 10D Sign-off Gate (R-08 RAM variant check)",
+            "",
+            f"- **Variant sign-off**: `{'ALLOWED' if gate['signoff_allowed'] else 'BLOCKED'}`",
+            f"- **Reason**: {gate['reason']}",
+            "- This gate is one of the protocol §9 criteria; it does not by itself sign off Step 10D.",
+        ]
         return "\n".join(lines) + "\n"
 
     def update_device_capability_matrix(self, run_record: Dict[str, Any]):
@@ -312,7 +364,15 @@ class CharacterizationReportGenerator:
                 if st1 != st2:
                     discrepancies.append(f"Telemetry state mismatch [{dim}/{m_name}]: Run 1={st1}, Run 2={st2}")
 
+        # 6. R-08 sign-off gate: both runs must confirm the required RAM variant.
+        #    Reported separately so that `stable` keeps its repeatability meaning.
+        gate1 = evaluate_variant_signoff(run1)
+        gate2 = evaluate_variant_signoff(run2)
+        variant_ok = gate1["signoff_allowed"] and gate2["signoff_allowed"]
+
         return {
             "stable": len(discrepancies) == 0,
             "discrepancies": discrepancies,
+            "variant_signoff": {"run1": gate1, "run2": gate2},
+            "signoff_allowed": len(discrepancies) == 0 and variant_ok,
         }

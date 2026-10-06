@@ -51,6 +51,7 @@ It answers:
 - A disagreement is reported as a finding. Example: the reported total RAM is not consistent with the 3 GB variant, which would mean the wrong unit is in use. That case blocks Step 10D sign-off.
 - **The experimental device is the 3 GB RAM variant only.** The 4 GB and 6 GB variants are never substituted, and their specifications are never used.
 - **Variant check.** The observed `totalMem` is compared with the nominal capacities of the three variants. It must be nearest to the 3 GB nominal, allowing for memory reserved by the kernel and firmware (observed values are always below nominal).
+- **Variant check parameters (R-08, approved by the researcher on 2026-10-06).** Nominal capacities, in MiB: 3 GB = 3072, 4 GB = 4096, 6 GB = 6144. These are classification references, not measurements. The observed value is in MiB (`MemTotal` kB / 1024 or `totalMem` bytes / 1,048,576, rounded down). The nominal capacity at the smallest absolute distance is the candidate variant; an exact tie (an observed value of 3584 or 5120) is ambiguous and is not assigned to either variant. Only a nearest variant of 3 GB confirms the unit; a 4 GB or 6 GB nearest variant, a tie, or a value that cannot be classified blocks sign-off. The values are configured in `configs/device_characterization.yaml` (`ram_variant_check`).
 
 ## 3. Status Vocabularies
 
