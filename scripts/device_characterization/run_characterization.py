@@ -149,7 +149,7 @@ def run_characterization(
         props["is_real_device_observation"] = False
 
     # Execute all 11 capability collectors
-    dev_ident = DeviceIdentityCollector(unit_id).collect(props)
+    dev_ident = DeviceIdentityCollector(unit_id, ram_variant_spec=cfg.get("ram_variant_check")).collect(props)
     android_cap = AndroidCapabilityCollector().collect(props)
     battery_cap = BatteryTelemetryCollector().collect(props)
     memory_cap = MemoryTelemetryCollector().collect(props)

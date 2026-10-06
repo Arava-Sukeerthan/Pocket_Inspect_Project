@@ -19,6 +19,14 @@ import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.monitoring.characterization.ram_variant import (
+    AMBIGUOUS as RAM_AMBIGUOUS,
+    INVALID as RAM_INVALID,
+    MATCH as RAM_MATCH,
+    classify_ram_variant,
+    load_ram_variant_spec,
+    validate_ram_variant_spec,
+)
 from src.monitoring.characterization.models import (
     CapabilityResult,
     RuntimeState,
@@ -75,11 +83,18 @@ APP_EVIDENCE = "evidence/android_app_evidence.json"
 class DeviceIdentityCollector:
     """Collector 1: DeviceIdentityCollector.
     Checks device unit ID, known specifications, observed identity properties,
-    and performs the 3 GB RAM variant verification check.
+    and performs the 3 GB RAM variant verification check (R-08 nearest-nominal rule).
+
+    `total_ram_mb` holds MiB (host floor(MemTotal_kB / 1024), app floor(totalMem / 1,048,576)).
+    The variant specification comes from `ram_variant_check` in configs/device_characterization.yaml.
     """
 
-    def __init__(self, device_unit_id: str = "OPPO_A5_2020_UNIT_01"):
+    def __init__(self, device_unit_id: str = "OPPO_A5_2020_UNIT_01",
+                 ram_variant_spec: Optional[Dict[str, Any]] = None):
         self.device_unit_id = device_unit_id
+        self.ram_variant_spec = (
+            validate_ram_variant_spec(ram_variant_spec) if ram_variant_spec else load_ram_variant_spec()
+        )
 
     def collect(self, observed_props: Optional[Dict[str, Any]] = None) -> DeviceIdentity:
         known = KnownSpecification()
@@ -252,37 +267,63 @@ class DeviceIdentityCollector:
             evidence_ref=ev_gpu,
         ))
 
-        # Variant check (3 GB RAM variant, expected nominal range 2700 MB - 3300 MB)
+        # Variant check (R-08): nearest nominal capacity, unit MiB; see ram_variant.py and the config.
         if total_ram_mb is not None:
-            if 2700 <= total_ram_mb <= 3300:
-                variant_val = f"3 GB variant verified (observed total RAM: {total_ram_mb} MB)"
-                ver_v = bool(props.get("is_real_device_observation"))
+            total_ram_mib = total_ram_mb
+            cls = classify_ram_variant(total_ram_mib, self.ram_variant_spec)
+            required = cls["required_variant"]
+            is_real_obs = bool(props.get("is_real_device_observation"))
+            # Evidence cites the source that actually supplied the RAM value (P5-01).
+            ev_variant_src = (
+                f"{APP_EVIDENCE}#total_ram_mb" if _is_app_derived(props, "total_ram_mb")
+                else "evidence/meminfo_evidence.txt#ram_variant_check"
+            )
+            common = dict(
+                metric="variant_check",
+                unit="variant",
+                source="MemoryInfo.totalMem / MemTotal nearest-nominal variant check (R-08)",
+                verification_method="nearest_nominal_variant",
+            )
+            if cls["classification"] == RAM_INVALID:
                 variant_res = CapabilityResult(
-                    metric="variant_check",
+                    state=RuntimeState.ERROR.value,
+                    report_status=map_runtime_state_to_report_status(RuntimeState.ERROR, verified=False),
+                    value=None,
+                    verified=False,
+                    evidence_ref=ev_variant_src if is_real_obs else None,
+                    error_message=f"Observed total RAM {total_ram_mib!r} MiB cannot be classified (non-positive or non-numeric).",
+                    notes="Variant check could not be performed; blocks Step 10D sign-off.",
+                    **common,
+                )
+            elif cls["classification"] == RAM_MATCH:
+                ver_v = is_real_obs
+                variant_res = CapabilityResult(
                     state=RuntimeState.AVAILABLE.value,
                     report_status=ReportStatus.VERIFIED.value if ver_v else ReportStatus.AVAILABLE.value,
-                    value=variant_val,
-                    unit="variant",
-                    source="MemoryInfo.totalMem RAM range check",
+                    value=cls,
                     verified=ver_v,
-                    verification_method="observed_ram_range_verification",
                     observed_at=now if ver_v else None,
-                    evidence_ref=(f"{APP_EVIDENCE}#total_ram_mb" if _is_app_derived(props, "total_ram_mb") else "evidence/meminfo_evidence.txt#ram_variant_check") if ver_v else None,
-                    notes="Observed RAM matches the required 3 GB experimental platform variant.",
+                    evidence_ref=ev_variant_src if ver_v else None,
+                    notes=(f"Observed {total_ram_mib} MiB is nearest the {required} nominal "
+                           f"({cls['nominal_ram_mib']} MiB): matches the required experimental variant."),
+                    **common,
                 )
             else:
-                variant_val = f"DISAGREEMENT: Observed RAM {total_ram_mb} MB does not match 3 GB variant range (2700-3300 MB)"
+                if cls["classification"] == RAM_AMBIGUOUS:
+                    finding = (f"Observed {total_ram_mib} MiB is equidistant from "
+                               f"{' and '.join(cls['tied_variants'])}: AMBIGUOUS, not assigned to either variant.")
+                else:
+                    finding = (f"Observed {total_ram_mib} MiB is nearest the {cls['nearest_variant']} nominal "
+                               f"({cls['nominal_ram_mib']} MiB), not the required {required}: MISMATCH.")
                 variant_res = CapabilityResult(
-                    metric="variant_check",
                     state=RuntimeState.AVAILABLE.value,
                     report_status=ReportStatus.AVAILABLE.value,
-                    value=variant_val,
-                    unit="variant",
-                    source="MemoryInfo.totalMem RAM range check",
+                    value=cls,
                     verified=False,
-                    verification_method="observed_ram_range_verification",
                     observed_at=now,
-                    notes="RAM variant check indicates non-3GB device variant.",
+                    evidence_ref=ev_variant_src if is_real_obs else None,
+                    notes=f"{finding} Blocks Step 10D sign-off (protocol §2, §9); other variants are never substitutes.",
+                    **common,
                 )
         else:
             variant_res = CapabilityResult(
