@@ -369,6 +369,32 @@
           "items": {
             "type": "string"
           }
+        },
+        "graph_load": {
+          "$ref": "#/$defs/capability_result"
+        },
+        "inference_execution": {
+          "$ref": "#/$defs/capability_result"
+        },
+        "runtime_version_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delegation_evidence": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Per graph variant: requested backend/delegate, observation mechanism, observed provider(s), node/partition counts where observable, CPU fallback where observable, evidence reference."
+        },
+        "reference_graph_artifacts": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Per graph variant: artifact name, app-reported SHA-256 of the bytes loaded, pinned SHA-256, match."
         }
       },
       "required": [
@@ -450,6 +476,13 @@
         },
         "absolute_energy_claimed": {
           "const": false
+        },
+        "selection_basis": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Researcher E-1/E-2 fields used by the D-16 selection, with the unmet selection requirements per level."
         }
       },
       "required": [

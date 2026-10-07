@@ -197,6 +197,10 @@ class CameraCapability:
 
 @dataclass
 class BackendCapability:
+    """Capability of one runtime/backend. availability = runtime initialised; graph_load / inference_execution /
+    probability_output = reference-graph stages (primary variant); delegation = the requested delegate/provider
+    observed active (never inferred from the runtime accepting it). The optional fields are absent in runs written
+    before the Step 10D backend implementation."""
     backend: str
     availability: CapabilityResult
     delegation: CapabilityResult
@@ -205,9 +209,14 @@ class BackendCapability:
     runtime_version: Optional[str] = None
     reference_graph_hash: Optional[str] = None
     known_limitations: List[str] = field(default_factory=list)
+    graph_load: Optional[CapabilityResult] = None
+    inference_execution: Optional[CapabilityResult] = None
+    runtime_version_source: Optional[str] = None
+    delegation_evidence: Optional[Dict[str, Any]] = None
+    reference_graph_artifacts: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        out = {
             "backend": self.backend,
             "runtime_version": self.runtime_version,
             "availability": self.availability.to_dict(),
@@ -217,6 +226,17 @@ class BackendCapability:
             "reference_graph_hash": self.reference_graph_hash,
             "known_limitations": self.known_limitations,
         }
+        if self.graph_load is not None:
+            out["graph_load"] = self.graph_load.to_dict()
+        if self.inference_execution is not None:
+            out["inference_execution"] = self.inference_execution.to_dict()
+        if self.runtime_version_source is not None:
+            out["runtime_version_source"] = self.runtime_version_source
+        if self.delegation_evidence is not None:
+            out["delegation_evidence"] = self.delegation_evidence
+        if self.reference_graph_artifacts is not None:
+            out["reference_graph_artifacts"] = self.reference_graph_artifacts
+        return out
 
 
 @dataclass
@@ -248,15 +268,20 @@ class EnergyCapability:
     E3_software_counters: CapabilityResult
     selected_level: Optional[str] = None
     absolute_energy_claimed: bool = False
+    # Researcher fields the D-16 selection used, per level, with the unmet selection requirements (None: no file).
+    selection_basis: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        out = {
             "E1_battery_side_reference": self.E1_battery_side_reference.to_dict(),
             "E2_supply_powered_session": self.E2_supply_powered_session.to_dict(),
             "E3_software_counters": self.E3_software_counters.to_dict(),
             "selected_level": self.selected_level,
             "absolute_energy_claimed": False,
         }
+        if self.selection_basis is not None:
+            out["selection_basis"] = self.selection_basis
+        return out
 
 
 @dataclass

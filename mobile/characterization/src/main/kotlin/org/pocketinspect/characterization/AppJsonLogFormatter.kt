@@ -38,6 +38,7 @@ object AppJsonLogFormatter {
         "gpu_capability",
         "profiling_capability",
         "camera_telemetry",
+        "backend_capability",
     )
 
     private val compactGson = GsonBuilder().disableHtmlEscaping().create()

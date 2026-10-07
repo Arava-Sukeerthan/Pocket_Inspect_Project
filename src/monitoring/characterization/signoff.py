@@ -14,6 +14,7 @@ the review gate is open, even if every automated criterion passes.
 
 from typing import Any, Dict, Optional
 
+from src.monitoring.characterization.energy_evidence import unmet_selection_requirements
 from src.monitoring.characterization.coverage import check_matrix_coverage
 
 _UNSUPPORTED = ("API_UNSUPPORTED", "UNAVAILABLE")
@@ -49,26 +50,45 @@ def evaluate_d10_thermal_source(run: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def evaluate_d16_energy_level(run: Dict[str, Any]) -> Dict[str, Any]:
-    """D-16: a level is decided from evidence without skipping a preferred, unassessed level."""
+    """D-16: a level is decided from evidence without skipping a preferred, unassessed level.
+
+    Independently of the collector, the recorded selection basis (researcher fields per level) must satisfy the
+    selected level's requirements: E-1 every E-1 requirement including safety_signoff; E-2 an E-1 assessed as not
+    feasible and every E-2 requirement including non-charging evidence; E-3 both preferred levels not feasible.
+    """
     energy = run.get("energy") or {}
     level = energy.get("selected_level")
     e1, e2, e3 = (energy.get(k) or {} for k in ("E1_battery_side_reference", "E2_supply_powered_session",
                                                  "E3_software_counters"))
+    basis = energy.get("selection_basis") if isinstance(energy.get("selection_basis"), dict) else None
+    b1, b2 = ((basis or {}).get(k) or {} for k in ("E1_battery_side_reference", "E2_supply_powered_session"))
     assessed = lambda r: r.get("state") == "EXTERNAL_REQUIRED" and bool(r.get("evidence_ref"))  # noqa: E731
     problems = []
     if energy.get("absolute_energy_claimed") is not False:
         problems.append("absolute energy must not be claimed")
+    if level is not None and basis is None:
+        problems.append(f"{level} selected without a recorded selection basis")
     if level is None:
         problems.append("no energy level selected (E-1/E-2 evidence not yet established)")
     elif level == "E-1":
         if not assessed(e1):
             problems.append("E-1 selected without researcher E-1 evidence")
+        unmet = unmet_selection_requirements("E1_battery_side_reference", b1)
+        if basis is not None and unmet:
+            problems.append(f"E-1 selected with unmet requirements: {unmet}")
     elif level == "E-2":
         if not (assessed(e1) and assessed(e2)):
             problems.append("E-2 selected without researcher E-1 and E-2 evidence")
+        if basis is not None and b1.get("feasible") is not False:
+            problems.append("E-2 selected although E-1 is not recorded as not feasible")
+        unmet = unmet_selection_requirements("E2_supply_powered_session", b2)
+        if basis is not None and unmet:
+            problems.append(f"E-2 selected with unmet requirements: {unmet}")
     elif level == "E-3":
         if not (assessed(e1) and assessed(e2)):
             problems.append("E-3 selected while a preferred level is unassessed")
+        if basis is not None and not (b1.get("feasible") is False and b2.get("feasible") is False):
+            problems.append("E-3 selected although E-1 or E-2 is not recorded as not feasible")
         if e3.get("state") != "AVAILABLE":
             problems.append("E-3 selected without demonstrated software counters")
     else:
