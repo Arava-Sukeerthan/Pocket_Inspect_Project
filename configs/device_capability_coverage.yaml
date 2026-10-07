@@ -1,0 +1,117 @@
+# Step 10D §9 criterion 1 — mapping from device_capability_matrix.md rows to report records.
+#
+# Used by src/monitoring/characterization/coverage.py. The matrix is authoritative and is never modified.
+# Row ids: "<section>/<first cell>" ("<section>/<Dimension>/<Metric>" in section 3), markdown removed.
+# A row passes only if every listed record exists, has a non-default status (not NOT_TESTED / ERROR /
+# NOT YET VERIFIED) and carries an evidence reference. camera:*/<metric> means "for every camera".
+#
+# `records: []` with a `reason` marks a row that has no collector yet: it ALWAYS fails coverage, so the gap
+# stays visible. `specification_fixed: true` is allowed only where the matrix itself already states a
+# non-default status (the checker rejects it otherwise).
+#
+# Reference syntax: identity:<metric> | telemetry:<dimension>/<metric> | thermal:<field> |
+# thermal:temperature_sources/<metric> | camera:*/<metric> | backend:<name>/<field> | profiling:<metric> | energy:<field>
+
+rows:
+  # 1. Device identity
+  "1/Manufacturer": {records: ["identity:manufacturer"]}
+  "1/Model": {records: ["identity:model"]}
+  "1/RAM variant": {records: ["identity:variant_check"]}
+  "1/Storage": {records: ["identity:storage_total"]}
+  "1/SoC": {records: ["identity:soc_model"]}
+  "1/GPU": {records: ["identity:gpu_renderer"]}
+  "1/Build": {records: ["identity:build_fingerprint"]}
+
+  # 2. Installed Android / API
+  "2/Android version": {records: ["identity:release_version"]}
+  "2/API level": {records: ["identity:api_level"]}
+  "2/Security patch": {records: ["identity:security_patch"]}
+  "2/Thermal-status API (API ≥ 29)": {records: ["thermal:thermal_status_api"]}
+  "2/Thermal headroom (API ≥ 30)": {records: ["thermal:thermal_headroom_api"]}
+
+  # 3. Telemetry capability matrix
+  "3/Battery/Percentage": {records: ["telemetry:battery/battery_level_percent"]}
+  "3/Battery/Charging state / plug type": {records: ["telemetry:battery/battery_charging_state"]}
+  "3/Battery/Voltage": {records: ["telemetry:battery/battery_voltage"]}
+  "3/Battery/Current": {records: ["telemetry:battery/battery_current_now", "telemetry:battery/battery_current_average"]}
+  "3/Battery/Charge / energy counter": {records: ["telemetry:battery/battery_charge_counter", "telemetry:battery/battery_energy_counter"]}
+  "3/Battery/Temperature": {records: ["telemetry:battery/battery_temperature"]}
+  "3/Battery/Health / status": {records: ["telemetry:battery/battery_health_status"]}
+  # Power is derived only (current x voltage), never stored as measured power; the row is answered by its inputs.
+  "3/Battery/Power information": {records: ["telemetry:battery/battery_current_now", "telemetry:battery/battery_voltage"]}
+  "3/Memory/Total / available RAM, threshold, low-memory flag":
+    records: ["identity:total_ram_mb", "telemetry:memory/available_memory_mb", "telemetry:memory/memory_threshold_mb", "telemetry:memory/low_memory_flag"]
+  "3/Memory/App / process memory": {records: ["telemetry:memory/app_heap_allocated_mb", "telemetry:memory/app_pss_kb"]}
+  "3/Memory/Memory-pressure indicators":
+    records: ["telemetry:memory/psi_memory_pressure", "telemetry:memory/low_memory_flag"]
+    note: "onTrimMemory levels are event-driven and are not probed in Step 10D; app readability of /proc/meminfo is not probed."
+  "3/CPU/Model / core count": {records: ["telemetry:cpu/cpu_core_count"]}
+  "3/CPU/Current / per-core frequency": {records: ["telemetry:cpu/cpu_scaling_cur_freq"]}
+  "3/CPU/Frequency limits": {records: ["telemetry:cpu/cpu_frequency_limits"]}
+  "3/CPU/Device-wide utilisation": {records: ["telemetry:cpu/device_wide_cpu_utilization"]}
+  "3/CPU/Process CPU time": {records: ["telemetry:cpu/app_cpu_time"]}
+  "3/GPU/Identification": {records: ["telemetry:gpu/gpu_vendor_renderer", "telemetry:gpu/gpu_vulkan_support"]}
+  "3/GPU/Utilisation": {records: ["telemetry:gpu/gpu_utilization"]}
+  "3/GPU/Frequency": {records: ["telemetry:gpu/gpu_clock_hz"]}
+  "3/GPU/Memory":
+    records: []
+    reason: "No collector: no public API exists and no driver-specific check is defined by the protocol yet."
+  "3/Thermal/Thermal status / listener": {records: ["thermal:thermal_status_api", "telemetry:thermal/thermal_status_listener"]}
+  "3/Thermal/Temperature sources": {records: ["thermal:temperature_sources/temperature_battery", "thermal:temperature_sources/thermal_zones_sysfs"]}
+  "3/Thermal/Throttling indicator": {records: ["thermal:frequency_capping_observable"]}
+
+  # 4. Camera capability matrix (every camera)
+  "4/Rear camera availability, camera IDs, logical/physical IDs":
+    records: ["identity:camera_id_list", "camera:*/lens_facing", "camera:*/physical_camera_ids"]
+  "4/Camera2 hardware level": {records: ["camera:*/hardware_level"]}
+  "4/Capabilities (MANUAL_SENSOR, MANUAL_POST_PROCESSING, RAW, BURST_CAPTURE)":
+    records: ["camera:*/available_capabilities", "camera:*/manual_exposure_advertised"]
+  "4/Resolutions and formats": {records: ["camera:*/stream_configurations"]}
+  "4/FPS ranges": {records: ["camera:*/ae_target_fps_ranges"]}
+  "4/Autofocus / manual focus": {records: ["camera:*/af_available_modes", "camera:*/lens_min_focus_distance"]}
+  "4/Exposure / ISO ranges": {records: ["camera:*/exposure_time_range_ns", "camera:*/sensitivity_range"]}
+  "4/White balance": {records: ["camera:*/awb_available_modes", "camera:*/awb_lock_available"]}
+  "4/AE / AWB lock": {records: ["camera:*/ae_lock_available", "camera:*/awb_lock_available"]}
+  "4/Manual control honoured": {records: ["camera:*/manual_control_honoured"]}
+  "4/Video capability": {records: ["camera:*/video_profiles"]}
+
+  # 5. Runtime / backend capability (implementation blocked pending researcher decision)
+  "5/TFLite (LiteRT) CPU / XNNPACK": {records: ["backend:TFLite_CPU/availability", "backend:TFLite_CPU/probability_output"]}
+  "5/TFLite GPU delegate": {records: ["backend:TFLite_GPU/availability", "backend:TFLite_GPU/delegation", "backend:TFLite_GPU/probability_output"]}
+  "5/TFLite NNAPI delegate": {records: ["backend:TFLite_NNAPI/availability", "backend:TFLite_NNAPI/delegation", "backend:TFLite_NNAPI/probability_output"]}
+  "5/ONNX Runtime Mobile CPU": {records: ["backend:ONNXRuntime_CPU/availability", "backend:ONNXRuntime_CPU/probability_output"]}
+  "5/ONNX Runtime NNAPI EP": {records: ["backend:ONNXRuntime_NNAPI/availability", "backend:ONNXRuntime_NNAPI/delegation", "backend:ONNXRuntime_NNAPI/probability_output"]}
+  "5/Other approved runtimes (e.g. ExecuTorch)":
+    records: []
+    reason: "No collector: which other runtimes are approved is a pending researcher decision."
+
+  # 6. Profiling / tracing
+  "6/Timestamps (monotonic)": {records: ["profiling:system_nano_time"]}
+  "6/Model load / inference timing": {records: ["profiling:system_nano_time", "profiling:android_trace_api"]}
+  "6/App CPU time": {records: ["telemetry:cpu/app_cpu_time"]}
+  "6/Process memory": {records: ["telemetry:memory/app_pss_kb"]}
+  "6/Frame timing (Stage 2 camera)": {records: ["camera:*/capture_sensor_timestamp"]}
+  "6/Thermal monitoring": {records: ["thermal:thermal_status_api", "thermal:temperature_sources/temperature_battery"]}
+  "6/System tracing": {records: ["profiling:adb_atrace_profiling"]}
+  "6/GPU counters": {records: ["telemetry:gpu/gpu_utilization"]}
+
+  # 7. Thermal capability
+  "7/A. Thermal status API exists": {records: ["thermal:thermal_status_api"]}
+  "7/B. Temperature sensors accessible (battery; zones by type name)":
+    records: ["thermal:temperature_sources/temperature_battery", "thermal:temperature_sources/thermal_zones_sysfs"]
+  "7/C. CPU-frequency capping observable": {records: ["thermal:frequency_capping_observable"]}
+  "7/D. External surface temperature required": {specification_fixed: true}
+  "7/Temperature measurement vs throttling state": {specification_fixed: true}
+
+  # 8. Energy measurement feasibility
+  "8/E-1 battery-side external reference": {records: ["energy:E1_battery_side_reference"]}
+  "8/E-2 supply-powered external session, charging excluded": {records: ["energy:E2_supply_powered_session"]}
+  "8/E-3 software counters only": {records: ["energy:E3_software_counters"]}
+  "8/Absolute energy": {specification_fixed: true, check: absolute_energy_not_claimed}
+
+  # 9. Resource-state input availability (reliability column is REQUIRES PILOT VALIDATION by specification)
+  "9/Thermal":
+    records: ["thermal:thermal_status_api", "thermal:temperature_sources/temperature_battery", "thermal:temperature_sources/thermal_zones_sysfs", "thermal:frequency_capping_observable"]
+  "9/Battery": {records: ["telemetry:battery/battery_level_percent", "telemetry:battery/battery_charging_state", "identity:power_save_mode"]}
+  "9/Memory": {records: ["telemetry:memory/available_memory_mb", "telemetry:memory/low_memory_flag"]}
+  "9/Compute": {records: ["telemetry:cpu/device_wide_cpu_utilization", "telemetry:cpu/cpu_scaling_cur_freq"]}

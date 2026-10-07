@@ -78,6 +78,266 @@ def _app_metric_state(props: Dict[str, Any], metric: str) -> Optional[Dict[str, 
 
 
 APP_EVIDENCE = "evidence/android_app_evidence.json"
+HOST_ADB = "HOST ADB SHELL"
+GETPROP_SDK_EVIDENCE = "evidence/getprop_evidence.txt#ro.build.version.sdk"
+COMMANDS_LOG = "evidence/commands.log"
+VALID_STATES = {s.value for s in RuntimeState}
+
+# Probe outcome (host_probes) -> runtime state. Absent path is UNAVAILABLE, a refused read PERMISSION_REQUIRED.
+_OUTCOME_STATE = {
+    "READABLE": RuntimeState.AVAILABLE.value,
+    "ABSENT": RuntimeState.UNAVAILABLE.value,
+    "PERMISSION_DENIED": RuntimeState.PERMISSION_REQUIRED.value,
+    "ERROR": RuntimeState.ERROR.value,
+}
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _make(
+    metric: str,
+    state: str,
+    *,
+    is_real: bool,
+    source: str,
+    verification_method: str,
+    value: Any = None,
+    unit: Optional[str] = None,
+    evidence_ref: Optional[str] = None,
+    condition: Optional[str] = None,
+    pilot: bool = False,
+    verifiable: bool = True,
+    min_api: Optional[int] = None,
+    error_message: Optional[str] = None,
+    notes: Optional[str] = None,
+) -> CapabilityResult:
+    """Builds one record with the protocol §3 mapping applied consistently.
+
+    - verified only for a real, unconditional, non-pilot AVAILABLE observation with evidence (and `verifiable`);
+    - a condition (host ADB, ...) gives CONDITIONALLY AVAILABLE, never VERIFIED;
+    - `pilot` (interface demonstrated, semantics pending E0) gives REQUIRES PILOT VALIDATION, only for AVAILABLE;
+    - evidence and timestamps are only attached to real-device observations;
+    - a non-AVAILABLE state always carries value None (no fake zeros).
+    """
+    available = state == RuntimeState.AVAILABLE.value
+    ev = evidence_ref if is_real else None
+    cond = condition if state in (RuntimeState.AVAILABLE.value, RuntimeState.PERMISSION_REQUIRED.value) else None
+    verified = bool(is_real and available and not cond and not pilot and verifiable and ev)
+    report = map_runtime_state_to_report_status(
+        RuntimeState(state), verified=verified, condition=cond, pilot_validation=bool(pilot and available)
+    )
+    return CapabilityResult(
+        metric=metric,
+        state=state,
+        report_status=report.value,
+        value=value if available else None,
+        unit=unit,
+        source=source,
+        min_api=min_api,
+        condition=cond,
+        verified=verified,
+        verification_method=verification_method,
+        evidence_ref=ev,
+        observed_at=_now() if (is_real and state != RuntimeState.NOT_TESTED.value) else None,
+        error_message=error_message,
+        notes=notes,
+    )
+
+
+def _app_collected(props: Dict[str, Any]) -> bool:
+    return props.get("app_output_status") == "APP_OUTPUT_COLLECTED"
+
+
+def _app_rec(props: Dict[str, Any], metric: str) -> Optional[Dict[str, Any]]:
+    recs = props.get("app_records")
+    return recs.get(metric) if isinstance(recs, dict) else None
+
+
+def _join_notes(*parts: Optional[str]) -> Optional[str]:
+    text = " ".join(p for p in parts if p)
+    return text or None
+
+
+_UNSET = object()
+
+
+def _app_result(
+    props: Dict[str, Any],
+    metric: str,
+    *,
+    source: str,
+    verification_method: str,
+    record: Any = _UNSET,
+    anchor: Optional[str] = None,
+    unit: Optional[str] = None,
+    min_api: Optional[int] = None,
+    condition: Optional[str] = None,
+    pilot: bool = False,
+    verifiable: bool = True,
+    notes: Optional[str] = None,
+    record_name: Optional[str] = None,
+) -> CapabilityResult:
+    """Record for a metric whose only source is the Android app report (A2/Phase B probes).
+
+    The app's own state is preserved (P5-02/P5-03 rule). The evidence always cites the app file, never a host file.
+    - app output not retrieved (APP_OUTPUT_MISSING / not connected) -> NOT_TESTED;
+    - app output retrieval failed (APP_OUTPUT_ERROR) -> ERROR (an attempted probe that failed);
+    - app report without this record (older app build) -> NOT_TESTED, explained in notes;
+    - AVAILABLE without a value, or an unknown state -> ERROR (inconsistent app output).
+    """
+    is_real = bool(props.get("is_real_device_observation", False))
+    name = record_name or metric
+    ref = f"{APP_EVIDENCE}#{anchor or metric}"
+    common = dict(is_real=is_real, source=source, verification_method=verification_method, unit=unit, min_api=min_api)
+    status = props.get("app_output_status")
+    if status == "APP_OUTPUT_ERROR":
+        return _make(name, RuntimeState.ERROR.value, evidence_ref=f"{COMMANDS_LOG}#app_output", **common,
+                     error_message="Android app output could not be retrieved or parsed (APP_OUTPUT_ERROR).")
+    if not _app_collected(props):
+        return _make(name, RuntimeState.NOT_TESTED.value, **common,
+                     notes=f"Android app output not collected ({status or 'no connected app run'}); probe not executed.")
+    rec = _app_rec(props, metric) if record is _UNSET else record
+    if rec is None:
+        return _make(name, RuntimeState.NOT_TESTED.value, **common,
+                     notes=f"The Android app report contains no '{metric}' record (app build without this probe).")
+    state = rec.get("state")
+    app_notes = rec.get("notes")
+    if state not in VALID_STATES:
+        return _make(name, RuntimeState.ERROR.value, evidence_ref=ref, **common,
+                     error_message=f"Android app reported an unrecognised state {state!r} for '{metric}'.")
+    if state == RuntimeState.AVAILABLE.value:
+        if rec.get("value") is None:
+            return _make(name, RuntimeState.ERROR.value, evidence_ref=ref, **common,
+                         error_message=f"Android app reported '{metric}' AVAILABLE without a value (inconsistent output).")
+        return _make(name, state, value=rec.get("value"), evidence_ref=ref, condition=condition, pilot=pilot,
+                     verifiable=verifiable, notes=_join_notes(notes, app_notes), **common)
+    return _make(name, state, evidence_ref=ref, error_message=rec.get("error_message"),
+                 notes=_join_notes(app_notes, notes), **common)
+
+
+def _host_outcome_result(
+    metric: str,
+    probe: Optional[Dict[str, Any]],
+    *,
+    is_real: bool,
+    source: str,
+    verification_method: str,
+    evidence_file: str,
+    value: Any = None,
+    unit: Optional[str] = None,
+    pilot_note: Optional[str] = None,
+) -> CapabilityResult:
+    """Record from one host file probe outcome (READABLE / ABSENT / PERMISSION_DENIED / ERROR).
+
+    READABLE through host adb is CONDITIONALLY AVAILABLE (condition HOST ADB SHELL), never VERIFIED.
+    A refused read under host adb has no known unlocking condition, so it stays PERMISSION_REQUIRED (report UNAVAILABLE).
+    """
+    if not probe or probe.get("outcome") not in _OUTCOME_STATE:
+        return _make(metric, RuntimeState.NOT_TESTED.value, is_real=is_real, source=source,
+                     verification_method=verification_method, unit=unit, notes="Host probe not executed.")
+    outcome = probe["outcome"]
+    state = _OUTCOME_STATE[outcome]
+    notes = {
+        "READABLE": pilot_note,
+        "ABSENT": f"{probe.get('target')} does not exist on this device.",
+        "PERMISSION_DENIED": f"Reading {probe.get('target')} was refused even through host adb.",
+        "ERROR": None,
+    }[outcome]
+    return _make(
+        metric, state, is_real=is_real, source=source, verification_method=verification_method,
+        value=value if state == RuntimeState.AVAILABLE.value else None, unit=unit,
+        evidence_ref=f"evidence/{evidence_file}", condition=HOST_ADB if state == RuntimeState.AVAILABLE.value else None,
+        error_message=f"Unexpected probe result for {probe.get('target')}" if outcome == "ERROR" else None,
+        notes=notes,
+    )
+
+
+def _resolve_gpu_renderer(props: Dict[str, Any]) -> Dict[str, Any]:
+    """Single authoritative GPU renderer observation (A8), shared by gpu_renderer and gpu_vendor_renderer.
+
+    Priority: the app's EGL GL_RENDERER/GL_VENDOR (protocol interface); otherwise host SurfaceFlinger GLES line
+    (host ADB condition). Returns the fields needed to build either record.
+    """
+    is_real = bool(props.get("is_real_device_observation", False))
+    app = _app_rec(props, "gpu_renderer") if _app_collected(props) else None
+    if app and app.get("state") == RuntimeState.AVAILABLE.value and isinstance(app.get("value"), dict) \
+            and app["value"].get("renderer"):
+        v = app["value"]
+        return dict(state=RuntimeState.AVAILABLE.value, renderer=v.get("renderer"), vendor=v.get("vendor"),
+                    version=v.get("version"), source="EGL14/GLES20 glGetString(GL_RENDERER, GL_VENDOR) (android app)",
+                    evidence_ref=f"{APP_EVIDENCE}#gpu_renderer", condition=None, error=None, notes=None)
+    host = props.get("host_gles")
+    if isinstance(host, dict) and host.get("renderer"):
+        app_note = (f"App EGL probe state: {app.get('state')}." if app else "App EGL probe result not available.")
+        return dict(state=RuntimeState.AVAILABLE.value, renderer=host["renderer"], vendor=host.get("vendor"),
+                    version=host.get("version"), source="adb shell dumpsys SurfaceFlinger (GLES line)",
+                    evidence_ref="evidence/gpu_renderer_evidence.txt", condition=HOST_ADB, error=None,
+                    notes=app_note)
+    if app and app.get("state") in VALID_STATES:
+        return dict(state=app["state"] if app["state"] != RuntimeState.AVAILABLE.value else RuntimeState.ERROR.value,
+                    renderer=None, vendor=None, version=None,
+                    source="EGL14/GLES20 glGetString(GL_RENDERER) (android app)",
+                    evidence_ref=f"{APP_EVIDENCE}#gpu_renderer", condition=None,
+                    error=app.get("error_message") or (None if app["state"] != RuntimeState.AVAILABLE.value
+                                                       else "App reported AVAILABLE without a renderer string."),
+                    notes=app.get("notes"))
+    if props.get("probe_error_surfaceflinger") and not _app_collected(props):
+        return dict(state=RuntimeState.ERROR.value, renderer=None, vendor=None, version=None,
+                    source="adb shell dumpsys SurfaceFlinger", evidence_ref=f"{COMMANDS_LOG}#probe_error_surfaceflinger",
+                    condition=None, error=props["probe_error_surfaceflinger"], notes=None)
+    legacy = props.get("gpu_renderer") or props.get("gles_renderer") or props.get("renderer")
+    if legacy:
+        return dict(state=RuntimeState.AVAILABLE.value, renderer=legacy, vendor=None, version=None,
+                    source="GLES20.glGetString(GL_RENDERER)", evidence_ref="evidence/observed_props.json#gpu_renderer",
+                    condition=None, error=None, notes=None)
+    notes = None
+    if "host_gles" in props:
+        notes = "Host SurfaceFlinger output had no GLES line; app EGL probe result not available."
+    return dict(state=RuntimeState.NOT_TESTED.value, renderer=None, vendor=None, version=None,
+                source="EGL GL_RENDERER / dumpsys SurfaceFlinger", evidence_ref=None, condition=None, error=None,
+                notes=notes)
+
+
+def cpufreq_policy_result(props: Dict[str, Any], metric: str, files: Tuple[str, ...], source: str,
+                          verification_method: str, value_text: Optional[str] = None,
+                          pilot_note: Optional[str] = None) -> CapabilityResult:
+    """Record from the per-policy cpufreq probe (A7): AVAILABLE (host ADB) when every file in `files` is readable
+    for at least one policy. Observability only: no throttling or capping behaviour is inferred."""
+    is_real = bool(props.get("is_real_device_observation", False))
+    probe = props.get("cpufreq_policy_probe")
+    ev = "evidence/cpufreq_policy_evidence.json"
+    common = dict(is_real=is_real, source=source, verification_method=verification_method)
+    if not isinstance(probe, dict):
+        return _make(metric, RuntimeState.NOT_TESTED.value, **common, notes="Host cpufreq policy probe not executed.")
+    listing = probe.get("listing_outcome")
+    if listing != "READABLE":
+        state = _OUTCOME_STATE.get(listing, RuntimeState.ERROR.value)
+        return _make(metric, state, evidence_ref=ev, **common,
+                     error_message="cpufreq policy directory listing failed" if state == RuntimeState.ERROR.value else None,
+                     notes=None if state == RuntimeState.ERROR.value else f"cpufreq policy directory: {listing}.")
+    policies = probe.get("policies") or {}
+    if not policies:
+        return _make(metric, RuntimeState.UNAVAILABLE.value, evidence_ref=ev, **common,
+                     notes="No policyN directories under the configured cpufreq policy directory.")
+    readable = {pol: {f: files_[f]["value"] for f in files}
+                for pol, files_ in policies.items()
+                if all((files_.get(f) or {}).get("outcome") == "READABLE" for f in files)}
+    if readable:
+        return _make(metric, RuntimeState.AVAILABLE.value, value=value_text or readable, unit=None if value_text else "kHz",
+                     evidence_ref=ev, condition=HOST_ADB, **common,
+                     notes=_join_notes(f"Readable for policies: {', '.join(sorted(readable))}.", pilot_note))
+    outcomes = {(files_.get(f) or {}).get("outcome") for files_ in policies.values() for f in files}
+    if "PERMISSION_DENIED" in outcomes:
+        state = RuntimeState.PERMISSION_REQUIRED.value
+    elif outcomes == {"ABSENT"}:
+        state = RuntimeState.UNAVAILABLE.value
+    else:
+        state = RuntimeState.ERROR.value
+    return _make(metric, state, evidence_ref=ev, **common,
+                 error_message="cpufreq policy files could not be read" if state == RuntimeState.ERROR.value else None,
+                 notes=f"Per-policy outcomes: {sorted(o for o in outcomes if o)}.")
 
 
 class DeviceIdentityCollector:
@@ -247,25 +507,21 @@ class DeviceIdentityCollector:
             evidence_ref=ev_soc,
         ))
 
-        # GPU Renderer
-        obs_gpu = props.get("gpu_renderer") or props.get("gles_renderer")
-        state_gpu = RuntimeState.AVAILABLE.value if obs_gpu else (
-            RuntimeState.UNAVAILABLE.value if ("gpu_renderer" in props or "gles_renderer" in props) else RuntimeState.NOT_TESTED.value
-        )
-        ver_gpu = bool(props.get("is_real_device_observation") and obs_gpu)
-        ev_gpu = "evidence/observed_props.json#gpu_renderer" if ver_gpu else None
-
-        observed_results.append(CapabilityResult(
-            metric="gpu_renderer",
-            state=state_gpu,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_gpu), verified=ver_gpu),
-            value=obs_gpu if state_gpu == RuntimeState.AVAILABLE.value else None,
-            source="GLES20.glGetString(GL_RENDERER) / EGL",
-            verified=ver_gpu,
-            verification_method="device_observation",
-            observed_at=now if ver_gpu else None,
-            evidence_ref=ev_gpu,
+        # GPU renderer (A8): one authoritative observation shared with GPUTelemetryCollector.
+        gpu = _resolve_gpu_renderer(props)
+        observed_results.append(_make(
+            "gpu_renderer", gpu["state"], is_real=bool(props.get("is_real_device_observation")),
+            source=gpu["source"], verification_method="gles_renderer_string_check",
+            value={"renderer": gpu["renderer"], "vendor": gpu["vendor"], "version": gpu["version"]}
+            if gpu["state"] == RuntimeState.AVAILABLE.value else None,
+            evidence_ref=gpu["evidence_ref"], condition=gpu["condition"], error_message=gpu["error"],
+            notes=gpu["notes"],
         ))
+
+        # Storage (matrix §1): StatFs on the data partition, app only.
+        observed_results.append(_app_result(props, "storage_total_bytes", record_name="storage_total",
+                                            source="StatFs(Environment.getDataDirectory()).getTotalBytes()",
+                                            verification_method="statfs_check", unit="bytes"))
 
         # Variant check (R-08): nearest nominal capacity, unit MiB; see ram_variant.py and the config.
         if total_ram_mb is not None:
@@ -434,29 +690,51 @@ class AndroidCapabilityCollector:
             error_message=err_rel,
         ))
 
-        services = ["PowerManager", "HardwarePropertiesManager", "CameraManager", "ActivityManager", "BatteryManager"]
-        for svc in services:
-            key = f"service_{svc}"
-            avail = props.get(key)
+        # Build identity from getprop (host): security patch and fingerprint (matrix §1 Build, §2 Security patch).
+        for metric, key, prop in (("security_patch", "security_patch", "ro.build.version.security_patch"),
+                                  ("build_fingerprint", "build_fingerprint", "ro.build.fingerprint")):
             if key not in props:
-                state_svc = RuntimeState.NOT_TESTED.value
-            elif avail is True:
-                state_svc = RuntimeState.AVAILABLE.value
+                st = RuntimeState.ERROR.value if probe_err_prop else RuntimeState.NOT_TESTED.value
+                results.append(_make(metric, st, is_real=is_real, source=f"getprop {prop}",
+                                     verification_method="device_observation",
+                                     evidence_ref=f"{COMMANDS_LOG}#probe_error_getprop" if probe_err_prop else None,
+                                     error_message=probe_err_prop or None))
             else:
-                state_svc = RuntimeState.UNAVAILABLE.value
-            
-            ver_svc = is_real and state_svc == RuntimeState.AVAILABLE.value
-            results.append(CapabilityResult(
-                metric=key,
-                state=state_svc,
-                report_status=map_runtime_state_to_report_status(RuntimeState(state_svc), verified=ver_svc),
-                value=f"{svc} available" if state_svc == RuntimeState.AVAILABLE.value else None,
-                source=f"Context.getSystemService({svc})",
-                verified=ver_svc,
-                verification_method="service_get_check",
-                observed_at=now if ver_svc else None,
-                evidence_ref=f"evidence/android_app_evidence.json#{key}" if ver_svc else None,
-            ))
+                val = props.get(key)
+                st = RuntimeState.AVAILABLE.value if val else RuntimeState.UNAVAILABLE.value
+                results.append(_make(metric, st, is_real=is_real, value=val, source=f"getprop {prop}",
+                                     verification_method="device_observation",
+                                     evidence_ref=f"evidence/getprop_evidence.txt#{prop}",
+                                     notes=None if val else f"{prop} is empty or not set on this build."))
+
+        # Platform services (B1): obtained and exercised by the app. The app's state is preserved, including
+        # PERMISSION_REQUIRED (e.g. HardwarePropertiesManager outside device-owner/VR mode); a service object
+        # existing is never taken as proof that its operations are permitted.
+        services = {
+            "PowerManager": "getSystemService(POWER_SERVICE) + isPowerSaveMode()",
+            "HardwarePropertiesManager": "getSystemService(HARDWARE_PROPERTIES_SERVICE) + getDeviceTemperatures()",
+            "CameraManager": "getSystemService(CAMERA_SERVICE) + getCameraIdList()",
+            "ActivityManager": "getSystemService(ACTIVITY_SERVICE) + getMemoryInfo()",
+            "BatteryManager": "getSystemService(BATTERY_SERVICE) + getIntProperty(BATTERY_PROPERTY_CAPACITY)",
+        }
+        for svc, op in services.items():
+            key = f"service_{svc}"
+            if key in props and not _app_collected(props):
+                # Legacy/mock input path: a plain boolean; never verified without the app evidence file.
+                st = RuntimeState.AVAILABLE.value if props.get(key) is True else RuntimeState.UNAVAILABLE.value
+                results.append(_make(key, st, is_real=False, value=f"{svc} available", source=op,
+                                     verification_method="service_get_check"))
+                continue
+            results.append(_app_result(props, key, source=op, verification_method="service_operation_check"))
+
+        results.append(_app_result(props, "power_save_mode", source="PowerManager.isPowerSaveMode()",
+                                   verification_method="service_operation_check"))
+        cam_list = _app_rec(props, "camera_id_list")
+        cam_probe = _app_rec(props, "camera_probe")
+        use_probe = cam_list is None and cam_probe is not None
+        results.append(_app_result(props, "camera_id_list", record=cam_probe if use_probe else cam_list,
+                                   anchor="camera_probe" if use_probe else "camera_id_list",
+                                   source="CameraManager.getCameraIdList()", verification_method="camera_id_list_check"))
 
         return TelemetryCapability(
             dimension="android",
@@ -714,17 +992,23 @@ class BatteryTelemetryCollector:
                         notes_curr = "Observed battery current reading is 0. Flagged as potential driver sentinel zero (unverified)."
                         ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if is_real else None
                     else:
+                        # Interface demonstrated; sign convention and update rate are not checked in Step 10D,
+                        # so the value is REQUIRES PILOT VALIDATION rather than VERIFIED (protocol §3, B2).
                         state_curr = RuntimeState.AVAILABLE.value
                         val_curr = converted_ma
-                        ver_curr = is_real
+                        ver_curr = False
+                        pilot_curr = True
                         unit_curr = "mA"
-                        notes_curr = f"Raw current reading: {raw_val} ({explicit_unit}), converted to {converted_ma} mA."
-                        ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if ver_curr else None
+                        notes_curr = (f"Raw current reading: {raw_val} ({explicit_unit}), converted to {converted_ma} mA. "
+                                      "Sign convention and update rate: REQUIRES PILOT VALIDATION.")
+                        ev_curr = "evidence/battery_dumpsys_evidence.txt#battery_current_now" if is_real else None
 
-        results.append(CapabilityResult(
+        host_current = CapabilityResult(
             metric="battery_current_now",
             state=state_curr,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_curr), verified=ver_curr),
+            report_status=map_runtime_state_to_report_status(
+                RuntimeState(state_curr), verified=ver_curr,
+                pilot_validation=bool(locals().get("pilot_curr")) and state_curr == RuntimeState.AVAILABLE.value),
             value=val_curr,
             unit=unit_curr if 'unit_curr' in locals() else None,
             source="BatteryManager.BATTERY_PROPERTY_CURRENT_NOW / dumpsys battery",
@@ -734,55 +1018,185 @@ class BatteryTelemetryCollector:
             evidence_ref=ev_curr,
             error_message=err_curr,
             notes=notes_curr,
-        ))
-
-        # Battery charge counter (uAh)
-        if "battery_charge_counter" not in props and "charge_counter_uah" not in props:
-            if probe_err_bat:
-                state_chg = RuntimeState.ERROR.value
-                val_chg = None
-                err_chg = probe_err_bat
-                ev_chg = "evidence/commands.log#probe_error_battery"
-            else:
-                state_chg = RuntimeState.NOT_TESTED.value
-                val_chg = None
-                err_chg = None
-                ev_chg = None
-        else:
-            chg = props.get("battery_charge_counter") if "battery_charge_counter" in props else props.get("charge_counter_uah")
-            sentinel_chg = props.get("charge_counter_is_sentinel", False)
-            if sentinel_chg or chg is None:
-                state_chg = RuntimeState.UNAVAILABLE.value
-                val_chg = None
-                err_chg = None
-                ev_chg = None
-            else:
-                state_chg = RuntimeState.AVAILABLE.value
-                val_chg = int(chg)
-                err_chg = None
-                ev_chg = "evidence/battery_dumpsys_evidence.txt#battery_charge_counter" if is_real else None
-
-        ver_chg = is_real and state_chg == RuntimeState.AVAILABLE.value
-        results.append(CapabilityResult(
-            metric="battery_charge_counter",
-            state=state_chg,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_chg), verified=ver_chg),
-            value=val_chg,
-            unit="uAh",
-            source="BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER",
-            verified=ver_chg,
-            verification_method="battery_property_check",
-            observed_at=now if ver_chg else None,
-            evidence_ref=ev_chg,
-            error_message=err_chg,
-        ))
-
+        )
+        results.append(self._battery_property_current(props, host_current, "battery_property_current_now",
+                                                      "battery_current_now",
+                                                      "BatteryManager.getIntProperty(BATTERY_PROPERTY_CURRENT_NOW)",
+                                                      dumpsys_field="current now"))
+        results.append(self._battery_property_current(props, None, "battery_property_current_average",
+                                                      "battery_current_average",
+                                                      "BatteryManager.getIntProperty(BATTERY_PROPERTY_CURRENT_AVERAGE)"))
+        results.append(self._charge_counter(props))
+        results.append(self._energy_counter(props))
+        results.extend(self._status_records(props))
         return TelemetryCapability(
             dimension="battery",
             results=results,
             resource_state_input=True,
             reliability="REQUIRES PILOT VALIDATION",
         )
+
+
+    # --- Battery helpers -------------------------------------------------------------------------------
+    @staticmethod
+    def _dumpsys_ran(props: Dict[str, Any]) -> bool:
+        return isinstance(props.get("battery_dumpsys_fields"), list)
+
+    def _battery_property_current(self, props: Dict[str, Any], host_result: Optional[CapabilityResult],
+                                  app_metric: str, metric: str, source: str,
+                                  dumpsys_field: Optional[str] = None) -> CapabilityResult:
+        """BATTERY_PROPERTY_CURRENT_* (B2). The app's BatteryManager property is the protocol interface and is
+        preferred; the host dumpsys value (R-09 handling) is used only when the app did not report the property.
+        A value in uA (API contract) that is non-zero is REQUIRES PILOT VALIDATION (sign/update rate), never VERIFIED.
+        """
+        is_real = bool(props.get("is_real_device_observation", False))
+        rec = _app_rec(props, app_metric) if _app_collected(props) else None
+        if rec is not None:
+            ref = f"{APP_EVIDENCE}#{app_metric}"
+            common = dict(is_real=is_real, source=f"{source} (android app)", verification_method="battery_property_check")
+            if rec.get("state") == RuntimeState.AVAILABLE.value:
+                raw = rec.get("value")
+                if not isinstance(raw, (int, float)) or isinstance(raw, bool):
+                    return _make(metric, RuntimeState.ERROR.value, evidence_ref=ref, **common,
+                                 error_message=f"Non-numeric {app_metric} value from the app: {raw!r}")
+                ma = raw / 1000.0  # BatteryManager current properties are documented in microamperes
+                if abs(ma) > 10000:
+                    return _make(metric, RuntimeState.ERROR.value, evidence_ref=ref, **common,
+                                 error_message=f"Implausible battery current value: {raw} uA")
+                if raw == 0:
+                    return _make(metric, RuntimeState.AVAILABLE.value, value=0.0, unit="mA", evidence_ref=ref,
+                                 verifiable=False, **common,
+                                 notes="Property returned 0: possible unsupported-zero; not verified (R-09).")
+                return _make(metric, RuntimeState.AVAILABLE.value, value=ma, unit="mA", evidence_ref=ref, pilot=True,
+                             **common, notes=f"Raw {raw} uA (API unit) converted to mA. Sign convention and update "
+                                             "rate: REQUIRES PILOT VALIDATION.")
+            return _app_result(props, app_metric, record_name=metric, source=f"{source} (android app)",
+                               verification_method="battery_property_check", unit="mA")
+        if host_result is not None and host_result.state != RuntimeState.NOT_TESTED.value:
+            return host_result
+        if host_result is not None and dumpsys_field and self._dumpsys_ran(props):
+            # Host dumpsys ran but this build does not print the field; the BatteryManager property was not
+            # probed by the app. Not a device fact about the property, so it stays NOT_TESTED, explicitly.
+            return _make(metric, RuntimeState.NOT_TESTED.value, is_real=is_real, source=source,
+                         verification_method="battery_property_check",
+                         evidence_ref="evidence/battery_dumpsys_evidence.txt",
+                         notes=f"dumpsys battery executed but does not print '{dumpsys_field}' on this build; "
+                               "the BatteryManager property itself was not probed (no app record).")
+        if host_result is not None:
+            return host_result
+        return _app_result(props, app_metric, record_name=metric, source=f"{source} (android app)",
+                           verification_method="battery_property_check", unit="mA")
+
+    def _charge_counter(self, props: Dict[str, Any]) -> CapabilityResult:
+        """BATTERY_PROPERTY_CHARGE_COUNTER (uAh): app property preferred, else dumpsys 'Charge counter' (A3).
+        A non-zero reading demonstrates the interface; monotonic change during discharge is REQUIRES PILOT VALIDATION.
+        """
+        is_real = bool(props.get("is_real_device_observation", False))
+        metric = "battery_charge_counter"
+
+        def _classify(raw: Any, ref: str, source: str) -> CapabilityResult:
+            common = dict(is_real=is_real, source=source, verification_method="battery_property_check", unit="uAh",
+                          evidence_ref=ref)
+            if not isinstance(raw, int) or isinstance(raw, bool):
+                return _make(metric, RuntimeState.ERROR.value, **common, error_message=f"Non-integer charge counter {raw!r}")
+            if raw == 0:
+                return _make(metric, RuntimeState.AVAILABLE.value, value=0, verifiable=False, **common,
+                             notes="Charge counter reads 0: possible unsupported-zero; not verified.")
+            if raw < 0:
+                return _make(metric, RuntimeState.ERROR.value, **common, error_message=f"Negative charge counter {raw}")
+            return _make(metric, RuntimeState.AVAILABLE.value, value=raw, pilot=True, **common,
+                         notes="Single reading. Monotonic change during discharge: REQUIRES PILOT VALIDATION.")
+
+        rec = _app_rec(props, "battery_property_charge_counter") if _app_collected(props) else None
+        if rec is not None:
+            if rec.get("state") == RuntimeState.AVAILABLE.value:
+                return _classify(rec.get("value"), f"{APP_EVIDENCE}#battery_property_charge_counter",
+                                 "BatteryManager.getIntProperty(BATTERY_PROPERTY_CHARGE_COUNTER) (android app)")
+            return _app_result(props, "battery_property_charge_counter", record_name=metric, unit="uAh",
+                               source="BatteryManager.getIntProperty(BATTERY_PROPERTY_CHARGE_COUNTER) (android app)",
+                               verification_method="battery_property_check")
+        if props.get("charge_counter_is_sentinel"):
+            return _make(metric, RuntimeState.UNAVAILABLE.value, is_real=is_real, unit="uAh",
+                         source="BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER",
+                         verification_method="battery_property_check", notes="Unsupported sentinel returned.")
+        host_src = "dumpsys battery 'Charge counter' (BatteryService health info)"
+        if props.get("probe_error_battery_charge_counter"):
+            return _make(metric, RuntimeState.ERROR.value, is_real=is_real, unit="uAh", source=host_src,
+                         verification_method="battery_property_check",
+                         evidence_ref="evidence/battery_dumpsys_evidence.txt",
+                         error_message=props["probe_error_battery_charge_counter"])
+        for key in ("battery_charge_counter", "charge_counter_uah"):
+            if key in props:
+                raw = props[key]
+                if raw is None:
+                    return _make(metric, RuntimeState.UNAVAILABLE.value, is_real=is_real, unit="uAh", source=host_src,
+                                 verification_method="battery_property_check")
+                return _classify(raw, "evidence/battery_dumpsys_evidence.txt#Charge counter", host_src)
+        if props.get("probe_error_battery"):
+            return _make(metric, RuntimeState.ERROR.value, is_real=is_real, unit="uAh", source=host_src,
+                         verification_method="battery_property_check",
+                         evidence_ref=f"{COMMANDS_LOG}#probe_error_battery", error_message=props["probe_error_battery"])
+        if self._dumpsys_ran(props):
+            return _make(metric, RuntimeState.NOT_TESTED.value, is_real=is_real, unit="uAh", source=host_src,
+                         verification_method="battery_property_check",
+                         evidence_ref="evidence/battery_dumpsys_evidence.txt",
+                         notes="dumpsys battery executed but prints no 'Charge counter' field on this build; "
+                               "the BatteryManager property itself was not probed (no app record).")
+        return _make(metric, RuntimeState.NOT_TESTED.value, is_real=is_real, unit="uAh", source=host_src,
+                     verification_method="battery_property_check")
+
+    def _energy_counter(self, props: Dict[str, Any]) -> CapabilityResult:
+        """BATTERY_PROPERTY_ENERGY_COUNTER (nWh), app only. Long.MIN_VALUE sentinel -> UNAVAILABLE (set by the app)."""
+        rec = _app_rec(props, "battery_property_energy_counter") if _app_collected(props) else None
+        pilot = bool(rec and rec.get("state") == RuntimeState.AVAILABLE.value and rec.get("value") not in (0, None))
+        verifiable = not (rec and rec.get("value") == 0)
+        return _app_result(props, "battery_property_energy_counter", record_name="battery_energy_counter",
+                           unit="nWh", pilot=pilot, verifiable=verifiable,
+                           source="BatteryManager.getLongProperty(BATTERY_PROPERTY_ENERGY_COUNTER) (android app)",
+                           verification_method="battery_property_check",
+                           notes="Accuracy relative to an external reference: REQUIRES PILOT VALIDATION (D-16)." if pilot else None)
+
+    _HEALTH = {1: "UNKNOWN", 2: "GOOD", 3: "OVERHEAT", 4: "DEAD", 5: "OVER_VOLTAGE", 6: "UNSPECIFIED_FAILURE", 7: "COLD"}
+    _STATUS = {1: "UNKNOWN", 2: "CHARGING", 3: "DISCHARGING", 4: "NOT_CHARGING", 5: "FULL"}
+
+    def _status_records(self, props: Dict[str, Any]) -> List[CapabilityResult]:
+        """Charging state / plug type and health / status from dumpsys battery (host). Fields that the build
+        does not print are never defaulted."""
+        is_real = bool(props.get("is_real_device_observation", False))
+        out: List[CapabilityResult] = []
+        fields = props.get("battery_dumpsys_fields")
+        err = props.get("probe_error_battery")
+        src = "dumpsys battery (ACTION_BATTERY_CHANGED state)"
+        for metric, needed in (("battery_charging_state", "status"), ("battery_health_status", "health")):
+            if not isinstance(fields, list):
+                st = RuntimeState.ERROR.value if err else RuntimeState.NOT_TESTED.value
+                out.append(_make(metric, st, is_real=is_real, source=src, verification_method="battery_broadcast_check",
+                                 evidence_ref=f"{COMMANDS_LOG}#probe_error_battery" if err else None, error_message=err))
+                continue
+            if needed not in fields:
+                out.append(_make(metric, RuntimeState.UNAVAILABLE.value, is_real=is_real, source=src,
+                                 verification_method="battery_broadcast_check",
+                                 evidence_ref="evidence/battery_dumpsys_evidence.txt",
+                                 notes=f"dumpsys battery prints no '{needed}' field on this build."))
+                continue
+            if metric == "battery_charging_state":
+                code = props.get("battery_status_code")
+                value = {"status_code": code, "status": self._STATUS.get(code),
+                         "plug_source": props.get("plugged_source")}
+            else:
+                code = props.get("battery_health_code")
+                value = {"health_code": code, "health": self._HEALTH.get(code),
+                         "status_code": props.get("battery_status_code")}
+            if code is None:
+                out.append(_make(metric, RuntimeState.ERROR.value, is_real=is_real, source=src,
+                                 verification_method="battery_broadcast_check",
+                                 evidence_ref="evidence/battery_dumpsys_evidence.txt",
+                                 error_message=f"'{needed}' field present but not an integer"))
+                continue
+            out.append(_make(metric, RuntimeState.AVAILABLE.value, is_real=is_real, value=value, source=src,
+                             verification_method="battery_broadcast_check",
+                             evidence_ref=f"evidence/battery_dumpsys_evidence.txt#{needed}"))
+        return out
 
 
 class MemoryTelemetryCollector:
@@ -836,89 +1250,27 @@ class MemoryTelemetryCollector:
             error_message=err_avail,
         ))
 
-        # Low Memory Flag
-        if "low_memory_flag" not in props:
-            if probe_err_mem:
-                state_low = RuntimeState.ERROR.value
-                val_low = None
-                err_low = probe_err_mem
-                ev_low = "evidence/commands.log#probe_error_meminfo"
-            else:
-                state_low = RuntimeState.NOT_TESTED.value
-                val_low = None
-                err_low = None
-                ev_low = None
-        else:
-            low_flag = props.get("low_memory_flag")
-            state_low = RuntimeState.AVAILABLE.value if low_flag is not None else RuntimeState.UNAVAILABLE.value
-            val_low = low_flag if state_low == RuntimeState.AVAILABLE.value else None
-            err_low = None
-            ev_low = "evidence/meminfo_evidence.txt#lowMemory" if (is_real and state_low == RuntimeState.AVAILABLE.value) else None
+        # ActivityManager.MemoryInfo.lowMemory / threshold (B3): app-only. /proc/meminfo has no such field.
+        results.append(_app_result(props, "low_memory_flag", source="ActivityManager.MemoryInfo.lowMemory",
+                                   verification_method="memory_info_check", unit="boolean",
+                                   notes="Behaviour under memory pressure (D-13, ColorOS): REQUIRES PILOT VALIDATION."))
+        results.append(_app_result(props, "memory_threshold_mb", source="ActivityManager.MemoryInfo.threshold",
+                                   verification_method="memory_info_check", unit="MB"))
+        results.append(_app_result(props, "app_heap_allocated_mb", source="Runtime.totalMemory() - Runtime.freeMemory()",
+                                   verification_method="runtime_heap_check", unit="MB"))
+        results.append(_app_result(props, "app_pss_kb", source="Debug.getMemoryInfo(Debug.MemoryInfo).getTotalPss()",
+                                   verification_method="process_memory_check", unit="kB"))
 
-        ver_low = is_real and state_low == RuntimeState.AVAILABLE.value
-        results.append(CapabilityResult(
-            metric="low_memory_flag",
-            state=state_low,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_low), verified=ver_low),
-            value=val_low,
-            source="ActivityManager.MemoryInfo.lowMemory",
-            verified=ver_low,
-            verification_method="memory_info_check",
-            observed_at=now if ver_low else None,
-            evidence_ref=ev_low,
-            error_message=err_low,
-        ))
-
-        # App Heap Allocated
-        if "app_heap_allocated_mb" not in props:
-            state_app = RuntimeState.NOT_TESTED.value
-            val_app = None
-        else:
-            app_heap = props.get("app_heap_allocated_mb")
-            state_app = RuntimeState.AVAILABLE.value if app_heap is not None else RuntimeState.UNAVAILABLE.value
-            val_app = app_heap if state_app == RuntimeState.AVAILABLE.value else None
-
-        ver_app = is_real and state_app == RuntimeState.AVAILABLE.value
-        results.append(CapabilityResult(
-            metric="app_heap_allocated_mb",
-            state=state_app,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_app), verified=ver_app),
-            value=val_app,
-            unit="MB",
-            source="Runtime.totalMemory() - freeMemory()",
-            verified=ver_app,
-            verification_method="runtime_heap_check",
-            observed_at=now if ver_app else None,
-            evidence_ref="evidence/memory_props.json#app_heap" if ver_app else None,
-        ))
-
-        # PSI Memory Pressure
-        if "psi_memory_readable" not in props:
-            state_psi = RuntimeState.NOT_TESTED.value
-            val_psi = None
-        else:
-            psi = props.get("psi_memory_readable")
-            if psi is True:
-                state_psi = RuntimeState.AVAILABLE.value
-                val_psi = "PSI readable"
-            elif psi is False:
-                state_psi = RuntimeState.PERMISSION_REQUIRED.value
-                val_psi = None
-            else:
-                state_psi = RuntimeState.UNAVAILABLE.value
-                val_psi = None
-
-        ver_psi = is_real and state_psi == RuntimeState.AVAILABLE.value
-        results.append(CapabilityResult(
-            metric="psi_memory_pressure",
-            state=state_psi,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_psi), verified=ver_psi),
-            value=val_psi,
-            source="/proc/pressure/memory",
-            verified=ver_psi,
-            verification_method="file_read_check",
-            observed_at=now if ver_psi else None,
-            evidence_ref="evidence/memory_props.json#psi" if ver_psi else None,
+        # PSI memory pressure (A5): host probe of the configured /proc/pressure/memory path.
+        psi_probe = props.get("psi_memory_probe")
+        kernel = props.get("kernel_release")
+        results.append(_host_outcome_result(
+            "psi_memory_pressure", psi_probe, is_real=is_real,
+            source=f"{(psi_probe or {}).get('target', '/proc/pressure/memory')} via adb shell"
+                   + (f" (kernel {kernel})" if kernel else ""),
+            verification_method="file_read_check", evidence_file="psi_memory_evidence.json",
+            value="PSI memory file readable", pilot_note="Readability only; meaning as a resource-state input "
+                                                         "REQUIRES PILOT VALIDATION. App readability not tested.",
         ))
 
         return TelemetryCapability(
@@ -997,43 +1349,23 @@ class CPUTelemetryCollector:
             err_freq = None
             ev_freq = "evidence/cpufreq_evidence.txt#scaling_cur_freq" if (is_real and state_freq == RuntimeState.AVAILABLE.value) else None
 
-        ver_freq = is_real and state_freq == RuntimeState.AVAILABLE.value
-        results.append(CapabilityResult(
-            metric="cpu_scaling_cur_freq",
-            state=state_freq,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_freq), verified=ver_freq),
-            value=val_freq,
-            unit="kHz",
-            source="/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq",
-            verified=ver_freq,
-            verification_method="cpufreq_sysfs_check",
-            observed_at=now if ver_freq else None,
-            evidence_ref=ev_freq,
+        # Host sysfs read through adb: CONDITIONALLY AVAILABLE (HOST ADB SHELL), never VERIFIED (§12).
+        results.append(_make(
+            "cpu_scaling_cur_freq", state_freq, is_real=is_real, value=val_freq, unit="kHz",
+            source="cpu0 scaling_cur_freq via adb shell (configs probes.cpufreq_sysfs_pattern)",
+            verification_method="cpufreq_sysfs_check", condition=HOST_ADB,
+            evidence_ref=ev_freq if state_freq != RuntimeState.AVAILABLE.value else "evidence/cpufreq_evidence.txt#scaling_cur_freq",
             error_message=err_freq,
+            notes="Read through host adb; app readability not tested." if state_freq == RuntimeState.AVAILABLE.value else None,
         ))
+        results.append(cpufreq_policy_result(props, "cpu_frequency_limits", ("scaling_max_freq", "cpuinfo_max_freq"),
+                                             "cpufreq policy scaling_max_freq / cpuinfo_max_freq via adb shell",
+                                             "cpufreq_limits_check"))
 
-        # App CPU time
-        if "app_cpu_time_ms" not in props:
-            state_app_cpu = RuntimeState.NOT_TESTED.value
-            val_app_cpu = None
-        else:
-            app_cpu = props.get("app_cpu_time_ms")
-            state_app_cpu = RuntimeState.AVAILABLE.value if app_cpu is not None else RuntimeState.UNAVAILABLE.value
-            val_app_cpu = app_cpu if state_app_cpu == RuntimeState.AVAILABLE.value else None
-
-        ver_app_cpu = is_real and state_app_cpu == RuntimeState.AVAILABLE.value
-        results.append(CapabilityResult(
-            metric="app_cpu_time",
-            state=state_app_cpu,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_app_cpu), verified=ver_app_cpu),
-            value=val_app_cpu,
-            unit="ms",
-            source="Process.getElapsedCpuTime() / /proc/self/stat",
-            verified=ver_app_cpu,
-            verification_method="process_stat_check",
-            observed_at=now if ver_app_cpu else None,
-            evidence_ref="evidence/cpu_props.json#app_cpu_time" if ver_app_cpu else None,
-        ))
+        # Process CPU time (B4): app only; not a utilisation figure.
+        results.append(_app_result(props, "app_cpu_time", source="Process.getElapsedCpuTime()",
+                                   verification_method="process_cpu_time_check", unit="ms",
+                                   notes="Process CPU time of the characterization app; not interpreted as utilisation."))
 
         # Device-wide CPU utilization via ADB /proc/stat
         probe_err_stat = props.get("probe_error_proc_stat")
@@ -1058,7 +1390,7 @@ class CPUTelemetryCollector:
                 state_proc = RuntimeState.AVAILABLE.value
                 val_proc = "Readable via host ADB"
                 cond_proc = "HOST ADB SHELL"
-                ver_proc = is_real
+                ver_proc = False  # condition-gated: CONDITIONALLY AVAILABLE, never VERIFIED (§12)
                 err_proc = None
                 ev_proc = "evidence/proc_stat_evidence.txt" if is_real else None
             else:
@@ -1078,7 +1410,7 @@ class CPUTelemetryCollector:
             condition=cond_proc,
             verified=ver_proc,
             verification_method="adb_shell_proc_stat_check",
-            observed_at=now if ver_proc else None,
+            observed_at=now if (is_real and state_proc != RuntimeState.NOT_TESTED.value) else None,
             evidence_ref=ev_proc,
             error_message=err_proc,
             notes="App-level read of /proc/stat is PERMISSION_REQUIRED on Android 8+ SELinux.",
@@ -1106,25 +1438,15 @@ class GPUTelemetryCollector:
         results: List[CapabilityResult] = []
         probe_err_gpu = props.get("probe_error_gpu")
 
-        if "renderer" not in props and "gles_renderer" not in props:
-            state_rend = RuntimeState.NOT_TESTED.value
-            val_rend = None
-        else:
-            renderer = props.get("renderer") or props.get("gles_renderer")
-            state_rend = RuntimeState.AVAILABLE.value if renderer else RuntimeState.UNAVAILABLE.value
-            val_rend = renderer if state_rend == RuntimeState.AVAILABLE.value else None
-
-        ver_rend = is_real and state_rend == RuntimeState.AVAILABLE.value
-        results.append(CapabilityResult(
-            metric="gpu_vendor_renderer",
-            state=state_rend,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_rend), verified=ver_rend),
-            value=val_rend,
-            source="GLES20.glGetString(GL_RENDERER)",
-            verified=ver_rend,
-            verification_method="gles_string_check",
-            observed_at=now if ver_rend else None,
-            evidence_ref="evidence/android_app_evidence.json#gpu_renderer" if ver_rend else None,
+        # gpu_vendor_renderer is derived from the same single observation as device_identity gpu_renderer (A8).
+        gpu = _resolve_gpu_renderer(props)
+        rend_val = (f"{gpu['vendor']} / {gpu['renderer']}" if gpu["vendor"] else gpu["renderer"]) \
+            if gpu["state"] == RuntimeState.AVAILABLE.value else None
+        results.append(_make(
+            "gpu_vendor_renderer", gpu["state"], is_real=is_real, value=rend_val, source=gpu["source"],
+            verification_method="gles_renderer_string_check", evidence_ref=gpu["evidence_ref"],
+            condition=gpu["condition"], error_message=gpu["error"],
+            notes=_join_notes("Derived from the same observation as device_identity gpu_renderer.", gpu["notes"]),
         ))
 
         # GPU clock frequency (P-03 canonical key)
@@ -1146,43 +1468,32 @@ class GPUTelemetryCollector:
             err_freq = None
             ev_freq = "evidence/gpu_evidence.txt#gpuclk" if (is_real and state_freq == RuntimeState.AVAILABLE.value) else None
 
-        ver_freq = is_real and state_freq == RuntimeState.AVAILABLE.value
-        results.append(CapabilityResult(
-            metric="gpu_clock_hz",
-            state=state_freq,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_freq), verified=ver_freq),
-            value=val_freq,
-            unit="Hz",
-            source="/sys/class/kgsl/kgsl-3d0/gpuclk",
-            verified=ver_freq,
-            verification_method="kgsl_sysfs_check",
-            observed_at=now if ver_freq else None,
-            evidence_ref=ev_freq,
+        # Host kgsl sysfs read: CONDITIONALLY AVAILABLE (HOST ADB SHELL), never VERIFIED (§12). A clock value is
+        # never a utilisation figure.
+        results.append(_make(
+            "gpu_clock_hz", state_freq, is_real=is_real, value=val_freq, unit="Hz",
+            source="kgsl gpuclk via adb shell (configs probes.kgsl_gpu_clock_path)",
+            verification_method="kgsl_sysfs_check", condition=HOST_ADB,
+            evidence_ref=ev_freq if state_freq != RuntimeState.AVAILABLE.value else "evidence/gpu_evidence.txt#gpuclk",
             error_message=err_freq,
         ))
 
-        if "gpu_utilization_percent" not in props:
-            state_util = RuntimeState.NOT_TESTED.value
-            val_util = None
-        else:
-            gpu_util = props.get("gpu_utilization_percent")
-            state_util = RuntimeState.AVAILABLE.value if gpu_util is not None else RuntimeState.UNAVAILABLE.value
-            val_util = gpu_util if state_util == RuntimeState.AVAILABLE.value else None
-
-        ver_util = is_real and state_util == RuntimeState.AVAILABLE.value
-        results.append(CapabilityResult(
-            metric="gpu_utilization",
-            state=state_util,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_util), verified=ver_util),
-            value=val_util,
-            unit="percent",
-            source="/sys/class/kgsl/kgsl-3d0/gpubusy",
-            verified=ver_util,
-            verification_method="kgsl_busy_check",
-            observed_at=now if ver_util else None,
-            evidence_ref="evidence/kgsl_evidence.txt#gpubusy" if ver_util else None,
-            notes="UNAVAILABLE THROUGH AVAILABLE PLATFORM INTERFACE unless root/custom driver permissions exist.",
+        # GPU busy counters (A6): readability of the configured kgsl gpubusy node only.
+        busy = props.get("gpu_busy_probe")
+        results.append(_host_outcome_result(
+            "gpu_utilization", busy, is_real=is_real,
+            source=f"{(busy or {}).get('target', 'kgsl gpubusy')} via adb shell",
+            verification_method="kgsl_busy_readability_check", evidence_file="gpu_busy_evidence.json",
+            value="kgsl gpubusy counters readable",
+            pilot_note="Readability of raw busy/total counters only; no utilisation value is derived. Meaning as a "
+                       "utilisation signal REQUIRES PILOT VALIDATION.",
         ))
+        if results[-1].state == RuntimeState.UNAVAILABLE.value:
+            results[-1].notes = _join_notes(results[-1].notes, "UNAVAILABLE THROUGH AVAILABLE PLATFORM INTERFACE.")
+
+        results.append(_app_result(props, "gpu_vulkan_support",
+                                   source="PackageManager.hasSystemFeature(FEATURE_VULKAN_HARDWARE_VERSION / LEVEL)",
+                                   verification_method="system_feature_check"))
 
         return TelemetryCapability(
             dimension="gpu",
@@ -1239,8 +1550,11 @@ class ThermalTelemetryCollector:
             ev_status_api = f"{APP_EVIDENCE}#thermal_status_api" if is_real else None
         elif _is_app_derived(props, "thermal_status_api"):
             ev_status_api = f"{APP_EVIDENCE}#thermal_status_api" if ver_status_api else None
+        elif status_api_state == RuntimeState.API_UNSUPPORTED.value:
+            # The evidence for API_UNSUPPORTED is the observed installed API level.
+            ev_status_api = GETPROP_SDK_EVIDENCE if is_real else None
         else:
-            ev_status_api = "evidence/thermal_evidence.json#status_api" if ver_status_api else None
+            ev_status_api = "evidence/thermal_evidence.txt" if ver_status_api else None
 
         res_status_api = CapabilityResult(
             metric="thermal_status_api",
@@ -1251,7 +1565,7 @@ class ThermalTelemetryCollector:
             min_api=29,
             verified=ver_status_api,
             verification_method="power_manager_thermal_status_check",
-            observed_at=now if ver_status_api else None,
+            observed_at=now if (is_real and status_api_state != RuntimeState.NOT_TESTED.value) else None,
             evidence_ref=ev_status_api,
             error_message=err_status_api,
         )
@@ -1285,35 +1599,20 @@ class ThermalTelemetryCollector:
             min_api=30,
             verified=ver_headroom,
             verification_method="power_manager_thermal_headroom_check",
-            observed_at=now if ver_headroom else None,
-            evidence_ref="evidence/thermal_evidence.json#headroom_api" if ver_headroom else None,
+            observed_at=now if (is_real and headroom_state != RuntimeState.NOT_TESTED.value) else None,
+            evidence_ref=(GETPROP_SDK_EVIDENCE if (is_real and headroom_state == RuntimeState.API_UNSUPPORTED.value)
+                          else ("evidence/thermal_evidence.txt" if ver_headroom else None)),
+            notes=("Installed API level is below the interface minimum (API 30)."
+                   if headroom_state == RuntimeState.API_UNSUPPORTED.value else None),
         )
 
         # Temperature sources
         temp_sources: List[CapabilityResult] = []
 
-        # Battery temperature source
-        if "battery_temp_available" not in props:
-            state_batt_t = RuntimeState.NOT_TESTED.value
-            val_batt_t = None
-        else:
-            batt_t = props.get("battery_temp_available")
-            state_batt_t = RuntimeState.AVAILABLE.value if batt_t is True else RuntimeState.UNAVAILABLE.value
-            val_batt_t = "BatteryManager EXTRA_TEMPERATURE" if state_batt_t == RuntimeState.AVAILABLE.value else None
-
-        ver_batt_t = is_real and state_batt_t == RuntimeState.AVAILABLE.value
-        temp_sources.append(CapabilityResult(
-            metric="temperature_battery",
-            state=state_batt_t,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_batt_t), verified=ver_batt_t),
-            value=val_batt_t,
-            unit="degC",
-            source="BatteryManager broadcast",
-            verified=ver_batt_t,
-            verification_method="battery_temperature_check",
-            observed_at=now if ver_batt_t else None,
-            evidence_ref="evidence/battery_evidence.json#temperature" if ver_batt_t else None,
-        ))
+        # Battery temperature source (A4): derived from the battery temperature observation itself, citing the
+        # same evidence (host dumpsys or app), instead of a separate flag nobody set.
+        temp_sources.append(self._battery_temperature_source(props))
+        state_batt_t = temp_sources[-1].state
 
         # Thermal zones sysfs
         probe_err_th = props.get("probe_error_thermal")
@@ -1335,42 +1634,29 @@ class ThermalTelemetryCollector:
             err_zones = None
             ev_zones = "evidence/thermal_evidence.txt#thermal_zones" if (is_real and state_zones == RuntimeState.AVAILABLE.value) else None
 
-        ver_zones = is_real and state_zones == RuntimeState.AVAILABLE.value
-        temp_sources.append(CapabilityResult(
-            metric="thermal_zones_sysfs",
-            state=state_zones,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_zones), verified=ver_zones),
-            value=val_zones,
-            unit="zones",
-            source="/sys/class/thermal/thermal_zone*",
-            verified=ver_zones,
-            verification_method="thermal_zone_sysfs_read_check",
-            observed_at=now if ver_zones else None,
-            evidence_ref=ev_zones,
+        # Host sysfs read through adb: CONDITIONALLY AVAILABLE; zone type names are in the evidence file and no
+        # zone is assumed to be the SoC temperature.
+        temp_sources.append(_make(
+            "thermal_zones_sysfs", state_zones, is_real=is_real, value=val_zones, unit="zones",
+            source="thermal zone type/temp via adb shell (configs probes.thermal_sysfs_pattern)",
+            verification_method="thermal_zone_sysfs_read_check", condition=HOST_ADB,
+            evidence_ref=ev_zones if state_zones != RuntimeState.AVAILABLE.value else "evidence/thermal_evidence.txt#thermal_zones",
             error_message=err_zones,
+            notes=("Zone type names recorded in the evidence; no zone is assumed to be SoC temperature."
+                   if state_zones == RuntimeState.AVAILABLE.value else None),
         ))
 
-        # Frequency capping observable
-        if "frequency_capping_observable" not in props:
-            state_cap = RuntimeState.NOT_TESTED.value
-            val_cap = None
-        else:
-            fc = props.get("frequency_capping_observable")
-            state_cap = RuntimeState.AVAILABLE.value if fc is True else RuntimeState.UNAVAILABLE.value
-            val_cap = "Observed scaling_max_freq drops" if state_cap == RuntimeState.AVAILABLE.value else None
-
-        ver_cap = is_real and state_cap == RuntimeState.AVAILABLE.value
-        res_freq_cap = CapabilityResult(
-            metric="frequency_capping_observable",
-            state=state_cap,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_cap), verified=ver_cap),
-            value=val_cap,
-            source="cpufreq scaling_max_freq vs scaling_boost_freq / cpuinfo_max_freq",
-            verified=ver_cap,
-            verification_method="cpufreq_capping_check",
-            observed_at=now if ver_cap else None,
-            evidence_ref="evidence/cpufreq_evidence.txt#capping" if ver_cap else None,
+        # Frequency-capping observability (A7, protocol §5.7 C): per-policy current, scaling-max and hardware-max
+        # frequencies readable. Readability does not establish throttling behaviour.
+        res_freq_cap = cpufreq_policy_result(
+            props, "frequency_capping_observable", ("scaling_cur_freq", "scaling_max_freq", "cpuinfo_max_freq"),
+            "cpufreq policy scaling_cur_freq / scaling_max_freq / cpuinfo_max_freq via adb shell",
+            "cpufreq_capping_observability_check",
+            value_text="Per-policy scaling_cur_freq, scaling_max_freq and cpuinfo_max_freq readable",
+            pilot_note="Observability only (no load applied in Step 10D). Interpreting scaling_max_freq below "
+                       "cpuinfo_max_freq as thermal capping REQUIRES PILOT VALIDATION.",
         )
+        state_cap = res_freq_cap.state
 
         # External surface probe
         res_ext_probe = CapabilityResult(
@@ -1405,151 +1691,223 @@ class ThermalTelemetryCollector:
         )
 
 
+    def _battery_temperature_source(self, props: Dict[str, Any]) -> CapabilityResult:
+        is_real = bool(props.get("is_real_device_observation", False))
+        common = dict(is_real=is_real, verification_method="battery_temperature_check", unit="degC")
+        raw = props.get("battery_temperature", props.get("temperature_c"))
+        if raw is not None:
+            if isinstance(raw, (int, float)) and not isinstance(raw, bool) and -20 <= raw <= 80:
+                app = _is_app_derived(props, "battery_temperature")
+                return _make("temperature_battery", RuntimeState.AVAILABLE.value, value=float(raw),
+                             source="BatteryManager EXTRA_TEMPERATURE" + (" (android app)" if app else " via dumpsys battery"),
+                             evidence_ref=(f"{APP_EVIDENCE}#battery_temperature" if app
+                                           else "evidence/battery_dumpsys_evidence.txt#battery_temperature"),
+                             notes="Same observation as the battery_temperature record.", **common)
+            return _make("temperature_battery", RuntimeState.ERROR.value, source="BatteryManager EXTRA_TEMPERATURE",
+                         error_message=f"Implausible battery temperature value observed: {raw} degC", **common)
+        if "battery_temp_available" in props:  # legacy/mock input path
+            st = RuntimeState.AVAILABLE.value if props["battery_temp_available"] is True else RuntimeState.UNAVAILABLE.value
+            return _make("temperature_battery", st, value="BatteryManager EXTRA_TEMPERATURE", is_real=False,
+                         source="BatteryManager broadcast", verification_method="battery_temperature_check", unit="degC")
+        if props.get("probe_error_battery"):
+            return _make("temperature_battery", RuntimeState.ERROR.value, source="BatteryManager EXTRA_TEMPERATURE",
+                         evidence_ref=f"{COMMANDS_LOG}#probe_error_battery", error_message=props["probe_error_battery"],
+                         **common)
+        return _make("temperature_battery", RuntimeState.NOT_TESTED.value, source="BatteryManager EXTRA_TEMPERATURE",
+                     **common)
+
+    def collect_listener(self, thermal_props: Optional[Dict[str, Any]] = None) -> TelemetryCapability:
+        """Thermal-status listener registration (protocol §5.1: status API and listener), app only."""
+        props = thermal_props or {}
+        listener = _app_result(props, "thermal_status_listener",
+                               source="PowerManager.addThermalStatusListener() / removeThermalStatusListener()",
+                               verification_method="listener_registration_check", min_api=29,
+                               notes="Registration only; callback delivery under thermal change is not exercised in Step 10D.")
+        return TelemetryCapability(dimension="thermal", results=[listener], resource_state_input=True,
+                                   reliability="REQUIRES PILOT VALIDATION")
+
+
 class CameraCapabilityCollector:
-    """Collector 8: CameraCapabilityCollector.
-    Checks camera IDs, hardware levels, formats/sizes, FPS ranges, manual controls,
-    and checks advertised-vs-honoured manual controls via CaptureResult.
+    """Collector 8: CameraCapabilityCollector (protocol P3, §5.3).
+
+    Camera IDs come only from the app's CameraManager.getCameraIdList() record; they are never generated from a
+    count, and lens facing is never defaulted. Per-camera characteristics come from CameraCharacteristics in the
+    app. The host `dumpsys media.camera` parse is a cross-check only (noted, never a substitute).
+
+    Manual control (advertised vs honoured): the app reports the requested and CaptureResult values; the host
+    classifies them with the tolerances in configs/device_characterization.yaml (`camera_manual_control_check`).
+    Manual control is AVAILABLE only when the check ran and matched; never claimed from advertisement alone.
     """
+
+    # Per-camera metrics reported by the app, in report order (manual_control_honoured is handled separately).
+    PER_CAMERA_METRICS = (
+        ("hardware_level", "CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL", None),
+        ("available_capabilities", "CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES", None),
+        ("manual_exposure_advertised", "REQUEST_AVAILABLE_CAPABILITIES contains MANUAL_SENSOR", None),
+        ("stream_configurations", "CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP", None),
+        ("ae_target_fps_ranges", "CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES", "fps"),
+        ("af_available_modes", "CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES", None),
+        ("lens_min_focus_distance", "CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE", "diopters"),
+        ("exposure_time_range_ns", "CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE", "ns"),
+        ("sensitivity_range", "CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE", "ISO"),
+        ("awb_available_modes", "CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES", None),
+        ("ae_lock_available", "CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE", None),
+        ("awb_lock_available", "CameraCharacteristics.CONTROL_AWB_LOCK_AVAILABLE", None),
+        ("physical_camera_ids", "CameraCharacteristics.getPhysicalCameraIds() (API 28)", None),
+        ("video_profiles", "CamcorderProfile.hasProfile(cameraId, QUALITY_*)", None),
+        ("capture_sensor_timestamp", "CaptureResult.SENSOR_TIMESTAMP (manual-control capture)", "ns"),
+    )
+
+    def __init__(self, manual_control_check: Optional[Dict[str, Any]] = None):
+        self.check_cfg = manual_control_check if manual_control_check is not None else _load_camera_check_config()
+        for key in ("exposure_time_relative_tolerance", "sensitivity_relative_tolerance"):
+            v = self.check_cfg.get(key)
+            if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
+                raise ValueError(f"camera_manual_control_check.{key} must be a non-negative number (got {v!r})")
 
     def collect(self, camera_props: Optional[Dict[str, Any]] = None) -> List[CameraCapability]:
         props = camera_props or {}
-        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         is_real = bool(props.get("is_real_device_observation", False))
+        id_rec = _app_rec(props, "camera_id_list") if _app_collected(props) else None
+        camera_ids: Optional[List[str]] = None
+        if id_rec and id_rec.get("state") == RuntimeState.AVAILABLE.value and isinstance(id_rec.get("value"), list):
+            camera_ids = [str(c) for c in id_rec["value"]]
+        if camera_ids:
+            return [self._camera(props, cid, is_real) for cid in camera_ids]
+        return [self._unidentified(props, is_real, id_rec)]
 
-        camera_ids = props.get("camera_ids")
-        if not camera_ids and "camera_count" in props:
-            try:
-                cnt = int(props["camera_count"])
-                camera_ids = [str(i) for i in range(cnt)] if cnt > 0 else ["0"]
-            except (ValueError, TypeError):
-                camera_ids = ["0"]
-        if not camera_ids:
-            camera_ids = ["0"]
+    # -- no identified cameras -----------------------------------------------------------------------------
+    def _unidentified(self, props: Dict[str, Any], is_real: bool, id_rec: Optional[Dict[str, Any]]) -> CameraCapability:
+        """One placeholder entry, camera_id "UNIDENTIFIED", when no camera ID list was observed. It carries the
+        reason (app probe state, host failure, not tested) and never a generated ID or facing."""
+        src = "CameraManager.getCameraIdList()"
+        probe = _app_rec(props, "camera_probe") if _app_collected(props) else None
+        if id_rec and id_rec.get("state") == RuntimeState.AVAILABLE.value:
+            base = _make("camera_availability", RuntimeState.UNAVAILABLE.value, is_real=is_real, source=src,
+                         verification_method="camera_id_list_check", evidence_ref=f"{APP_EVIDENCE}#camera_id_list",
+                         notes="getCameraIdList() returned no camera.")
+        elif id_rec or probe:
+            rec = id_rec or probe
+            base = _app_result(props, "camera_availability", record=rec,
+                               anchor="camera_id_list" if id_rec else "camera_probe", source=src,
+                               verification_method="camera_id_list_check")
+            if base.state == RuntimeState.ERROR.value and not base.error_message:
+                base.error_message = "Android app camera probe failed"
+        elif props.get("probe_error_camera"):
+            base = _make("camera_availability", RuntimeState.ERROR.value, is_real=is_real, source=src,
+                         verification_method="camera_id_list_check", evidence_ref=f"{COMMANDS_LOG}#probe_error_camera",
+                         error_message=props["probe_error_camera"])
+        else:
+            base = _app_result(props, "camera_id_list", record_name="camera_availability", source=src,
+                               verification_method="camera_id_list_check")
+        results = [base]
+        # When the camera probe as a whole was attempted and failed (ERROR), or the camera service/cameras are
+        # absent (UNAVAILABLE) or refused (PERMISSION_REQUIRED), every per-camera check inherits that state and its
+        # evidence (P5-03). Only when nothing was attempted do they stay NOT_TESTED.
+        inherited = base.state in (RuntimeState.ERROR.value, RuntimeState.UNAVAILABLE.value,
+                                   RuntimeState.PERMISSION_REQUIRED.value)
 
-        results_list: List[CameraCapability] = []
+        def dependent(metric: str, source: str, unit: Optional[str], method: str) -> CapabilityResult:
+            if inherited:
+                return _make(metric, base.state, is_real=is_real, source=source, unit=unit, verification_method=method,
+                             evidence_ref=base.evidence_ref, error_message=base.error_message,
+                             notes=_join_notes("Inherited from the camera probe (no camera ID observed).", base.notes))
+            return _make(metric, RuntimeState.NOT_TESTED.value, is_real=is_real, source=source, unit=unit,
+                         verification_method=method, notes="No camera ID was observed, so no per-camera check ran.")
 
-        for cid in camera_ids:
-            cam_info = props.get(f"camera_{cid}", {})
-            res_cam: List[CapabilityResult] = []
-            probe_err_cam = props.get("probe_error_camera")
+        for metric, source, unit in self.PER_CAMERA_METRICS:
+            results.append(dependent(metric, source, unit, "camera_characteristics_check"))
+        honoured = dependent("manual_control_honoured", "CaptureResult advertised-vs-honoured check", None,
+                             "capture_result_honoured_check")
+        return CameraCapability(camera_id="UNIDENTIFIED", lens_facing=None, results=results,
+                                manual_control_honoured=honoured)
 
-            # Hardware level
-            hw_level = cam_info.get("hardware_level") if isinstance(cam_info, dict) else None
-            if hw_level is None and f"camera_{cid}_hardware_level" in props:
-                hw_level = props[f"camera_{cid}_hardware_level"]
+    # -- one identified camera -----------------------------------------------------------------------------
+    def _camera(self, props: Dict[str, Any], cid: str, is_real: bool) -> CameraCapability:
+        recs = (props.get("app_camera_records") or {}).get(cid, {})
+        host = (props.get("host_camera_dumpsys") or {}).get(cid)
 
-            app_hw = _app_metric_state(props, f"camera_{cid}_hardware_level")
-            app_cam_probe = _app_metric_state(props, "camera_probe") if cid == "0" else None
-            if hw_level is None and app_hw and app_hw.get("state") in {s.value for s in RuntimeState}:
-                # P5-03: preserve the app's non-AVAILABLE state for this camera metric
-                state_hw = app_hw["state"]
-                val_hw = None
-                err_hw = app_hw.get("error_message")
-                ev_hw = f"{APP_EVIDENCE}#camera_{cid}_hardware_level" if is_real else None
-            elif hw_level is None and app_cam_probe and app_cam_probe.get("state") in {s.value for s in RuntimeState}:
-                # P5-03: the app's camera probe did not succeed as a whole, e.g. ERROR
-                # (CameraAccessException) or UNAVAILABLE (no CameraManager service); keep that state.
-                state_hw = app_cam_probe["state"]
-                val_hw = None
-                if state_hw == RuntimeState.ERROR.value:
-                    err_hw = app_cam_probe.get("error_message") or "Android app camera probe failed"
-                else:
-                    err_hw = app_cam_probe.get("error_message")
-                ev_hw = f"{APP_EVIDENCE}#camera_probe" if is_real else None
-            elif hw_level is None:
-                if probe_err_cam:
-                    state_hw = RuntimeState.ERROR.value
-                    val_hw = None
-                    err_hw = probe_err_cam
-                    ev_hw = "evidence/commands.log#probe_error_camera"
-                else:
-                    state_hw = RuntimeState.NOT_TESTED.value
-                    val_hw = None
-                    err_hw = None
-                    ev_hw = None
-            else:
-                state_hw = RuntimeState.AVAILABLE.value if hw_level is not None else RuntimeState.UNAVAILABLE.value
-                val_hw = hw_level if state_hw == RuntimeState.AVAILABLE.value else None
-                err_hw = None
-                if _is_app_derived(props, f"camera_{cid}_hardware_level"):
-                    ev_hw = f"{APP_EVIDENCE}#camera_{cid}_hardware_level" if (is_real and state_hw == RuntimeState.AVAILABLE.value) else None
-                else:
-                    ev_hw = f"evidence/camera_{cid}_evidence.json#hardware_level" if (is_real and state_hw == RuntimeState.AVAILABLE.value) else None
+        def app_metric(metric: str, source: str, unit: Optional[str] = None, **kw: Any) -> CapabilityResult:
+            return _app_result(props, metric, record=recs.get(metric), anchor=f"camera_telemetry/{cid}/{metric}",
+                               source=f"{source} (ID {cid})", verification_method="camera_characteristics_check",
+                               unit=unit, **kw)
 
-            ver_hw = is_real and state_hw == RuntimeState.AVAILABLE.value
-            res_cam.append(CapabilityResult(
-                metric="hardware_level",
-                state=state_hw,
-                report_status=map_runtime_state_to_report_status(RuntimeState(state_hw), verified=ver_hw),
-                value=val_hw,
-                source=f"CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL (ID {cid})",
-                verified=ver_hw,
-                verification_method="camera_characteristics_check",
-                observed_at=now if ver_hw else None,
-                evidence_ref=ev_hw,
-                error_message=err_hw,
-            ))
+        facing = app_metric("lens_facing", "CameraCharacteristics.LENS_FACING")
+        if facing.state == RuntimeState.AVAILABLE.value and host and host.get("lens_facing"):
+            agree = host["lens_facing"] == facing.value
+            facing.notes = _join_notes(facing.notes, f"Host dumpsys cross-check: {host['lens_facing']} "
+                                                     f"({'agrees' if agree else 'DISAGREES'}).")
+        results = [facing]
+        for metric, source, unit in self.PER_CAMERA_METRICS:
+            res = app_metric(metric, source, unit)
+            if metric == "manual_exposure_advertised" and res.state == RuntimeState.AVAILABLE.value and res.value is not True:
+                # "Not advertised" is UNAVAILABLE, never AVAILABLE with a false value.
+                res = _make(metric, RuntimeState.UNAVAILABLE.value, is_real=is_real, source=res.source,
+                            verification_method=res.verification_method,
+                            evidence_ref=f"{APP_EVIDENCE}#camera_telemetry/{cid}/{metric}",
+                            notes="MANUAL_SENSOR is not advertised.")
+            if metric == "available_capabilities" and res.state == RuntimeState.AVAILABLE.value and host \
+                    and host.get("available_capabilities"):
+                res.notes = _join_notes(res.notes, f"Host dumpsys cross-check lists: {host['available_capabilities']}.")
+            results.append(res)
+        advertised = next(r for r in results if r.metric == "manual_exposure_advertised")
+        honoured = self._honoured(props, cid, recs.get("manual_control_honoured"), advertised, is_real)
+        return CameraCapability(camera_id=cid,
+                                lens_facing=facing.value if facing.state == RuntimeState.AVAILABLE.value else None,
+                                results=results, manual_control_honoured=honoured)
 
-            # Manual exposure control advertised
-            if "manual_exposure_advertised" not in cam_info:
-                state_exp = RuntimeState.NOT_TESTED.value
-                val_exp = None
-            else:
-                man_exp = cam_info.get("manual_exposure_advertised")
-                state_exp = RuntimeState.AVAILABLE.value if man_exp is True else RuntimeState.UNAVAILABLE.value
-                val_exp = "MANUAL_SENSOR capability advertised" if state_exp == RuntimeState.AVAILABLE.value else None
+    def _honoured(self, props: Dict[str, Any], cid: str, rec: Optional[Dict[str, Any]],
+                  advertised: CapabilityResult, is_real: bool) -> CapabilityResult:
+        metric = "manual_control_honoured"
+        ref = f"{APP_EVIDENCE}#camera_telemetry/{cid}/{metric}"
+        common = dict(is_real=is_real, source=f"CaptureResult vs requested manual exposure/sensitivity (ID {cid})",
+                      verification_method="capture_result_honoured_check")
+        if rec is None or rec.get("state") != RuntimeState.AVAILABLE.value:
+            res = _app_result(props, metric, record=rec, anchor=f"camera_telemetry/{cid}/{metric}",
+                              source=common["source"], verification_method=common["verification_method"])
+            if res.state == RuntimeState.UNAVAILABLE.value and advertised.state != RuntimeState.AVAILABLE.value:
+                res.notes = _join_notes(res.notes, "Manual control is not advertised, so it is not honoured.")
+            return res
+        if advertised.state != RuntimeState.AVAILABLE.value:
+            return _make(metric, RuntimeState.ERROR.value, evidence_ref=ref, **common,
+                         error_message="Capture check reported although MANUAL_SENSOR is not advertised (inconsistent).")
+        v = rec.get("value") if isinstance(rec.get("value"), dict) else {}
+        keys = ("requested_exposure_time_ns", "reported_exposure_time_ns", "requested_sensitivity", "reported_sensitivity")
+        if not all(isinstance(v.get(k), (int, float)) and not isinstance(v.get(k), bool) for k in keys):
+            return _make(metric, RuntimeState.ERROR.value, evidence_ref=ref, **common,
+                         error_message="Capture check record lacks requested/reported exposure and sensitivity values.")
+        exp_tol = self.check_cfg["exposure_time_relative_tolerance"]
+        iso_tol = self.check_cfg["sensitivity_relative_tolerance"]
 
-            ver_exp = is_real and state_exp == RuntimeState.AVAILABLE.value
-            res_cam.append(CapabilityResult(
-                metric="manual_exposure_advertised",
-                state=state_exp,
-                report_status=map_runtime_state_to_report_status(RuntimeState(state_exp), verified=ver_exp),
-                value=val_exp,
-                source=f"CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES (ID {cid})",
-                verified=ver_exp,
-                verification_method="camera_capabilities_check",
-                observed_at=now if ver_exp else None,
-                evidence_ref=f"evidence/camera_{cid}_evidence.json#manual_exposure" if ver_exp else None,
-            ))
+        def within(req: float, rep: float, tol: float) -> bool:
+            return req > 0 and abs(rep - req) <= tol * req
 
-            # Advertised vs Honoured check for manual control
-            if "manual_control_honoured" not in cam_info:
-                state_hon = RuntimeState.NOT_TESTED.value
-                val_hon = None
-            else:
-                honoured = cam_info.get("manual_control_honoured")
-                if honoured is True:
-                    state_hon = RuntimeState.AVAILABLE.value
-                    val_hon = "CaptureResult confirms set exposure/ISO honoured"
-                elif honoured is False:
-                    state_hon = RuntimeState.UNAVAILABLE.value
-                    val_hon = None
-                else:
-                    state_hon = RuntimeState.NOT_TESTED.value
-                    val_hon = None
+        exp_ok = within(v["requested_exposure_time_ns"], v["reported_exposure_time_ns"], exp_tol)
+        iso_ok = within(v["requested_sensitivity"], v["reported_sensitivity"], iso_tol)
+        detail = (f"exposure requested {v['requested_exposure_time_ns']} ns, reported {v['reported_exposure_time_ns']} ns; "
+                  f"sensitivity requested {v['requested_sensitivity']}, reported {v['reported_sensitivity']} "
+                  f"(tolerances: exposure {exp_tol}, sensitivity {iso_tol}).")
+        if exp_ok and iso_ok:
+            return _make(metric, RuntimeState.AVAILABLE.value, value="CaptureResult matched the requested manual "
+                         "exposure time and sensitivity", evidence_ref=ref, notes=detail, **common)
+        return _make(metric, RuntimeState.UNAVAILABLE.value, evidence_ref=ref, **common,
+                     notes=f"Advertised but NOT HONOURED: {detail}")
 
-            ver_hon = is_real and state_hon == RuntimeState.AVAILABLE.value
-            res_honoured = CapabilityResult(
-                metric="manual_control_honoured",
-                state=state_hon,
-                report_status=map_runtime_state_to_report_status(RuntimeState(state_hon), verified=ver_hon),
-                value=val_hon,
-                source=f"CaptureResult metadata verification (ID {cid})",
-                verified=ver_hon,
-                verification_method="capture_result_honoured_check",
-                observed_at=now if ver_hon else None,
-                evidence_ref=f"evidence/camera_{cid}_evidence.json#manual_control_honoured" if ver_hon else None,
-                notes="Distinguishes advertised capabilities from actually honoured camera capture parameters.",
-            )
 
-            results_list.append(CameraCapability(
-                camera_id=cid,
-                lens_facing=cam_info.get("lens_facing", "BACK"),
-                results=res_cam,
-                manual_control_honoured=res_honoured,
-            ))
+def _load_camera_check_config() -> Dict[str, Any]:
+    import yaml  # local import: only needed when no explicit settings are passed
+    cfg_path = Path(__file__).resolve().parents[3] / "configs" / "device_characterization.yaml"
+    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    check = cfg.get("camera_manual_control_check")
+    if not isinstance(check, dict):
+        raise ValueError("configs/device_characterization.yaml lacks camera_manual_control_check")
+    return check
 
-        return results_list
+
+BACKEND_BLOCKED_NOTE = (
+    "BACKEND IMPLEMENTATION BLOCKED PENDING RESEARCHER DECISION: no runtime dependency and no reference graph "
+    "exist yet, so this check did not run (see the Step 10D correction-round CHANGELOG entry)."
+)
 
 
 class InferenceBackendCapabilityCollector:
@@ -1587,7 +1945,8 @@ class InferenceBackendCapabilityCollector:
                 verified=ver_avail,
                 verification_method="backend_init_check",
                 observed_at=now if ver_avail else None,
-                evidence_ref=f"evidence/backend_{b_name}_evidence.json#availability" if ver_avail else None,
+                evidence_ref=f"{APP_EVIDENCE}#backends/{b_name}/availability" if ver_avail else None,
+                notes=None if "available" in b_info else BACKEND_BLOCKED_NOTE,
             )
 
             if "delegation_working" not in b_info:
@@ -1608,7 +1967,8 @@ class InferenceBackendCapabilityCollector:
                 verified=ver_deleg,
                 verification_method="delegate_load_check",
                 observed_at=now if ver_deleg else None,
-                evidence_ref=f"evidence/backend_{b_name}_evidence.json#delegation" if ver_deleg else None,
+                evidence_ref=f"{APP_EVIDENCE}#backends/{b_name}/delegation" if ver_deleg else None,
+                notes=None if "delegation_working" in b_info else BACKEND_BLOCKED_NOTE,
             )
 
             if "probability_output_valid" not in b_info:
@@ -1629,8 +1989,9 @@ class InferenceBackendCapabilityCollector:
                 verified=ver_prob,
                 verification_method="reference_graph_output_check",
                 observed_at=now if ver_prob else None,
-                evidence_ref=f"evidence/backend_{b_name}_evidence.json#probability_output" if ver_prob else None,
-                notes="Capability check only; no latency, throughput or accuracy benchmarking performed.",
+                evidence_ref=f"{APP_EVIDENCE}#backends/{b_name}/probability_output" if ver_prob else None,
+                notes=("Capability check only; no latency, throughput or accuracy benchmarking performed."
+                       if "probability_output_valid" in b_info else BACKEND_BLOCKED_NOTE),
             )
 
             out.append(BackendCapability(
@@ -1658,48 +2019,28 @@ class ProfilingCapabilityCollector:
         is_real = bool(props.get("is_real_device_observation", False))
         results: List[CapabilityResult] = []
 
-        if "system_nano_time_available" not in props:
-            state_nano = RuntimeState.NOT_TESTED.value
-            val_nano = None
-        else:
-            nano = props.get("system_nano_time_available")
-            state_nano = RuntimeState.AVAILABLE.value if nano is True else RuntimeState.UNAVAILABLE.value
-            val_nano = "System.nanoTime() / SystemClock.elapsedRealtimeNanos() functional" if state_nano == RuntimeState.AVAILABLE.value else None
+        # Clock sources (B9): monotonicity, resolution and call overhead measured by the app. Clock
+        # characterization only (protocol P5); not a benchmark and not a performance result.
+        nano = _app_result(props, "system_nano_time",
+                           source="System.nanoTime() / SystemClock.elapsedRealtimeNanos()",
+                           verification_method="clock_source_check", unit="ns",
+                           notes="Clock characterization only; no benchmark-quality precision is claimed.")
+        if nano.state == RuntimeState.AVAILABLE.value:
+            v = nano.value if isinstance(nano.value, dict) else {}
+            clocks = [v.get(k) for k in ("system_nano_time", "elapsed_realtime_nanos")]
+            if not all(isinstance(c, dict) and c.get("monotonic") is True for c in clocks):
+                nano = _make("system_nano_time", RuntimeState.ERROR.value, is_real=is_real, unit="ns",
+                             source=nano.source, verification_method=nano.verification_method,
+                             evidence_ref=f"{APP_EVIDENCE}#system_nano_time",
+                             error_message="Clock check did not report both clocks as monotonic.")
+        results.append(nano)
 
-        ver_nano = is_real and state_nano == RuntimeState.AVAILABLE.value
-        results.append(CapabilityResult(
-            metric="system_nano_time",
-            state=state_nano,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_nano), verified=ver_nano),
-            value=val_nano,
-            unit="ns",
-            source="System.nanoTime() / SystemClock.elapsedRealtimeNanos()",
-            verified=ver_nano,
-            verification_method="clock_source_check",
-            observed_at=now if ver_nano else None,
-            evidence_ref="evidence/profiling_evidence.json#nano_time" if ver_nano else None,
-        ))
-
-        if "android_trace_api_available" not in props:
-            state_trace = RuntimeState.NOT_TESTED.value
-            val_trace = None
-        else:
-            tr = props.get("android_trace_api_available")
-            state_trace = RuntimeState.AVAILABLE.value if tr is True else RuntimeState.UNAVAILABLE.value
-            val_trace = "android.os.Trace beginSection/endSection functional" if state_trace == RuntimeState.AVAILABLE.value else None
-
-        ver_trace = is_real and state_trace == RuntimeState.AVAILABLE.value
-        results.append(CapabilityResult(
-            metric="android_trace_api",
-            state=state_trace,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_trace), verified=ver_trace),
-            value=val_trace,
-            source="android.os.Trace",
-            verified=ver_trace,
-            verification_method="trace_api_check",
-            observed_at=now if ver_trace else None,
-            evidence_ref="evidence/profiling_evidence.json#trace_api" if ver_trace else None,
-        ))
+        # android.os.Trace (B10): a successful API call establishes availability only. VERIFIED would require
+        # the section to appear in a captured system trace, which is not performed here.
+        results.append(_app_result(props, "android_trace_api",
+                                   source="android.os.Trace.beginSection/endSection; Trace.isEnabled (API 29)",
+                                   verification_method="trace_api_call_check", verifiable=False,
+                                   notes="API call succeeded only; section visibility in a captured trace is not verified."))
 
         if "atrace_adb_available" not in props:
             state_atrace = RuntimeState.NOT_TESTED.value
@@ -1710,9 +2051,9 @@ class ProfilingCapabilityCollector:
             atrace = props.get("atrace_adb_available")
             if atrace is True:
                 state_atrace = RuntimeState.AVAILABLE.value
-                val_atrace = "atrace / systrace / perfetto via ADB available"
+                val_atrace = "atrace category listing via ADB succeeded"
                 cond_atrace = "HOST ADB SHELL"
-                ver_atrace = is_real
+                ver_atrace = False  # condition-gated, and a category listing is not a captured trace
             else:
                 state_atrace = RuntimeState.UNAVAILABLE.value
                 val_atrace = None
@@ -1728,104 +2069,106 @@ class ProfilingCapabilityCollector:
             condition=cond_atrace,
             verified=ver_atrace,
             verification_method="adb_atrace_check",
-            observed_at=now if ver_atrace else None,
-            evidence_ref="evidence/atrace_evidence.txt" if ver_atrace else None,
+            observed_at=now if (is_real and state_atrace != RuntimeState.NOT_TESTED.value) else None,
+            evidence_ref="evidence/atrace_evidence.txt" if (is_real and state_atrace != RuntimeState.NOT_TESTED.value) else None,
+            notes=("atrace --list_categories succeeded; capturing a trace across USB disconnection (D-16 B) "
+                   "is not tested here." if state_atrace == RuntimeState.AVAILABLE.value else None),
         ))
 
         return results
 
 
 class EnergyMeasurementCapabilityChecker:
-    """Collector 11: EnergyMeasurementCapabilityChecker.
-    Evaluates E-1 (battery-side external), E-2 (supply-powered session), E-3 (software relative counters).
-    F-12: Unassessed feasibility stays NOT_TESTED. selected_level requires evidence.
+    """Collector 11: EnergyMeasurementCapabilityChecker (protocol §6, D-16 hierarchy).
+
+    - E-1 / E-2 are physical checks recorded by the researcher in the evidence file named by
+      `energy_feasibility_evidence` (configs/device_characterization.yaml). Not assessed -> NOT_TESTED;
+      assessed -> EXTERNAL_REQUIRED (REQUIRES EXTERNAL INSTRUMENTATION) citing that file. Never inferred.
+    - E-3 is derived from the run's battery counter records (current now, charge counter, energy counter):
+      a demonstrated counter -> AVAILABLE / REQUIRES PILOT VALIDATION (agreement, D-16); all unsupported ->
+      UNAVAILABLE; otherwise NOT_TESTED.
+    - selected_level follows energy_evidence.select_energy_level(): a preferred level is never skipped while it
+      is unassessed, so software counters alone never select E-3. Absolute energy is never claimed.
     """
 
-    def collect(self, energy_props: Optional[Dict[str, Any]] = None) -> EnergyCapability:
+    COUNTER_METRICS = ("battery_current_now", "battery_charge_counter", "battery_energy_counter")
+
+    def collect(self, energy_props: Optional[Dict[str, Any]] = None,
+                battery_results: Optional[List[CapabilityResult]] = None) -> EnergyCapability:
         props = energy_props or {}
-        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         is_real = bool(props.get("is_real_device_observation", False))
+        evidence = props.get("energy_feasibility") or {}
+        data = evidence.get("data") if isinstance(evidence, dict) else None
+        errors = evidence.get("errors") if isinstance(evidence, dict) else None
+        ev_ref = props.get("energy_feasibility_evidence_ref")
 
-        # E-1 Battery-side reference
-        if "E1_feasible" not in props:
-            state_e1 = RuntimeState.NOT_TESTED.value
-            rep_e1 = ReportStatus.NOT_YET_VERIFIED.value
-            notes_e1 = "Physical battery terminal access feasibility not yet assessed."
-        else:
-            e1 = props.get("E1_feasible")
-            state_e1 = RuntimeState.EXTERNAL_REQUIRED.value
-            rep_e1 = ReportStatus.REQUIRES_EXTERNAL_INSTRUMENTATION.value
-            notes_e1 = "Requires physical battery terminal access and safety sign-off." if e1 else "Infeasible battery-side access."
-
-        res_e1 = CapabilityResult(
-            metric="E1_battery_side_reference",
-            state=state_e1,
-            report_status=rep_e1,
-            value=None,
-            source="External power meter (e.g. Monsoon / Yokogawa / Keysight)",
-            verified=False,
-            verification_method="external_hardware_feasibility_check",
-            notes=notes_e1,
+        e1 = self._level(
+            "E1_battery_side_reference", data, errors, ev_ref,
+            source="Researcher physical inspection: battery-side external reference (power analyser bypass)",
+            describe=lambda d: (f"feasible={d.get('feasible')}, reference_validated={d.get('reference_validated')}, "
+                                f"safety_signoff={d.get('safety_signoff')}, instrument={d.get('instrument_model')}"),
         )
-
-        # E-2 Supply-powered session
-        if "E2_feasible" not in props:
-            state_e2 = RuntimeState.NOT_TESTED.value
-            rep_e2 = ReportStatus.NOT_YET_VERIFIED.value
-            notes_e2 = "Supply-powered session feasibility not yet assessed."
-        else:
-            e2 = props.get("E2_feasible")
-            state_e2 = RuntimeState.EXTERNAL_REQUIRED.value
-            rep_e2 = ReportStatus.REQUIRES_EXTERNAL_INSTRUMENTATION.value
-            notes_e2 = "USB battery charging current must be accounted for or isolated." if e2 else "Infeasible USB supply-powered session."
-
-        res_e2 = CapabilityResult(
-            metric="E2_supply_powered_session",
-            state=state_e2,
-            report_status=rep_e2,
-            value=None,
-            source="External USB power meter / inline power monitor",
-            verified=False,
-            verification_method="external_usb_meter_check",
-            notes=notes_e2,
+        e2 = self._level(
+            "E2_supply_powered_session", data, errors, ev_ref,
+            source="Researcher session: external meter on a supply-powered session with charging excluded",
+            describe=lambda d: (f"feasible={d.get('feasible')}, reference_validated={d.get('reference_validated')}, "
+                                f"non_charging_verified={d.get('non_charging_verified')}, meter={d.get('meter_model')}"),
         )
+        e3, e3_available = self._software_counters(battery_results, is_real)
 
-        # E-3 Software relative counters
-        if "E3_counters_available" not in props:
-            state_e3 = RuntimeState.NOT_TESTED.value
-            val_e3 = None
-        else:
-            e3 = props.get("E3_counters_available")
-            state_e3 = RuntimeState.AVAILABLE.value if e3 is True else RuntimeState.UNAVAILABLE.value
-            val_e3 = "BatteryManager software current/charge counters readable" if state_e3 == RuntimeState.AVAILABLE.value else None
-
-        ver_e3 = is_real and state_e3 == RuntimeState.AVAILABLE.value
-        res_e3 = CapabilityResult(
-            metric="E3_software_counters",
-            state=state_e3,
-            report_status=map_runtime_state_to_report_status(RuntimeState(state_e3), verified=ver_e3),
-            value=val_e3,
-            source="BatteryManager BATTERY_PROPERTY_CURRENT_NOW / CHARGE_COUNTER",
-            verified=ver_e3,
-            verification_method="software_counter_check",
-            observed_at=now if ver_e3 else None,
-            evidence_ref="evidence/battery_dumpsys_evidence.txt#E3_counters" if ver_e3 else None,
-            notes="Relative software comparison only; NO absolute energy claimed.",
-        )
-
-        # Level selection based on explicit evidence
-        selected_level = None
-        if props.get("E1_feasible") is True:
-            selected_level = "E-1"
-        elif props.get("E2_feasible") is True:
-            selected_level = "E-2"
-        elif props.get("E3_counters_available") is True:
-            selected_level = "E-3"
+        from src.monitoring.characterization.energy_evidence import select_energy_level
+        selected = select_energy_level(
+            (data or {}).get("E1_battery_side_reference"), (data or {}).get("E2_supply_powered_session"), e3_available
+        ) if data else None
 
         return EnergyCapability(
-            E1_battery_side_reference=res_e1,
-            E2_supply_powered_session=res_e2,
-            E3_software_counters=res_e3,
-            selected_level=selected_level,
+            E1_battery_side_reference=e1,
+            E2_supply_powered_session=e2,
+            E3_software_counters=e3,
+            selected_level=selected,
             absolute_energy_claimed=False,  # FIXED FALSE
         )
+
+    @staticmethod
+    def _level(key: str, data: Optional[Dict[str, Any]], errors: Optional[List[str]], ev_ref: Optional[str],
+               source: str, describe) -> CapabilityResult:
+        common = dict(is_real=True, source=source, verification_method="researcher_feasibility_record")
+        if errors:
+            return _make(key, RuntimeState.ERROR.value, evidence_ref=ev_ref, **common,
+                         error_message="Energy feasibility evidence file is invalid: " + "; ".join(errors))
+        level = (data or {}).get(key)
+        if not level:
+            return _make(key, RuntimeState.NOT_TESTED.value, **common,
+                         notes="No researcher energy-feasibility evidence configured (energy_feasibility_evidence: null).")
+        if level.get("assessed") is not True:
+            return _make(key, RuntimeState.NOT_TESTED.value, evidence_ref=ev_ref, **common,
+                         notes="Researcher evidence file marks this level as not yet assessed.")
+        return _make(key, RuntimeState.EXTERNAL_REQUIRED.value, evidence_ref=f"{ev_ref}#{key}" if ev_ref else None,
+                     **common, notes=f"Assessed by {level.get('assessed_by')} on {level.get('assessed_on')}: {describe(level)}.")
+
+    def _software_counters(self, battery_results: Optional[List[CapabilityResult]],
+                           is_real: bool) -> Tuple[CapabilityResult, Optional[bool]]:
+        source = "BatteryManager CURRENT_NOW / CHARGE_COUNTER / ENERGY_COUNTER (battery telemetry records)"
+        common = dict(is_real=is_real, source=source, verification_method="software_counter_derivation")
+        if not battery_results:
+            return _make("E3_software_counters", RuntimeState.NOT_TESTED.value, **common,
+                         notes="Battery counter records not available to this check."), None
+        by_metric = {r.metric: r for r in battery_results if r.metric in self.COUNTER_METRICS}
+        demonstrated = [r for r in by_metric.values()
+                        if r.state == RuntimeState.AVAILABLE.value and r.value not in (0, 0.0, None)]
+        if demonstrated:
+            first = demonstrated[0]
+            return _make("E3_software_counters", RuntimeState.AVAILABLE.value, is_real=is_real,
+                         value=f"Software counters demonstrated: {', '.join(r.metric for r in demonstrated)}",
+                         source=source, verification_method="software_counter_derivation",
+                         evidence_ref=first.evidence_ref, pilot=True,
+                         notes="Relative software comparison only; NO absolute energy claimed. Agreement with an "
+                               "external reference: REQUIRES PILOT VALIDATION (D-16; threshold not yet decided)."), True
+        states = {m: r.state for m, r in by_metric.items()}
+        unsupported = (RuntimeState.UNAVAILABLE.value, RuntimeState.API_UNSUPPORTED.value)
+        if len(by_metric) == len(self.COUNTER_METRICS) and all(st in unsupported for st in states.values()):
+            ref = next((r.evidence_ref for r in by_metric.values() if r.evidence_ref), None)
+            return _make("E3_software_counters", RuntimeState.UNAVAILABLE.value, evidence_ref=ref, **common,
+                         notes=f"All software counters unsupported: {states}."), False
+        return _make("E3_software_counters", RuntimeState.NOT_TESTED.value, **common,
+                     notes=f"No software counter demonstrated yet; counter states: {states}."), None

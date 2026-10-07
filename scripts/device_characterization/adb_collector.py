@@ -16,6 +16,32 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import yaml
+
+from src.monitoring.characterization import host_probes
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+DEFAULT_CONFIG_PATH = ROOT / "configs" / "device_characterization.yaml"
+
+REQUIRED_PROBE_KEYS = (
+    "cpufreq_sysfs_pattern", "cpufreq_policy_dir", "cpufreq_policy_files", "thermal_sysfs_pattern",
+    "thermal_zone_scan_count", "kgsl_gpu_clock_path", "kgsl_gpu_busy_path", "psi_memory_path",
+    "kernel_release_command",
+)
+
+
+def load_probe_config(config_path: Path = DEFAULT_CONFIG_PATH) -> Dict[str, Any]:
+    """Loads and validates the `probes` block of configs/device_characterization.yaml (A10: no hidden paths)."""
+    cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
+    return validate_probe_config(cfg.get("probes") or {})
+
+
+def validate_probe_config(probes: Dict[str, Any]) -> Dict[str, Any]:
+    missing = [k for k in REQUIRED_PROBE_KEYS if k not in probes]
+    if missing:
+        raise ValueError(f"configs/device_characterization.yaml probes block is missing keys: {missing}")
+    return dict(probes)
+
 
 def _get_adb_binary() -> str:
     sdk_adb = os.path.expanduser("~/AppData/Local/Android/Sdk/platform-tools/adb.exe")
@@ -27,10 +53,12 @@ def _get_adb_binary() -> str:
 class ADBCollector:
     """Host-side ADB collector for querying connected Android device shell paths."""
 
-    def __init__(self, device_id: Optional[str] = None, timeout_seconds: int = 15):
+    def __init__(self, device_id: Optional[str] = None, timeout_seconds: int = 15,
+                 probe_config: Optional[Dict[str, Any]] = None):
         self.device_id = device_id
         self.timeout = timeout_seconds
         self.command_logs: List[Dict[str, Any]] = []
+        self.probes = validate_probe_config(probe_config) if probe_config else load_probe_config()
 
     def _adb_cmd(self, args: List[str]) -> Tuple[int, str, str]:
         adb_bin = _get_adb_binary()
@@ -145,9 +173,10 @@ class ADBCollector:
 
     def check_thermal_zones(self) -> List[Dict[str, str]]:
         zones = []
-        for i in range(10):
-            t_path = f"/sys/class/thermal/thermal_zone{i}/type"
-            v_path = f"/sys/class/thermal/thermal_zone{i}/temp"
+        pattern = self.probes["thermal_sysfs_pattern"]
+        for i in range(int(self.probes["thermal_zone_scan_count"])):
+            t_path = f"{pattern % i}/type"
+            v_path = f"{pattern % i}/temp"
             ok_t, name = self.read_file(t_path)
             ok_v, temp = self.read_file(v_path)
             if ok_t and ok_v:
@@ -185,13 +214,27 @@ class ADBCollector:
     def parse_dumpsys_battery(self, text: str) -> Dict[str, Any]:
         """Parses dumpsys battery output."""
         res: Dict[str, Any] = {}
+        fields: List[str] = []
         for line in text.splitlines():
             line = line.strip()
             if ":" in line:
                 k, v = line.split(":", 1)
                 k = k.strip()
                 v = v.strip()
-                if k == "level":
+                fields.append(k)
+                if k == "Charge counter":
+                    try:
+                        res["battery_charge_counter"] = int(v)
+                    except ValueError:
+                        res["probe_error_battery_charge_counter"] = f"Failed to parse charge counter value: '{v}'"
+                elif k == "health":
+                    try:
+                        res["battery_health_code"] = int(v)
+                    except ValueError:
+                        pass
+                elif k == "present":
+                    res["battery_present"] = (v == "true")
+                elif k == "level":
                     try:
                         res["battery_level_percent"] = int(v)
                     except ValueError:
@@ -232,7 +275,18 @@ class ADBCollector:
                         res["probe_error_battery_current"] = f"Failed to parse battery current value: '{v}'"
         if "charging_state" not in res:
             res["charging_state"] = False
+        # Which fields this build's dumpsys prints: lets collectors say "field not printed" instead of NOT_TESTED silently.
+        res["battery_dumpsys_fields"] = fields
         return res
+
+    def probe_path(self, path: str) -> Dict[str, Any]:
+        """Reads one path with `adb shell cat` and returns the structured probe record (outcome + raw streams)."""
+        code, out, err = self._adb_cmd(["shell", "cat", path])
+        return host_probes.probe_record(path, code, out, err)
+
+    def probe_command(self, args: List[str]) -> Dict[str, Any]:
+        code, out, err = self._adb_cmd(["shell"] + list(args))
+        return host_probes.probe_record(" ".join(args), code, out, err)
 
     def get_boot_id(self) -> str:
         ok, out = self.read_file("/proc/sys/kernel/random/boot_id")
@@ -321,8 +375,38 @@ class ADBCollector:
             })
             return "APP_OUTPUT_ERROR", None
 
-    # App metrics (CharacterizationRunner.kt) that the host collectors consume.
-    # Any other app metric stays only in the raw app evidence file.
+    # ------------------------------------------------------------------
+    # Android app -> host bridge (A2)
+    # ------------------------------------------------------------------
+    # Explicit registry of the app report (CharacterizationRunner.kt): section -> metrics the host consumes.
+    # Anything outside the registry is not used as an observation; it is listed in
+    # `app_unrecognised_items` and stays only in the raw evidence file (android_app_evidence.json).
+    APP_SECTION_METRICS: Dict[str, Tuple[str, ...]] = {
+        "device_identity": ("manufacturer", "model", "soc_model", "storage_total_bytes"),
+        "memory_telemetry": ("total_ram_mb", "available_memory_mb", "low_memory_flag", "memory_threshold_mb",
+                             "app_heap_allocated_mb", "app_pss_kb"),
+        "thermal_capability": ("thermal_status_api", "thermal_status_listener"),
+        "battery_telemetry": ("battery_level_percent", "battery_voltage", "battery_temperature", "is_charging",
+                              "battery_property_current_now", "battery_property_current_average",
+                              "battery_property_charge_counter", "battery_property_energy_counter"),
+        "service_capability": ("service_PowerManager", "service_HardwarePropertiesManager",
+                               "service_CameraManager", "service_ActivityManager", "service_BatteryManager",
+                               "power_save_mode"),
+        "cpu_telemetry": ("app_cpu_time",),
+        "gpu_capability": ("gpu_renderer", "gpu_vulkan_support"),
+        "profiling_capability": ("system_nano_time", "android_trace_api"),
+        "camera_telemetry": ("camera_id_list", "camera_probe", "camera_count", "camera_0_hardware_level"),
+    }
+    # Per-camera metrics: app records in camera_telemetry that carry a "camera_id" field.
+    APP_CAMERA_METRICS: Tuple[str, ...] = (
+        "lens_facing", "hardware_level", "available_capabilities", "manual_exposure_advertised",
+        "manual_control_honoured", "capture_sensor_timestamp", "ae_target_fps_ranges", "af_available_modes",
+        "lens_min_focus_distance", "exposure_time_range_ns", "sensitivity_range", "awb_available_modes",
+        "ae_lock_available", "awb_lock_available", "physical_camera_ids", "stream_configurations",
+        "video_profiles",
+    )
+    # Legacy flat metrics merged into observed_props with host-wins provenance (P5-01). All other app
+    # metrics are consumed only through `app_records` / `app_camera_records`, always citing the app file.
     APP_METRICS = (
         "manufacturer",
         "model",
@@ -333,50 +417,59 @@ class ADBCollector:
         "battery_voltage",
         "battery_temperature",
         "thermal_status_api",
-        "camera_count",
-        "camera_0_hardware_level",
         "camera_probe",
     )
+    _RECORD_FIELDS = ("state", "value", "unit", "error_message", "notes", "details", "source", "min_api")
+
+    @classmethod
+    def _app_record(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        return {k: item.get(k) for k in cls._RECORD_FIELDS}
+
+    @staticmethod
+    def _prefer(existing: Optional[Dict[str, Any]], new: Dict[str, Any]) -> bool:
+        """An AVAILABLE record takes precedence over a non-AVAILABLE one for the same metric."""
+        return not (existing and existing.get("state") == "AVAILABLE" and new.get("state") != "AVAILABLE")
+
+    def _normalize_app_output_full(self, app_parsed: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalizes the app report into {"records", "camera_records", "unrecognised"} (structured, no raw dump)."""
+        records: Dict[str, Dict[str, Any]] = {}
+        camera_records: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        unrecognised: List[str] = []
+        if not isinstance(app_parsed, dict):
+            return {"records": records, "camera_records": camera_records, "unrecognised": unrecognised}
+
+        for section_name, allowed in self.APP_SECTION_METRICS.items():
+            section = app_parsed.get(section_name)
+            items = section if isinstance(section, list) else ([section] if isinstance(section, dict) else [])
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                metric = item.get("metric")
+                cam_id = item.get("camera_id")
+                if section_name == "camera_telemetry" and cam_id is not None:
+                    if metric not in self.APP_CAMERA_METRICS:
+                        unrecognised.append(f"{section_name}/{cam_id}/{metric}")
+                        continue
+                    rec = self._app_record(item)
+                    per_cam = camera_records.setdefault(str(cam_id), {})
+                    if self._prefer(per_cam.get(metric), rec):
+                        per_cam[metric] = rec
+                    continue
+                if metric not in allowed:
+                    unrecognised.append(f"{section_name}/{metric}")
+                    continue
+                rec = self._app_record(item)
+                if self._prefer(records.get(metric), rec):
+                    records[metric] = rec
+        return {"records": records, "camera_records": camera_records, "unrecognised": unrecognised}
 
     def _normalize_app_output(self, app_parsed: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-        """Normalizes the nested JSON schema produced by CharacterizationRunner.kt.
-
-        Returns one record per known app metric: {"state", "value", "unit", "error_message"}.
-        The app's own state is preserved (AVAILABLE, API_UNSUPPORTED, UNAVAILABLE, ERROR);
-        a metric is never treated as available just because it is present.
-        """
-        records: Dict[str, Dict[str, Any]] = {}
-        if not isinstance(app_parsed, dict):
-            return records
-
-        items: List[Any] = []
-        for section_name in ("device_identity", "memory_telemetry", "battery_telemetry",
-                             "thermal_capability", "camera_telemetry"):
-            section = app_parsed.get(section_name)
-            if isinstance(section, list):
-                items.extend(section)
-            elif isinstance(section, dict):
-                # ThermalTelemetryCollector.collect() returns a single CapabilityResult
-                items.append(section)
-
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            metric = item.get("metric")
-            if metric not in self.APP_METRICS:
-                continue
-            record = {
-                "state": item.get("state"),
-                "value": item.get("value"),
-                "unit": item.get("unit"),
-                "error_message": item.get("error_message"),
-            }
-            # Several items can share a metric (e.g. soc_model is emitted once per SDK branch);
-            # an AVAILABLE record takes precedence over a non-AVAILABLE one.
-            if metric in records and records[metric]["state"] == "AVAILABLE" and record["state"] != "AVAILABLE":
-                continue
-            records[metric] = record
-        return records
+        """Legacy view: one record per APP_METRICS metric ({"state", "value", "unit", "error_message"})."""
+        full = self._normalize_app_output_full(app_parsed)
+        return {
+            m: {k: r.get(k) for k in ("state", "value", "unit", "error_message")}
+            for m, r in full["records"].items() if m in self.APP_METRICS
+        }
 
     @staticmethod
     def _merge_app_observations(observed_props: Dict[str, Any], app_records: Dict[str, Dict[str, Any]]) -> None:
@@ -414,7 +507,9 @@ class ADBCollector:
         if app_states:
             observed_props["app_metric_states"] = app_states
 
-    def collect_raw_evidence_and_observations(self, output_dir: Path) -> Tuple[List[Path], Dict[str, Any]]:
+    def collect_raw_evidence_and_observations(
+        self, output_dir: Path, extra_evidence: Optional[Dict[str, bytes]] = None
+    ) -> Tuple[List[Path], Dict[str, Any]]:
         """Collects raw evidence text files, writes observed_props.json & manifest.json."""
         ev_dir = output_dir / "evidence"
         ev_dir.mkdir(parents=True, exist_ok=True)
@@ -422,9 +517,9 @@ class ADBCollector:
         observed_props: Dict[str, Any] = {"is_real_device_observation": True}
         manifest_entries: List[Dict[str, Any]] = []
 
-        def _save_evidence(filename: str, content: str) -> Path:
+        def _save_evidence(filename: str, content: Any) -> Path:
             p = ev_dir / filename
-            data_bytes = content.encode("utf-8")
+            data_bytes = content if isinstance(content, bytes) else content.encode("utf-8")
             p.write_bytes(data_bytes)
             files_saved.append(p)
             sha256 = hashlib.sha256(data_bytes).hexdigest()
@@ -435,6 +530,9 @@ class ADBCollector:
                 "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             })
             return p
+
+        def _save_json_evidence(filename: str, obj: Any) -> Path:
+            return _save_evidence(filename, json.dumps(obj, indent=2, sort_keys=True))
 
         # 1. proc cpuinfo (parsed early for SoC fallback)
         ok_cpu, out_cpu = self.read_file("/proc/cpuinfo")
@@ -458,6 +556,7 @@ class ADBCollector:
             observed_props["api_level"] = int(sdk_str) if sdk_str and sdk_str.isdigit() else None
             observed_props["cpu_abi"] = props.get("ro.product.cpu.abi")
             observed_props["build_fingerprint"] = props.get("ro.build.fingerprint")
+            observed_props["security_patch"] = props.get("ro.build.version.security_patch")
 
             # P-04 SoC property fallback with explicit source property recording
             if props.get("ro.soc.model"):
@@ -518,7 +617,7 @@ class ADBCollector:
             observed_props["probe_error_battery"] = f"Exit code {code_bat}: {err_bat or out_bat}"
 
         # 7. cpufreq
-        ok_freq, out_freq = self.read_file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+        ok_freq, out_freq = self.read_file(self.probes["cpufreq_sysfs_pattern"] % 0)
         if ok_freq and out_freq.strip():
             _save_evidence("cpufreq_evidence.txt", out_freq)
             try:
@@ -529,7 +628,7 @@ class ADBCollector:
             observed_props["probe_error_cpufreq"] = f"Failed to read cpufreq node: {out_freq}"
 
         # 8. GPU sysfs / dumpsys
-        ok_gpu, out_gpu = self.read_file("/sys/class/kgsl/kgsl-3d0/gpuclk")
+        ok_gpu, out_gpu = self.read_file(self.probes["kgsl_gpu_clock_path"])
         if ok_gpu and out_gpu.strip():
             _save_evidence("gpu_evidence.txt", out_gpu)
             try:
@@ -543,8 +642,67 @@ class ADBCollector:
         code_cam, out_cam, err_cam = self._adb_cmd(["shell", "dumpsys", "media.camera"])
         if code_cam == 0:
             _save_evidence("camera_dumpsys_evidence.txt", out_cam)
+            # A9: host cross-check only. Camera statuses come from the app's CameraCharacteristics probe.
+            parsed_cam = host_probes.parse_camera_dumpsys(out_cam)
+            _save_json_evidence("camera_host_evidence.json", {
+                "source": "adb shell dumpsys media.camera (parsed from camera_dumpsys_evidence.txt)",
+                "role": "host cross-check; not a substitute for the app CameraCharacteristics probe",
+                "devices": parsed_cam,
+            })
+            observed_props["host_camera_dumpsys"] = parsed_cam
         else:
             observed_props["probe_error_camera"] = f"Exit code {code_cam}: {err_cam or out_cam}"
+
+        # 9a. CPU frequency observability per CPU group (A7): scaling_cur/scaling_max/cpuinfo_max per policy.
+        policy_dir = self.probes["cpufreq_policy_dir"]
+        listing = self.probe_command(["ls", policy_dir])
+        policies = host_probes.parse_policy_listing(listing["stdout"]) if listing["outcome"] == host_probes.READABLE else []
+        policy_reads: Dict[str, Dict[str, Any]] = {}
+        for pol in policies:
+            for fname in self.probes["cpufreq_policy_files"]:
+                rec = self.probe_path(f"{policy_dir}/{pol}/{fname}")
+                rec["value"] = host_probes.parse_int_node(rec["stdout"]) if rec["outcome"] == host_probes.READABLE else None
+                if rec["outcome"] == host_probes.READABLE and rec["value"] is None:
+                    rec["outcome"] = host_probes.ERROR
+                    rec["parse_error"] = "content is not a single integer"
+                policy_reads.setdefault(pol, {})[fname] = rec
+        _save_json_evidence("cpufreq_policy_evidence.json", {"policy_listing": listing, "policies": policy_reads})
+        observed_props["cpufreq_policy_probe"] = {
+            "listing_outcome": listing["outcome"],
+            "policies": {pol: {f: {"outcome": r["outcome"], "value": r.get("value")} for f, r in files.items()}
+                         for pol, files in policy_reads.items()},
+        }
+
+        # 9b. GPU busy counters (A6): readability of the configured kgsl gpubusy node; no utilisation claim.
+        busy = self.probe_path(self.probes["kgsl_gpu_busy_path"])
+        busy["parsed"] = host_probes.parse_gpubusy(busy["stdout"]) if busy["outcome"] == host_probes.READABLE else None
+        if busy["outcome"] == host_probes.READABLE and busy["parsed"] is None:
+            busy["outcome"] = host_probes.ERROR
+            busy["parse_error"] = "content is not two integer counters"
+        _save_json_evidence("gpu_busy_evidence.json", busy)
+        observed_props["gpu_busy_probe"] = {"outcome": busy["outcome"], "target": busy["target"]}
+
+        # 9c. PSI memory pressure (A5) and kernel release.
+        psi = self.probe_path(self.probes["psi_memory_path"])
+        psi["parsed"] = host_probes.parse_psi(psi["stdout"]) if psi["outcome"] == host_probes.READABLE else None
+        if psi["outcome"] == host_probes.READABLE and psi["parsed"] is None:
+            psi["outcome"] = host_probes.ERROR
+            psi["parse_error"] = "content is not in PSI format"
+        kernel = self.probe_command(self.probes["kernel_release_command"])
+        _save_json_evidence("psi_memory_evidence.json", {"psi": psi, "kernel_release": kernel})
+        observed_props["psi_memory_probe"] = {"outcome": psi["outcome"], "target": psi["target"]}
+        observed_props["kernel_release"] = kernel["stdout"].strip() if kernel["outcome"] == host_probes.READABLE else None
+
+        # 9d. GPU renderer identity from SurfaceFlinger (A8 host source; the app EGL probe is preferred).
+        code_sf, out_sf, err_sf = self._adb_cmd(["shell", "dumpsys", "SurfaceFlinger"])
+        gles = host_probes.parse_surfaceflinger_gles(out_sf) if code_sf == 0 else None
+        gles_lines = [ln for ln in (out_sf or "").splitlines() if "GLES" in ln]
+        _save_evidence("gpu_renderer_evidence.txt",
+                       "COMMAND: adb shell dumpsys SurfaceFlinger (lines containing 'GLES' only)\n"
+                       f"Exit Code: {code_sf}\nSTDERR:\n{err_sf}\nGLES LINES:\n" + "\n".join(gles_lines) + "\n")
+        if code_sf != 0:
+            observed_props["probe_error_surfaceflinger"] = f"Exit code {code_sf}: {err_sf or out_sf}"
+        observed_props["host_gles"] = gles
 
         # 10. Profiling probe (R-02)
         atrace_avail, _ = self.probe_profiling_capability(ev_dir)
@@ -577,7 +735,16 @@ class ADBCollector:
             files_saved.append(ev_dir / "android_app_evidence.json")
             # Normalize nested Android app JSON schema produced by CharacterizationRunner.kt
             observed_props["app_telemetry"] = app_parsed
+            full = self._normalize_app_output_full(app_parsed)
+            observed_props["app_records"] = full["records"]
+            observed_props["app_camera_records"] = full["camera_records"]
+            if full["unrecognised"]:
+                observed_props["app_unrecognised_items"] = full["unrecognised"]
             self._merge_app_observations(observed_props, self._normalize_app_output(app_parsed))
+
+        # 12b. Researcher-provided evidence handed in by the orchestrator (e.g. energy feasibility, D-16).
+        for name, data in (extra_evidence or {}).items():
+            _save_evidence(name, data)
 
         # 13. Boot ID
         observed_props["boot_id"] = self.get_boot_id()

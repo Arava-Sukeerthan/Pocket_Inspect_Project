@@ -205,10 +205,15 @@ def test_repeat_comparison_reports_signoff_separately_from_stability():
         return r
 
     ok = gen.compare_repeat_runs(run(2642, "2026-10-07", "b1"), run(2642, "2026-10-08", "b2"))
-    assert ok["stable"] is True and ok["signoff_allowed"] is True
+    assert ok["stable"] is True and ok["variant_gate_passed"] is True
+    # Correction round: `signoff_allowed` is now the full §9 result. Stable + variant alone is not sign-off
+    # (coverage, D-10, D-16 and the human review gate are not satisfied by this minimal record).
+    assert ok["signoff_allowed"] is False
+    assert ok["signoff"]["run1"]["criteria"]["criterion_4_review_gate"]["status"] == "PENDING_HUMAN_REVIEW"
 
     mismatch = gen.compare_repeat_runs(run(4096, "2026-10-07", "b1"), run(4096, "2026-10-08", "b2"))
     assert mismatch["stable"] is True          # repeatability meaning unchanged
+    assert mismatch["variant_gate_passed"] is False
     assert mismatch["signoff_allowed"] is False
     assert mismatch["variant_signoff"]["run1"]["classification"] == MISMATCH
 

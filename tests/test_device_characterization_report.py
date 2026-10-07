@@ -177,19 +177,20 @@ def test_r09_battery_current_ambiguous_unit_and_safety():
 
     collector = BatteryTelemetryCollector()
 
-    # 1. Explicit mA -> VERIFIED
+    # 1. Explicit mA -> interface demonstrated, but sign convention / update rate are not checked in Step 10D:
+    #    REQUIRES PILOT VALIDATION, never VERIFIED (correction round, protocol §3 VERIFIED definition).
     res_ma = collector.collect({"battery_current_now": 150, "battery_current_unit": "mA", "is_real_device_observation": True})
     curr_res = next(r for r in res_ma.results if r.metric == "battery_current_now")
     assert curr_res.value == 150.0
-    assert curr_res.verified is True
-    assert curr_res.report_status == ReportStatus.VERIFIED.value
+    assert curr_res.verified is False
+    assert curr_res.report_status == ReportStatus.REQUIRES_PILOT_VALIDATION.value
 
-    # 2. Explicit uA -> VERIFIED
+    # 2. Explicit uA -> converted to mA, same classification
     res_ua = collector.collect({"battery_current_now": 150000, "battery_current_unit": "uA", "is_real_device_observation": True})
     curr_res = next(r for r in res_ua.results if r.metric == "battery_current_now")
     assert curr_res.value == 150.0
-    assert curr_res.verified is True
-    assert curr_res.report_status == ReportStatus.VERIFIED.value
+    assert curr_res.verified is False
+    assert curr_res.report_status == ReportStatus.REQUIRES_PILOT_VALIDATION.value
 
     # 3. Ambiguous 5000 (no unit metadata) -> MUST NOT be marked VERIFIED!
     res_amb = collector.collect({"battery_current_now": 5000, "is_real_device_observation": True})
