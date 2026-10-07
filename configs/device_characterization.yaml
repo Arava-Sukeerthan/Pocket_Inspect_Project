@@ -45,12 +45,40 @@ enabled_collectors:
   - energy_measurement_checker
 
 probes:
-  kgsl_sysfs_paths:
-    - "/sys/class/kgsl/kgsl-3d0/gpuclk"
-    - "/sys/class/kgsl/kgsl-3d0/gpubusy"
-    - "/sys/class/devfreq/1c00000.qcom,kgsl-3d0/cur_freq"
-  cpufreq_sysfs_pattern: "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq"
+  # Host (adb shell) probe paths. Every host sysfs/procfs path the collector reads comes from here.
+  cpufreq_sysfs_pattern: "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq"   # cpu0 current-frequency record
+  cpufreq_policy_dir: "/sys/devices/system/cpu/cpufreq"        # one policyN directory per CPU group
+  cpufreq_policy_files:                                         # read for every policy (frequency observability, protocol §5.7 C)
+    - "scaling_cur_freq"
+    - "scaling_max_freq"
+    - "cpuinfo_max_freq"
   thermal_sysfs_pattern: "/sys/class/thermal/thermal_zone%d"
+  thermal_zone_scan_count: 10                                   # zones thermal_zone0 .. thermal_zone9 are read
+  kgsl_gpu_clock_path: "/sys/class/kgsl/kgsl-3d0/gpuclk"
+  kgsl_gpu_busy_path: "/sys/class/kgsl/kgsl-3d0/gpubusy"        # readability only; meaning is not interpreted in Step 10D
+  psi_memory_path: "/proc/pressure/memory"
+  kernel_release_command: ["uname", "-r"]
+
+# Camera advertised-vs-honoured check (protocol §4 P3, §5.3).
+# The Android app requests locked manual exposure/sensitivity and reports requested and CaptureResult values;
+# the host decides "honoured" from them. A non-zero tolerance is a researcher decision: until one is approved,
+# any difference between requested and reported values is classified as NOT HONOURED.
+camera_manual_control_check:
+  exposure_time_relative_tolerance: 0.0
+  sensitivity_relative_tolerance: 0.0
+
+# Energy-measurement feasibility evidence (protocol §6, D-16 hierarchy).
+# E-1 and E-2 are physical/procedural checks performed by the researcher, never by software.
+# Set this to the path (relative to the repository root) of a researcher-completed evidence file that follows
+# configs/energy_feasibility_evidence_template.yaml. null means "not yet assessed": E-1/E-2 stay
+# NOT_TESTED and no energy level is selected.
+energy_feasibility_evidence: null
+
+# Historical physical runs. The software refuses to write into these run directories, with or without --overwrite.
+protected_runs:
+  - "run_20261005_181140"
+  - "run_20261006_052440"
+  - "run_20261007_082743"
 
 # RAM variant check (R-08, specification approved by the researcher on 2026-10-06; protocol §2).
 # Nominal capacities are classification references only, never measured RAM.

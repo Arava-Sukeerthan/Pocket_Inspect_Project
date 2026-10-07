@@ -1,0 +1,39 @@
+# Step 10D — Energy-measurement feasibility evidence (protocol §6, D-16 hierarchy). TEMPLATE.
+#
+# E-1 and E-2 are physical/procedural checks. Only the researcher fills this file, after the inspection.
+# Software never fills, infers or defaults any field. Copy this template to a new file, fill it, and set
+# `energy_feasibility_evidence` in configs/device_characterization.yaml to its path. The characterization run
+# copies the filled file into the run's evidence directory (evidence/energy_feasibility_evidence.yaml) and hashes it.
+#
+# Leave `assessed: false` for a level that has not been inspected: that level stays NOT_TESTED.
+# The energy agreement threshold is NOT part of this file (D-16: PRE-DATA-COLLECTION DECISION REQUIRED).
+#
+# Level selection rule implemented by the software (D-16, preferred level first):
+#   E-1 selected only if E-1 is assessed, feasible and reference_validated.
+#   E-2 considered only after E-1 is assessed and not achieved; selected only if E-2 is assessed, feasible,
+#       reference_validated and non_charging_verified.
+#   E-3 considered only after E-1 and E-2 are both assessed and not achieved, and only if the software
+#       counters were demonstrated in the run (E3_software_counters AVAILABLE).
+#   Otherwise no level is selected (selected_level = null). Absolute energy is never claimed in Step 10D.
+
+E1_battery_side_reference:
+  assessed: false                 # true only after the physical inspection was performed
+  assessed_by: null               # researcher name
+  assessed_on: null               # YYYY-MM-DD
+  feasible: null                  # true / false: battery-side bypass physically and safely achievable
+  reference_validated: false      # true only when the battery-side reference has been validated
+  instrument_model: null          # power analyser model, if any
+  safety_signoff: false           # researcher safety decision for battery-terminal work (protocol §8)
+  evidence_files: []              # photos / notes, paths relative to this file
+  notes: null
+
+E2_supply_powered_session:
+  assessed: false
+  assessed_by: null
+  assessed_on: null
+  feasible: null                  # true / false: external meter on a supply-powered session achievable
+  reference_validated: false
+  non_charging_verified: false    # battery status not charging and battery current near zero during the session
+  meter_model: null
+  evidence_files: []
+  notes: null

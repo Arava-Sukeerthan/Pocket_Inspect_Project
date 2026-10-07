@@ -34,14 +34,32 @@ class ReportStatus(str, Enum):
 def map_runtime_state_to_report_status(
     state: RuntimeState,
     verified: bool = False,
-    condition: Optional[str] = None
+    condition: Optional[str] = None,
+    pilot_validation: bool = False,
 ) -> ReportStatus:
-    """Maps a collector runtime state to the schema report_status enum per protocol §3."""
+    """Maps a collector runtime state to the schema report_status enum per protocol §3.
+
+    - VERIFIED only for an unconditional AVAILABLE observation whose semantics were checked.
+    - AVAILABLE through a condition (host ADB, shell-only path, permission) is CONDITIONALLY AVAILABLE,
+      never VERIFIED: a condition-gated value is not an app-verified device fact.
+    - AVAILABLE whose interface was demonstrated but whose accuracy/semantics need E0 is
+      REQUIRES PILOT VALIDATION. It is never used for a state other than AVAILABLE, so a check that
+      never ran cannot become REQUIRES PILOT VALIDATION.
+    """
+    state = RuntimeState(state)
     if verified:
+        if state != RuntimeState.AVAILABLE:
+            raise ValueError(f"verified=True requires state AVAILABLE (got {state.value}).")
+        if condition:
+            raise ValueError("A condition-gated observation is CONDITIONALLY AVAILABLE and cannot be VERIFIED.")
+        if pilot_validation:
+            raise ValueError("An observation that requires pilot validation cannot be VERIFIED.")
         return ReportStatus.VERIFIED
     if state == RuntimeState.AVAILABLE:
         if condition:
             return ReportStatus.CONDITIONALLY_AVAILABLE
+        if pilot_validation:
+            return ReportStatus.REQUIRES_PILOT_VALIDATION
         return ReportStatus.AVAILABLE
     if state in (RuntimeState.UNAVAILABLE, RuntimeState.API_UNSUPPORTED):
         return ReportStatus.UNAVAILABLE
@@ -51,8 +69,6 @@ def map_runtime_state_to_report_status(
         if condition:
             return ReportStatus.CONDITIONALLY_AVAILABLE
         return ReportStatus.UNAVAILABLE
-    if state in (RuntimeState.NOT_TESTED, RuntimeState.ERROR):
-        return ReportStatus.NOT_YET_VERIFIED
     return ReportStatus.NOT_YET_VERIFIED
 
 
@@ -95,6 +111,18 @@ class CapabilityResult:
                 raise ValueError(f"Verified metric '{self.metric}' requires non-null evidence_ref.")
             if not self.observed_at:
                 raise ValueError(f"Verified metric '{self.metric}' requires non-null observed_at.")
+            if self.condition:
+                raise ValueError(
+                    f"Verified metric '{self.metric}' has condition '{self.condition}': a condition-gated "
+                    "observation is CONDITIONALLY AVAILABLE, not VERIFIED."
+                )
+        if self.report_status == ReportStatus.REQUIRES_PILOT_VALIDATION.value and self.state != RuntimeState.AVAILABLE.value:
+            raise ValueError(
+                f"Metric '{self.metric}' is REQUIRES PILOT VALIDATION with state '{self.state}': pilot validation "
+                "applies only to an interface already demonstrated (state AVAILABLE)."
+            )
+        if self.report_status == ReportStatus.CONDITIONALLY_AVAILABLE.value and not self.condition:
+            raise ValueError(f"Metric '{self.metric}' is CONDITIONALLY AVAILABLE without a recorded condition.")
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)

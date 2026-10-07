@@ -29,13 +29,29 @@ Build Commands:
 
 ## Components
 
-The Android characterization client consists of 4 Kotlin source files:
-1. `MainActivity.kt`: Android UI activity and entry point for initiating on-device characterization tasks; writes the report file and logs it.
-2. `Collectors.kt`: On-device telemetry and capability collectors for Android services and hardware properties.
-3. `CharacterizationRunner.kt`: Runner for executing characterization probes and outputting canonical JSON results to app file storage.
-4. `AppJsonLogFormatter.kt`: Pure-JVM formatter that logs the report one record per logcat line, with the report file's SHA-256.
+The Android characterization client consists of 6 Kotlin source files:
+1. `MainActivity.kt`: entry point; runs every probe on a background thread (the camera capture check waits for camera callbacks), writes the report file and logs it.
+2. `Collectors.kt`: record helpers; identity (incl. storage), memory (incl. `lowMemory`, `threshold`, heap, PSS), thermal status and listener, battery broadcast values and `BatteryManager` properties (`CURRENT_NOW`, `CURRENT_AVERAGE`, `CHARGE_COUNTER`, `ENERGY_COUNTER`; the unsupported sentinel becomes UNAVAILABLE, never a value).
+3. `SystemProbes.kt`: platform services (each obtained **and** exercised; `SecurityException` is PERMISSION_REQUIRED), process CPU time, EGL `GL_RENDERER`/`GL_VENDOR` and Vulkan feature, clock monotonicity/resolution, `android.os.Trace`.
+4. `CameraProbes.kt`: real camera IDs (`getCameraIdList()`), per-camera `CameraCharacteristics`, and the advertised-vs-honoured manual-control capture check.
+5. `CharacterizationRunner.kt`: runs the collectors and writes the report sections (`device_identity`, `memory_telemetry`, `thermal_capability`, `battery_telemetry`, `service_capability`, `cpu_telemetry`, `gpu_capability`, `profiling_capability`, `camera_telemetry`). The host bridge (`APP_SECTION_METRICS` in `scripts/device_characterization/adb_collector.py`) consumes exactly these sections.
+6. `AppJsonLogFormatter.kt`: Pure-JVM formatter that logs the report one record per logcat line, with the report file's SHA-256.
 
 Unit test: `src/test/kotlin/.../AppJsonLogFormatterTest.kt` (JUnit 4, no device needed).
+
+No ML runtime (TFLite / ONNX Runtime) is a dependency: the backend capability checks are blocked pending a researcher decision.
+
+## Before launching the app: CAMERA runtime permission
+
+The manual-control check opens each camera. The app targets API 28, so CAMERA is a runtime permission. Grant it
+before launching the app, otherwise the check is recorded as PERMISSION_REQUIRED (never as honoured):
+
+```bash
+adb shell pm grant org.pocketinspect.characterization android.permission.CAMERA
+adb shell am start -n org.pocketinspect.characterization/.MainActivity
+```
+
+Wait for the `END run_id=...` logcat line before running the host characterization.
 
 ## Evidence artifact and where to find it
 
@@ -55,7 +71,7 @@ Every `evidence_ref` of the form `evidence/android_app_evidence.json#<metric>` i
 ## Logcat output (observation aid, not the evidence)
 
 A logcat entry is limited to about 4 KB (`LOGGER_ENTRY_MAX_PAYLOAD` = 4068 bytes including the tag). The full report
-is larger (about 4.3 KB on an OPPO CPH1931), so it is not logged as one entry. Under tag `POCKETINSPECT_APP_JSON` the
+is larger than one entry (about 4.3 KB on an OPPO CPH1931 before the correction round, larger now), so it is not logged as one entry. Under tag `POCKETINSPECT_APP_JSON` the
 app logs, for each launch:
 
 ```
@@ -77,12 +93,14 @@ manual: the host pipeline does not read logcat. An empty camera section is logge
 
 | Situation | Record |
 | :-- | :-- |
-| `CameraManager.getCameraIdList()` succeeds | `camera_count` AVAILABLE |
-| Camera 0 reports `INFO_SUPPORTED_HARDWARE_LEVEL` | `camera_0_hardware_level` AVAILABLE |
-| Camera 0 returns no hardware level | `camera_0_hardware_level` UNAVAILABLE, value null |
-| `CameraManager` throws (e.g. `CameraAccessException`) | `camera_probe` ERROR with the exception message |
+| `CameraManager.getCameraIdList()` succeeds | `camera_id_list` AVAILABLE (the exact ID strings) and `camera_count` |
+| Per camera ID | `lens_facing`, `hardware_level`, `available_capabilities`, `manual_exposure_advertised`, stream configurations, FPS ranges, AF modes, minimum focus distance, exposure/ISO ranges, AWB modes, AE/AWB lock, physical IDs, video profiles (each with `camera_id`) |
+| A characteristic key returns null | that record UNAVAILABLE, value null |
+| `MANUAL_SENSOR` not advertised | `manual_exposure_advertised` UNAVAILABLE; `manual_control_honoured` UNAVAILABLE |
+| `MANUAL_SENSOR` advertised, CAMERA granted | `manual_control_honoured` AVAILABLE with requested and `CaptureResult` exposure/sensitivity; the host decides honoured / NOT HONOURED (`camera_manual_control_check` in `configs/device_characterization.yaml`) |
+| CAMERA not granted | `manual_control_honoured` and `capture_sensor_timestamp` PERMISSION_REQUIRED |
+| `getCameraIdList()` throws | `camera_probe` ERROR with the exception message |
 | No `CameraManager` system service | `camera_probe` UNAVAILABLE |
 
-No camera value is inferred when a probe does not return one.
-
-
+No camera value is inferred when a probe does not return one: IDs are never generated from a count, and lens facing
+is never defaulted.

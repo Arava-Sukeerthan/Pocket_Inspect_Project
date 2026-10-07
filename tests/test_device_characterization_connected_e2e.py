@@ -385,13 +385,17 @@ def test_p03_unmocked_collector_e2e_pipeline(tmp_path):
                 assert cpu_freq_res is not None
                 assert cpu_freq_res["value"] == 1804800
                 assert cpu_freq_res["state"] == "AVAILABLE"
-                assert cpu_freq_res["verified"] is True
+                # Host sysfs read: CONDITIONALLY AVAILABLE (HOST ADB SHELL), never VERIFIED (correction round §12)
+                assert cpu_freq_res["verified"] is False
+                assert cpu_freq_res["report_status"] == "CONDITIONALLY AVAILABLE"
+                assert cpu_freq_res["condition"] == "HOST ADB SHELL"
                 assert cpu_freq_res["evidence_ref"] == "evidence/cpufreq_evidence.txt#scaling_cur_freq"
 
                 assert gpu_clock_res is not None
                 assert gpu_clock_res["value"] == 600000000
                 assert gpu_clock_res["state"] == "AVAILABLE"
-                assert gpu_clock_res["verified"] is True
+                assert gpu_clock_res["verified"] is False
+                assert gpu_clock_res["report_status"] == "CONDITIONALLY AVAILABLE"
                 assert gpu_clock_res["evidence_ref"] == "evidence/gpu_evidence.txt#gpuclk"
 
                 # Verify F-03 app-derived telemetry reaching characterization.json
@@ -400,11 +404,12 @@ def test_p03_unmocked_collector_e2e_pipeline(tmp_path):
                 assert thermal_cap.get("thermal_status_api", {}).get("evidence_ref") == "evidence/android_app_evidence.json#thermal_status_api"
 
                 camera_caps = data.get("camera", [])
-                assert len(camera_caps) > 0
-                cam0_hw = next((r for r in camera_caps[0]["results"] if r["metric"] == "hardware_level"), None)
-                assert cam0_hw is not None
-                assert cam0_hw["value"] == 1
-                assert cam0_hw["evidence_ref"] == "evidence/android_app_evidence.json#camera_0_hardware_level"
+                # Legacy app output (camera_count + camera_0_hardware_level, no camera_id_list): camera IDs are
+                # never generated from the count, so the host reports one UNIDENTIFIED entry, NOT_TESTED.
+                assert [c["camera_id"] for c in camera_caps] == ["UNIDENTIFIED"]
+                assert camera_caps[0]["lens_facing"] is None
+                cam_hw = next(r for r in camera_caps[0]["results"] if r["metric"] == "hardware_level")
+                assert cam_hw["state"] == "NOT_TESTED" and cam_hw["value"] is None
 
                 # Verify failure assertion: ensure app telemetry reached characterization.json
                 assert any((r.get("evidence_ref") or "").startswith("evidence/android_app_evidence.json") for t in telemetry for r in t.get("results", [])) or \
@@ -783,6 +788,9 @@ def test_p07_probe_failure_semantics():
     th_zones = next(r for r in th_cap.temperature_sources if r.metric == "thermal_zones_sysfs")
     assert th_zones.state == "ERROR"
 
+    assert cam_caps[0].camera_id == "UNIDENTIFIED"
+    cam_avail = next(r for r in cam_caps[0].results if r.metric == "camera_availability")
+    assert cam_avail.state == "ERROR"
     cam_hw = next(r for r in cam_caps[0].results if r.metric == "hardware_level")
     assert cam_hw.state == "ERROR"
 
@@ -796,7 +804,8 @@ def test_r09_battery_current_semantics():
     res1 = next(r for r in BatteryTelemetryCollector().collect(props1).results if r.metric == "battery_current_now")
     assert res1.state == "AVAILABLE"
     assert res1.value == 250.0
-    assert res1.verified is True
+    assert res1.verified is False  # sign convention / update rate: REQUIRES PILOT VALIDATION
+    assert res1.report_status == "REQUIRES PILOT VALIDATION"
 
     # Case 2: Zero current -> NOT marked VERIFIED
     props2 = {"is_real_device_observation": True, "battery_current_now": 0, "battery_current_unit": "mA"}
@@ -811,7 +820,8 @@ def test_r09_battery_current_semantics():
     res3 = next(r for r in BatteryTelemetryCollector().collect(props3).results if r.metric == "battery_current_now")
     assert res3.state == "AVAILABLE"
     assert res3.value == 350.0  # Converted to mA
-    assert res3.verified is True
+    assert res3.verified is False
+    assert res3.report_status == "REQUIRES PILOT VALIDATION"
 
     # Case 4: Implausible current (> 10,000 mA) -> state ERROR
     props4 = {"is_real_device_observation": False, "battery_current_now": 99999999, "battery_current_unit": "mA"}
@@ -1063,7 +1073,7 @@ def test_p503_app_camera_error_is_preserved(tmp_path):
     """P5-03: the app's camera_probe ERROR (CameraAccessException) becomes ERROR, not NOT_TESTED."""
     camera = [_app_item("camera_probe", "ERROR", error_message="CameraAccessException: CAMERA_DISABLED")]
     _, data, _ = _run_synthetic(tmp_path, _app_json(camera=camera))
-    hw = _all_results(data)["camera_0_hardware_level"]
+    hw = _all_results(data)["camera_UNIDENTIFIED_hardware_level"]
     assert hw["state"] == "ERROR"
     assert "CameraAccessException" in hw["error_message"]
     assert hw["evidence_ref"] == "evidence/android_app_evidence.json#camera_probe"
@@ -1072,11 +1082,11 @@ def test_p503_app_camera_error_is_preserved(tmp_path):
 
 @pytest.mark.parametrize("app_state", ["API_UNSUPPORTED", "UNAVAILABLE", "ERROR"])
 def test_p503_app_camera_hardware_level_state_is_preserved(tmp_path, app_state):
-    """P5-03: a non-AVAILABLE app camera_0_hardware_level state reaches the report unchanged."""
+    """P5-03: a non-AVAILABLE per-camera hardware_level state reaches the report unchanged (real camera ID)."""
     err = "CameraAccessException: hardware level query failed" if app_state == "ERROR" else None
     camera = [
-        _app_item("camera_count", value=1),
-        _app_item("camera_0_hardware_level", app_state, error_message=err),
+        _app_item("camera_id_list", value=["0"]),
+        dict(_app_item("hardware_level", app_state, error_message=err), camera_id="0"),
     ]
     _, data, observed = _run_synthetic(tmp_path, _app_json(camera=camera))
     hw = _all_results(data)["camera_0_hardware_level"]
@@ -1084,7 +1094,7 @@ def test_p503_app_camera_hardware_level_state_is_preserved(tmp_path, app_state):
     assert hw["value"] is None
     assert hw["verified"] is False
     assert hw["report_status"] != "VERIFIED"
-    assert hw["evidence_ref"] == "evidence/android_app_evidence.json#camera_0_hardware_level"
+    assert hw["evidence_ref"] == "evidence/android_app_evidence.json#camera_telemetry/0/hardware_level"
     if app_state == "ERROR":
         assert "CameraAccessException" in hw["error_message"]
     assert "camera_0_hardware_level" not in observed
@@ -1140,7 +1150,7 @@ def test_app_camera_probe_non_available_state_is_preserved(tmp_path, probe_state
     reaches the report unchanged through the real pipeline; it is never NOT_TESTED or a value."""
     camera = [_app_item("camera_probe", probe_state, error_message=err)]
     _, data, observed = _run_synthetic(tmp_path, _app_json(camera=camera))
-    hw = _all_results(data)["camera_0_hardware_level"]
+    hw = _all_results(data)["camera_UNIDENTIFIED_hardware_level"]
     assert hw["state"] == probe_state
     assert hw["value"] is None
     assert hw["verified"] is False

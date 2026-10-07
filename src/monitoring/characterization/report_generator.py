@@ -6,9 +6,10 @@ maps runtime states to report statuses, updates `device_capability_matrix.md`,
 prevents silent run overwrites, validates evidence file existence,
 and enforces two-run separate-day and reboot stability criteria.
 
-Step 10D sign-off gate (R-08, protocol §2 and §9 criterion 2): `evaluate_variant_signoff()` allows
-sign-off only when `variant_check` is VERIFIED and its nearest variant is the required variant.
-A MISMATCH, AMBIGUOUS, ERROR or NOT_TESTED variant check blocks sign-off. run_status is not changed.
+R-08 variant gate (protocol §2, §9 criterion 2): `evaluate_variant_signoff()` passes only when
+`variant_check` is VERIFIED and its nearest variant is the required variant. It is ONE §9 criterion.
+Full §9 sign-off (coverage, variant, D-10, D-16, human review gate) is evaluated by signoff.py and written to
+step10d_signoff.json in the run directory; software never marks the review gate satisfied. run_status is not changed.
 """
 
 import hashlib
@@ -20,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import jsonschema
 
+from src.monitoring.characterization.coverage import check_matrix_coverage
 from src.monitoring.characterization.ram_variant import MATCH as RAM_MATCH, load_ram_variant_spec
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -66,6 +68,11 @@ def evaluate_variant_signoff(run_record: Dict[str, Any], required_variant: Optio
     }
 
 
+def evaluate_step10d_signoff(run_record: Dict[str, Any], review_confirmed: bool = False) -> Dict[str, Any]:
+    from src.monitoring.characterization.signoff import evaluate_step10d_signoff as _full
+    return _full(run_record, review_confirmed=review_confirmed)
+
+
 def validate_characterization_record(
     record: Dict[str, Any],
     output_dir: Optional[Path] = None
@@ -101,6 +108,18 @@ def validate_characterization_record(
         verified = res.get("verified", False)
         report_status = res.get("report_status")
         ev_ref = res.get("evidence_ref")
+
+        condition = res.get("condition")
+        if report_status == "REQUIRES PILOT VALIDATION" and state != "AVAILABLE":
+            errors.append(f"{path}: REQUIRES PILOT VALIDATION requires a demonstrated interface (state AVAILABLE), got '{state}'")
+        if report_status == "CONDITIONALLY AVAILABLE" and not condition:
+            errors.append(f"{path}: CONDITIONALLY AVAILABLE requires a recorded condition")
+        if verified is True and condition:
+            errors.append(f"{path}: verified=True with condition '{condition}' (condition-gated values are CONDITIONALLY AVAILABLE)")
+        # A1: every evidence reference, verified or not, must name a file that exists in the run directory.
+        if output_dir and ev_ref and verified is not True:
+            if not (output_dir / ev_ref.split("#")[0]).exists():
+                errors.append(f"{path}: evidence_ref file '{output_dir / ev_ref.split('#')[0]}' does not exist on disk")
 
         if state and state != "AVAILABLE":
             if val is not None:
@@ -183,6 +202,39 @@ def validate_characterization_record(
     return errors
 
 
+def _record_states(run: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    """Flattened {record path: state} over every capability record of a run."""
+    out: Dict[str, Optional[str]] = {}
+    ident = run.get("device_identity") or {}
+    for r in ident.get("observed", []):
+        out[f"identity/{r.get('metric')}"] = r.get("state")
+    if ident.get("variant_check"):
+        out["identity/variant_check"] = ident["variant_check"].get("state")
+    for t in run.get("telemetry", []):
+        for r in t.get("results", []):
+            out[f"telemetry/{t.get('dimension')}/{r.get('metric')}"] = r.get("state")
+    thermal = run.get("thermal") or {}
+    for k, v in thermal.items():
+        if isinstance(v, dict):
+            out[f"thermal/{k}"] = v.get("state")
+    for r in thermal.get("temperature_sources", []) or []:
+        out[f"thermal/temperature_sources/{r.get('metric')}"] = r.get("state")
+    out["thermal/selected_thermal_source"] = thermal.get("selected_thermal_source")
+    for cam in run.get("camera", []):
+        for r in cam.get("results", []) + [cam.get("manual_control_honoured") or {}]:
+            out[f"camera/{cam.get('camera_id')}/{r.get('metric')}"] = r.get("state")
+    for b in run.get("backends", []):
+        for k in ("availability", "delegation", "probability_output"):
+            out[f"backend/{b.get('backend')}/{k}"] = (b.get(k) or {}).get("state")
+    for r in run.get("profiling", []):
+        out[f"profiling/{r.get('metric')}"] = r.get("state")
+    energy = run.get("energy") or {}
+    for k in ("E1_battery_side_reference", "E2_supply_powered_session", "E3_software_counters"):
+        out[f"energy/{k}"] = (energy.get(k) or {}).get("state")
+    out["energy/selected_level"] = energy.get("selected_level")
+    return out
+
+
 class CharacterizationReportGenerator:
     """Generates schema-valid characterization outputs without mutating authoritative research specs."""
 
@@ -233,12 +285,26 @@ class CharacterizationReportGenerator:
             # P-01: Do NOT call self.update_device_capability_matrix(run_record) automatically!
             # Matrix mutation is forbidden for single runs. Run outputs remain isolated in output_dir.
 
+            # §9: criterion-1 coverage and the full sign-off evaluation, written beside the run (the schema-bound
+            # characterization.json is not extended). The review gate is never satisfied by software.
+            signoff = evaluate_step10d_signoff(run_record)
+            coverage = check_matrix_coverage(run_record)
+            signoff_file = output_dir / "step10d_signoff.json"
+            tmp_signoff = output_dir / "step10d_signoff.json.tmp"
+            with open(tmp_signoff, "w", encoding="utf-8") as f:
+                json.dump({"run_id": run_record.get("run_id"), "signoff": signoff, "coverage": coverage}, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            tmp_signoff.replace(signoff_file)
+
             return {
                 "status": "VALID",
                 "run_file": str(run_file),
                 "readme_file": str(readme_file),
+                "signoff_file": str(signoff_file),
                 "errors": [],
                 "variant_signoff": evaluate_variant_signoff(run_record),
+                "signoff": signoff,
             }
         except Exception:
             if tmp_run_file.exists():
@@ -287,45 +353,53 @@ class CharacterizationReportGenerator:
             for res in t.get("results", []):
                 _format_row(res)
 
+        thermal = run_record.get("thermal", {})
+        for key in ("thermal_status_api", "thermal_headroom_api", "frequency_capping_observable", "external_surface_probe"):
+            if isinstance(thermal.get(key), dict):
+                _format_row(thermal[key])
+        for res in thermal.get("temperature_sources", []):
+            _format_row(res)
+        for cam in run_record.get("camera", []):
+            for res in cam.get("results", []) + [cam.get("manual_control_honoured")]:
+                if res:
+                    _format_row(dict(res, metric=f"camera[{cam.get('camera_id')}].{res.get('metric')}"))
+        for b in run_record.get("backends", []):
+            for key in ("availability", "delegation", "probability_output"):
+                _format_row(dict(b[key], metric=f"{b['backend']}.{b[key].get('metric')}"))
+        for res in run_record.get("profiling", []):
+            _format_row(res)
+        energy = run_record.get("energy", {})
+        for key in ("E1_battery_side_reference", "E2_supply_powered_session", "E3_software_counters"):
+            if isinstance(energy.get(key), dict):
+                _format_row(energy[key])
+
         gate = evaluate_variant_signoff(run_record)
+        full = evaluate_step10d_signoff(run_record)
+        crit = full["criteria"]
         lines += [
             "",
-            "## Step 10D Sign-off Gate (R-08 RAM variant check)",
+            f"- **Selected thermal source (D-10)**: `{thermal.get('selected_thermal_source')}`",
+            f"- **Selected energy level (D-16)**: `{energy.get('selected_level')}`; absolute energy claimed: `False`",
             "",
-            f"- **Variant sign-off**: `{'ALLOWED' if gate['signoff_allowed'] else 'BLOCKED'}`",
-            f"- **Reason**: {gate['reason']}",
-            "- This gate is one of the protocol §9 criteria; it does not by itself sign off Step 10D.",
+            "## Step 10D Sign-off (protocol §9)",
+            "",
+            f"- **Criterion 1, matrix coverage**: `{'PASS' if crit['criterion_1_matrix_coverage']['passed'] else 'FAIL'}` "
+            f"({crit['criterion_1_matrix_coverage']['rows_failed']} of {crit['criterion_1_matrix_coverage']['rows_total']} "
+            "rows failing; details in `step10d_signoff.json`)",
+            f"- **Criterion 2, R-08 variant check**: `{'PASS' if gate['signoff_allowed'] else 'FAIL'}`",
+            f"  - **Variant sign-off**: `{'ALLOWED' if gate['signoff_allowed'] else 'BLOCKED'}`",
+            f"  - **Reason**: {gate['reason']}",
+            f"- **Criterion 3, D-10 thermal source**: `{'PASS' if crit['criterion_3_d10_thermal_source']['passed'] else 'FAIL'}` "
+            f"({crit['criterion_3_d10_thermal_source']['reason']})",
+            f"- **Criterion 3, D-16 energy level**: `{'PASS' if crit['criterion_3_d16_energy_level']['passed'] else 'FAIL'}` "
+            f"({'; '.join(crit['criterion_3_d16_energy_level']['problems']) or 'decided from evidence'})",
+            f"- **Criterion 4, review gate**: `{crit['criterion_4_review_gate']['status']}` (never satisfied by software)",
+            f"- **Step 10D sign-off**: `{'ALLOWED' if full['signoff_allowed'] else 'NOT ALLOWED'}`",
         ]
         return "\n".join(lines) + "\n"
 
-    def update_device_capability_matrix(self, run_record: Dict[str, Any]):
-        """Updates research/experiments/device_capability_matrix.md with observed evidence."""
-        if not self.matrix_path.exists():
-            return
-
-        content = self.matrix_path.read_text(encoding="utf-8")
-
-        # Update observed status rows if real evidence exists
-        obs_map = {}
-        for item in run_record.get("device_identity", {}).get("observed", []):
-            obs_map[item["metric"]] = item
-        for t in run_record.get("telemetry", []):
-            for res in t.get("results", []):
-                obs_map[res["metric"]] = res
-
-        # Replace NOT YET VERIFIED status in matrix table rows when verified evidence exists
-        for metric, res in obs_map.items():
-            if res.get("verified") and res.get("evidence_ref"):
-                rep_st = res.get("report_status", "VERIFIED")
-                ev_ref = res.get("evidence_ref")
-                # Pattern for replacing placeholder status in markdown tables
-                pattern = rf"(\|\s*{re.escape(metric)}\s*\|.*?\|)\s*NOT YET VERIFIED\s*\|\s*—\s*\|"
-                replacement = rf"\1 {rep_st} | `{ev_ref}` |"
-                content = re.sub(pattern, replacement, content, flags=re.IGNORECASE)
-
-        self.matrix_path.write_text(content, encoding="utf-8")
-
-    def compare_repeat_runs(self, run1: Dict[str, Any], run2: Dict[str, Any]) -> Dict[str, Any]:
+    def compare_repeat_runs(self, run1: Dict[str, Any], run2: Dict[str, Any],
+                            review_confirmed: bool = False) -> Dict[str, Any]:
         """Compares two characterization runs for stability, separate calendar dates, and reboot proof."""
         discrepancies: List[str] = []
 
@@ -353,26 +427,27 @@ class CharacterizationReportGenerator:
         if ram1 != ram2:
             discrepancies.append(f"Observed total_ram_mb differs between runs: Run 1={ram1}, Run 2={ram2}")
 
-        # 5. Compare telemetry capabilities
-        tel1_map = {t["dimension"]: {r["metric"]: r["state"] for r in t.get("results", [])} for t in run1.get("telemetry", [])}
-        tel2_map = {t["dimension"]: {r["metric"]: r["state"] for r in t.get("results", [])} for t in run2.get("telemetry", [])}
+        # 5. Compare the capability state of every record in every phase (protocol §4: each phase repeated).
+        states1, states2 = _record_states(run1), _record_states(run2)
+        for key in sorted(set(states1) | set(states2)):
+            st1, st2 = states1.get(key), states2.get(key)
+            if st1 != st2:
+                discrepancies.append(f"Capability state mismatch [{key}]: Run 1={st1}, Run 2={st2}")
 
-        for dim, metrics1 in tel1_map.items():
-            metrics2 = tel2_map.get(dim, {})
-            for m_name, st1 in metrics1.items():
-                st2 = metrics2.get(m_name)
-                if st1 != st2:
-                    discrepancies.append(f"Telemetry state mismatch [{dim}/{m_name}]: Run 1={st1}, Run 2={st2}")
-
-        # 6. R-08 sign-off gate: both runs must confirm the required RAM variant.
-        #    Reported separately so that `stable` keeps its repeatability meaning.
+        # 6. §9 sign-off for each run. `stable` keeps its repeatability meaning; `variant_gate_passed` is the R-08
+        #    criterion only; `signoff_allowed` is the full §9 result (coverage, variant, D-10, D-16, review gate)
+        #    for both runs plus stability. The review gate is never satisfied by software.
         gate1 = evaluate_variant_signoff(run1)
         gate2 = evaluate_variant_signoff(run2)
         variant_ok = gate1["signoff_allowed"] and gate2["signoff_allowed"]
+        full1 = evaluate_step10d_signoff(run1, review_confirmed=review_confirmed)
+        full2 = evaluate_step10d_signoff(run2, review_confirmed=review_confirmed)
 
         return {
             "stable": len(discrepancies) == 0,
             "discrepancies": discrepancies,
             "variant_signoff": {"run1": gate1, "run2": gate2},
-            "signoff_allowed": len(discrepancies) == 0 and variant_ok,
+            "variant_gate_passed": len(discrepancies) == 0 and variant_ok,
+            "signoff": {"run1": full1, "run2": full2},
+            "signoff_allowed": len(discrepancies) == 0 and full1["signoff_allowed"] and full2["signoff_allowed"],
         }
