@@ -3175,3 +3175,44 @@ Step 10D, R-08 follow-up: a test-guard correction found after the R-08 CHANGELOG
 - `run_20261005_181140` stays untouched.
 
 Step 10E not started.
+
+---
+
+## 2026-10-06 — Identity-Match Investigation
+
+### Task
+Read-only investigation of `identity_match_status=MISMATCH` in physical run
+`run_20261006_052440`.
+
+### Finding
+- `identity_match_status=MISMATCH` is caused solely by the observed
+  `soc_model="trinket"` failing the current identity rule, which accepts
+  strings containing `"665"` or `"SM6125"`.
+- Manufacturer `OPPO` matches.
+- Model `CPH1931` matches.
+- RAM variant check is independently `MATCH` and `VERIFIED` for the required
+  3 GB variant.
+- No other identity field caused the mismatch.
+
+### Sign-off impact
+- `identity_match_status` is informational in the current implementation.
+- It does not affect the observed SoC verification, `run_status`, R-08
+  variant sign-off, or the Step 10D sign-off gate.
+- The physical run remains valid.
+- No physical rerun is required because of this finding.
+
+### Interpretation boundary
+- The repository does not currently contain an approved mapping from
+  `trinket` to Snapdragon 665 / SM6125.
+- Therefore, this investigation does not establish that equivalence as
+  repository evidence.
+- Any future alias/mapping should be introduced only after an appropriate
+  authoritative external source is selected and the change is explicitly
+  approved.
+
+### Decision
+DOCUMENTATION ONLY.
+
+### Next action
+Proceed with the remaining Step 10D sign-off criteria. Do not modify the
+identity-matching implementation as part of this finding.
