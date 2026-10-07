@@ -19,6 +19,11 @@ import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.monitoring.characterization.energy_evidence import (
+    select_energy_level,
+    selection_basis,
+    unmet_selection_requirements,
+)
 from src.monitoring.characterization.ram_variant import (
     AMBIGUOUS as RAM_AMBIGUOUS,
     INVALID as RAM_INVALID,
@@ -1904,108 +1909,298 @@ def _load_camera_check_config() -> Dict[str, Any]:
     return check
 
 
-BACKEND_BLOCKED_NOTE = (
-    "BACKEND IMPLEMENTATION BLOCKED PENDING RESEARCHER DECISION: no runtime dependency and no reference graph "
-    "exist yet, so this check did not run (see the Step 10D correction-round CHANGELOG entry)."
-)
+def _load_backend_check_config() -> Dict[str, Any]:
+    import yaml  # local import: only needed when no explicit settings are passed
+    cfg_path = Path(__file__).resolve().parents[3] / "configs" / "device_characterization.yaml"
+    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    check = cfg.get("inference_backend_check")
+    if not isinstance(check, dict):
+        raise ValueError("configs/device_characterization.yaml lacks inference_backend_check")
+    return check
+
+
+def validate_backend_check_config(check: Dict[str, Any]) -> None:
+    """Rejects an incomplete `inference_backend_check` block instead of defaulting any researcher parameter."""
+    from src.monitoring.characterization import reference_graph as rg
+    backends = check.get("backends")
+    if not isinstance(backends, dict) or not backends:
+        raise ValueError("inference_backend_check.backends must list the approved backends")
+    for name, spec in backends.items():
+        if not isinstance(spec, dict) or spec.get("artifact_format") not in rg.FORMATS or not spec.get("requested_delegate"):
+            raise ValueError(f"inference_backend_check.backends.{name} needs artifact_format (tflite/onnx) and requested_delegate")
+    variants = [check.get("primary_variant")] + list(check.get("quantization_variants") or [])
+    if not set(variants) <= set(rg.VARIANTS) or len(set(variants)) != len(variants):
+        raise ValueError(f"inference_backend_check variants must be distinct members of {rg.VARIANTS}")
+    if not isinstance((check.get("reference_graph") or {}).get("artifacts"), dict):
+        raise ValueError("inference_backend_check.reference_graph.artifacts (pinned SHA-256) is required")
+    rules = check.get("output_validation") or {}
+    needed = {"float": ("max_abs_error", "probability_sum_tolerance"),
+              "int8": ("output_scale", "max_abs_error_lsb", "probability_sum_tolerance_lsb")}
+    for cls, keys in needed.items():
+        for k in keys:
+            v = (rules.get(cls) or {}).get(k)
+            if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
+                raise ValueError(f"inference_backend_check.output_validation.{cls}.{k} must be a non-negative number")
+
+
+# A TFLite/NNAPI accelerator cannot be identified through the Java APIs (device enumeration needs the NDK, API 29).
+NNAPI_LIMITATION = ("NNAPI accelerator identity is not observable through the Java APIs (device enumeration needs the "
+                    "NDK, API >= 29); below API 29 the NNAPI CPU reference implementation cannot be excluded.")
 
 
 class InferenceBackendCapabilityCollector:
-    """Collector 9: InferenceBackendCapabilityCollector.
-    Checks backend availability, delegation (GPU/NNAPI), probability output validity.
-    NO latency, accuracy, or throughput benchmarking is performed or reported.
+    """Collector 9: InferenceBackendCapabilityCollector (protocol §4 P4, §5.4, §5.5; matrix §5).
+
+    Capability only: NO latency, accuracy or throughput is measured or reported. The Android app
+    (BackendProbes.kt) reports raw observations per backend; this collector decides every status:
+    - availability: runtime library initialised and the requested delegate/provider constructed or listed;
+    - graph_load / inference_execution: the pinned reference graph (SHA-256 checked) loaded / executed once;
+    - probability_output: the single output-validity rule (reference_graph.validate_output, config tolerances);
+    - delegation: the requested delegate/provider observed active (TFLite execution-plan length below the graph
+      node count; ONNX Runtime profile kernels executed by the requested provider). Accepting a delegate is never
+      taken as delegation; an unobservable delegation is NOT_TESTED;
+    - quantization_support: one record per quantization variant (load + inference + valid output).
+    Scope, graph identity and tolerances come from configs/device_characterization.yaml (inference_backend_check).
     """
+
+    def __init__(self, check_config: Optional[Dict[str, Any]] = None):
+        self.cfg = check_config if check_config is not None else _load_backend_check_config()
+        validate_backend_check_config(self.cfg)
 
     def collect(self, backend_props: Optional[Dict[str, Any]] = None) -> List[BackendCapability]:
         props = backend_props or {}
-        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        return [self._backend(props, name, spec) for name, spec in self.cfg["backends"].items()]
+
+    # ------------------------------------------------------------------
+    def _backend(self, props: Dict[str, Any], name: str, spec: Dict[str, Any]) -> BackendCapability:
         is_real = bool(props.get("is_real_device_observation", False))
+        recs = (props.get("app_backend_records") or {}).get(name)
+        recs = recs if isinstance(recs, dict) else {}
+        base = f"backend_capability/{name}"
+        primary = self.cfg["primary_variant"]
+        limitations: List[str] = []
+        if spec["requested_delegate"] in ("NNAPI", "NnapiExecutionProvider"):
+            limitations.append(NNAPI_LIMITATION)
+        if spec["artifact_format"] == "tflite":
+            limitations.append("TFLite delegation is observed through the execution-plan length: it shows that nodes "
+                               "were delegated, but not the exact delegated-node or partition count.")
 
-        backends = ["TFLite_CPU", "TFLite_GPU", "TFLite_NNAPI", "ONNXRuntime_CPU", "ONNXRuntime_NNAPI"]
-        out: List[BackendCapability] = []
+        availability, runtime_info = self._availability(props, name, spec, recs.get("backend_runtime"), base)
+        runtime_version = runtime_info.get("runtime_version") if runtime_info else None
+        if availability.state == RuntimeState.AVAILABLE.value and runtime_version is None:
+            limitations.append("Runtime version not reported by the runtime (recorded as null, not inferred).")
 
-        for b_name in backends:
-            b_info = props.get(b_name, {})
+        evaluated = {v: self._variant(props, name, spec, v, recs, base, is_real)
+                     for v in [primary] + list(self.cfg["quantization_variants"])}
+        main = evaluated[primary]
+        quant = [self._quantization(v, evaluated[v], is_real) for v in self.cfg["quantization_variants"]]
+        return BackendCapability(
+            backend=name,
+            availability=availability,
+            graph_load=main["load"],
+            inference_execution=main["inference"],
+            probability_output=main["output"],
+            delegation=main["delegation"],
+            quantization_support=quant,
+            runtime_version=runtime_version,
+            runtime_version_source=runtime_info.get("runtime_version_source") if runtime_info else None,
+            reference_graph_hash=main["artifact"].get("sha256_reported") if main["artifact"].get("match") else None,
+            reference_graph_artifacts={v: e["artifact"] for v, e in evaluated.items()},
+            delegation_evidence={v: e["evidence"] for v, e in evaluated.items()},
+            known_limitations=limitations,
+        )
 
-            if "available" not in b_info:
-                state_avail = RuntimeState.NOT_TESTED.value
-                val_avail = None
+    def _availability(self, props, name, spec, rec, base) -> Tuple[CapabilityResult, Optional[Dict[str, Any]]]:
+        source = f"Runtime library initialisation and delegate/provider construction ({name})"
+        res = _app_result(props, "backend_runtime", record=rec, anchor=f"{base}/backend_runtime",
+                          source=source, verification_method="backend_init_check", record_name="backend_availability")
+        if res.state != RuntimeState.AVAILABLE.value:
+            return res, None
+        info = res.value if isinstance(res.value, dict) else {}
+        if info.get("requested_delegate") != spec["requested_delegate"]:
+            return _make("backend_availability", RuntimeState.ERROR.value, is_real=True, source=source,
+                         verification_method="backend_init_check", evidence_ref=res.evidence_ref,
+                         error_message=f"App requested delegate {info.get('requested_delegate')!r}, config expects "
+                                       f"{spec['requested_delegate']!r}."), None
+        version = info.get("runtime_version") or "version not reported"
+        detail = {"GPU": f"GPU delegate constructed (compatibility list: {info.get('gpu_compatibility_list_supported')})",
+                  "NNAPI": "NNAPI delegate constructed",
+                  "NnapiExecutionProvider": f"NNAPI listed by the runtime ({info.get('available_providers')})"}
+        value = f"{spec.get('runtime_family', name)} {version} initialised"
+        if spec["requested_delegate"] in detail:
+            value += f"; {detail[spec['requested_delegate']]}"
+        res.value = value + " (delegation is verified separately)."
+        res.notes = _join_notes(res.notes, f"Declared dependency: {info.get('declared_dependency')}.")
+        return res, info
+
+    def _variant(self, props, name, spec, variant, recs, base, is_real) -> Dict[str, Any]:
+        from src.monitoring.characterization import reference_graph as rg
+        fmt = spec["artifact_format"]
+        artifact = rg.artifact_name(fmt, variant)
+        pinned = self.cfg["reference_graph"]["artifacts"]
+        anchor = f"{base}/reference_graph_check/{variant}"
+        ref = f"{APP_EVIDENCE}#{anchor}"
+        tag = f"{name}, {variant}"
+        art: Dict[str, Any] = {"artifact": artifact, "sha256_pinned": pinned.get(artifact), "sha256_reported": None,
+                               "match": None}
+        ev: Dict[str, Any] = {"requested_backend": name, "requested_delegate": spec["requested_delegate"],
+                              "mechanism": None, "observed": None, "delegated": None, "cpu_fallback": None,
+                              "partitions": None, "evidence_ref": None}
+
+        def mk(metric, state, method, value=None, notes=None, error=None, verifiable=True):
+            return _make(metric, state, is_real=is_real, source=f"Reference graph {artifact} ({tag})",
+                         verification_method=method, value=value, evidence_ref=ref, notes=notes,
+                         error_message=error, verifiable=verifiable)
+
+        def not_reached(metric, method, why):
+            return mk(metric, RuntimeState.NOT_TESTED.value, method, notes=f"Not evaluated: {why}.")
+
+        rec = recs.get(f"reference_graph_check/{variant}")
+        gate = _app_result(props, "reference_graph_check", record=rec, anchor=anchor,
+                           source=f"Reference graph {artifact} ({tag})", verification_method="reference_graph_load_check",
+                           record_name="graph_load")
+        out = {"artifact": art, "evidence": ev}
+        if gate.state != RuntimeState.AVAILABLE.value:
+            out.update(load=gate,
+                       inference=_retag(gate, "inference_execution", "reference_graph_inference_check"),
+                       output=_retag(gate, "probability_output_validity", "reference_graph_output_check"),
+                       delegation=_retag(gate, "backend_delegation", "delegation_observation"))
+            ev["evidence_ref"] = gate.evidence_ref
+            return out
+        val = gate.value if isinstance(gate.value, dict) else {}
+        ev["evidence_ref"] = ref
+        art["sha256_reported"] = val.get("artifact_sha256")
+        art["match"] = (val.get("artifact") == artifact and val.get("artifact_sha256") == pinned.get(artifact)
+                        and val.get("manifest_sha256") == pinned.get(rg.MANIFEST_NAME))
+        expected_nodes = rg.graph_node_counts()[fmt][variant]
+        mismatch = None
+        if not art["match"]:
+            mismatch = (f"artifact identity mismatch: app loaded {val.get('artifact')} sha256 {val.get('artifact_sha256')} "
+                        f"(manifest {val.get('manifest_sha256')}); pinned {pinned.get(artifact)}")
+        elif val.get("requested_backend") != name or val.get("requested_delegate") != spec["requested_delegate"]:
+            mismatch = (f"app ran backend {val.get('requested_backend')!r} / delegate {val.get('requested_delegate')!r}; "
+                        f"config expects {name!r} / {spec['requested_delegate']!r}")
+        elif (val.get("delegation") or {}).get("graph_node_count") not in (None, expected_nodes):
+            mismatch = f"app graph node count {(val.get('delegation') or {}).get('graph_node_count')} != {expected_nodes}"
+        if mismatch:
+            out.update(load=mk("graph_load", RuntimeState.ERROR.value, "reference_graph_load_check", error=mismatch),
+                       inference=not_reached("inference_execution", "reference_graph_inference_check", mismatch),
+                       output=not_reached("probability_output_validity", "reference_graph_output_check", mismatch),
+                       delegation=not_reached("backend_delegation", "delegation_observation", mismatch))
+            return out
+
+        load, infer = val.get("load") or {}, val.get("inference") or {}
+        if load.get("ok") is True:
+            out["load"] = mk("graph_load", RuntimeState.AVAILABLE.value, "reference_graph_load_check",
+                             value=f"{artifact} (sha256 {art['sha256_reported']}) loaded with {spec['requested_delegate']} requested")
+        else:
+            out["load"] = mk("graph_load", RuntimeState.ERROR.value, "reference_graph_load_check",
+                             error=load.get("error") or "graph load not reported (inconsistent app output)")
+        if out["load"].state != RuntimeState.AVAILABLE.value:
+            out["inference"] = not_reached("inference_execution", "reference_graph_inference_check", "graph did not load")
+        elif infer.get("ok") is True:
+            out["inference"] = mk("inference_execution", RuntimeState.AVAILABLE.value, "reference_graph_inference_check",
+                                  value="One inference on the deterministic manifest input completed",
+                                  notes="Capability check only; no latency, throughput or accuracy recorded.")
+        else:
+            out["inference"] = mk("inference_execution", RuntimeState.ERROR.value, "reference_graph_inference_check",
+                                  error=infer.get("error") or "inference not reported (inconsistent app output)")
+
+        if out["inference"].state != RuntimeState.AVAILABLE.value:
+            out["output"] = not_reached("probability_output_validity", "reference_graph_output_check", "inference did not run")
+        else:
+            ok, problems, measured = rg.validate_output(val.get("output"), variant, self.cfg["output_validation"])
+            summary = (f"{measured.get('rule')}; measured max abs error {measured.get('max_abs_error')}, "
+                       f"probability sum {measured.get('probability_sum')}")
+            if ok:
+                out["output"] = mk("probability_output_validity", RuntimeState.AVAILABLE.value,
+                                   "reference_graph_output_check", value="Valid probability output: shape [1, 4], finite, "
+                                   "in [0, 1], sum and values within tolerance of the float64 reference", notes=summary)
             else:
-                avail = b_info.get("available")
-                state_avail = RuntimeState.AVAILABLE.value if avail is True else RuntimeState.UNAVAILABLE.value
-                val_avail = f"{b_name} runtime available" if state_avail == RuntimeState.AVAILABLE.value else None
+                out["output"] = mk("probability_output_validity", RuntimeState.UNAVAILABLE.value,
+                                   "reference_graph_output_check", notes="Output INVALID: " + "; ".join(problems) + f" ({summary}).")
 
-            ver_avail = is_real and state_avail == RuntimeState.AVAILABLE.value
-            res_avail = CapabilityResult(
-                metric="backend_availability",
-                state=state_avail,
-                report_status=map_runtime_state_to_report_status(RuntimeState(state_avail), verified=ver_avail),
-                value=val_avail,
-                source=f"Runtime library initialization ({b_name})",
-                verified=ver_avail,
-                verification_method="backend_init_check",
-                observed_at=now if ver_avail else None,
-                evidence_ref=f"{APP_EVIDENCE}#backends/{b_name}/availability" if ver_avail else None,
-                notes=None if "available" in b_info else BACKEND_BLOCKED_NOTE,
-            )
-
-            if "delegation_working" not in b_info:
-                state_deleg = RuntimeState.NOT_TESTED.value
-                val_deleg = None
-            else:
-                deleg = b_info.get("delegation_working")
-                state_deleg = RuntimeState.AVAILABLE.value if deleg is True else RuntimeState.UNAVAILABLE.value
-                val_deleg = f"{b_name} delegate loaded" if state_deleg == RuntimeState.AVAILABLE.value else None
-
-            ver_deleg = is_real and state_deleg == RuntimeState.AVAILABLE.value
-            res_deleg = CapabilityResult(
-                metric="backend_delegation",
-                state=state_deleg,
-                report_status=map_runtime_state_to_report_status(RuntimeState(state_deleg), verified=ver_deleg),
-                value=val_deleg,
-                source=f"Delegate / EP load check ({b_name})",
-                verified=ver_deleg,
-                verification_method="delegate_load_check",
-                observed_at=now if ver_deleg else None,
-                evidence_ref=f"{APP_EVIDENCE}#backends/{b_name}/delegation" if ver_deleg else None,
-                notes=None if "delegation_working" in b_info else BACKEND_BLOCKED_NOTE,
-            )
-
-            if "probability_output_valid" not in b_info:
-                state_prob = RuntimeState.NOT_TESTED.value
-                val_prob = None
-            else:
-                prob = b_info.get("probability_output_valid")
-                state_prob = RuntimeState.AVAILABLE.value if prob is True else RuntimeState.UNAVAILABLE.value
-                val_prob = "Finite float output, correct shape, softmax sum ~= 1.0" if state_prob == RuntimeState.AVAILABLE.value else None
-
-            ver_prob = is_real and state_prob == RuntimeState.AVAILABLE.value
-            res_prob = CapabilityResult(
-                metric="probability_output_validity",
-                state=state_prob,
-                report_status=map_runtime_state_to_report_status(RuntimeState(state_prob), verified=ver_prob),
-                value=val_prob,
-                source=f"Reference graph output validation ({b_name})",
-                verified=ver_prob,
-                verification_method="reference_graph_output_check",
-                observed_at=now if ver_prob else None,
-                evidence_ref=f"{APP_EVIDENCE}#backends/{b_name}/probability_output" if ver_prob else None,
-                notes=("Capability check only; no latency, throughput or accuracy benchmarking performed."
-                       if "probability_output_valid" in b_info else BACKEND_BLOCKED_NOTE),
-            )
-
-            out.append(BackendCapability(
-                backend=b_name,
-                runtime_version=b_info.get("version"),
-                availability=res_avail,
-                delegation=res_deleg,
-                probability_output=res_prob,
-                quantization_support=[],
-                reference_graph_hash=b_info.get("reference_graph_hash"),
-                known_limitations=b_info.get("known_limitations", []),
-            ))
-
+        out["delegation"] = self._delegation(spec, val, out, ev, mk, not_reached, expected_nodes)
         return out
+
+    def _delegation(self, spec, val, out, ev, mk, not_reached, expected_nodes) -> CapabilityResult:
+        d = val.get("delegation") or {}
+        requested = spec["requested_delegate"]
+        nnapi = requested in ("NNAPI", "NnapiExecutionProvider")
+        method = "delegation_observation"
+        ev["mechanism"] = d.get("mechanism")
+        for k in ("nnapi_errno", "nnapi_has_errors", "log_lines"):
+            if k in d:
+                ev[k] = d[k]
+        if out["load"].state != RuntimeState.AVAILABLE.value:
+            return not_reached("backend_delegation", method, "graph did not load")
+        verifiable = not nnapi
+        note_nnapi = NNAPI_LIMITATION if nnapi else None
+        if d.get("mechanism") == "tflite_execution_plan_length":
+            plan = d.get("execution_plan_length")
+            ev.update(graph_node_count=expected_nodes, execution_plan_length=plan)
+            if not isinstance(plan, int) or isinstance(plan, bool):
+                return mk("backend_delegation", RuntimeState.NOT_TESTED.value, method,
+                          notes="Delegation not observable: execution-plan length unavailable "
+                                f"({d.get('execution_plan_error') or 'not reported'}).")
+            if plan < expected_nodes:
+                ev.update(observed=requested, delegated=True, cpu_fallback=False if plan == 1 else None)
+                shape = ("all nodes in one delegate kernel (no CPU fallback)" if plan == 1 else
+                         f"{plan} plan entries: several partitions or CPU-fallback nodes (not distinguishable)")
+                return mk("backend_delegation", RuntimeState.AVAILABLE.value, method, verifiable=verifiable,
+                          value=f"{requested} active: execution plan {plan} entr{'y' if plan == 1 else 'ies'} for a "
+                                f"{expected_nodes}-node graph; {shape}", notes=note_nnapi)
+            ev.update(observed="none observed", delegated=False, cpu_fallback=True)
+            return mk("backend_delegation", RuntimeState.UNAVAILABLE.value, method,
+                      notes=f"{requested} took no multi-node partition: execution plan length {plan} = graph node "
+                            f"count {expected_nodes}. A single-node delegate partition cannot be distinguished from "
+                            "CPU execution by this measure.")
+        if d.get("mechanism") == "ort_profile_node_provider":
+            kernels = d.get("kernels")
+            if out["inference"].state != RuntimeState.AVAILABLE.value:
+                return not_reached("backend_delegation", method, "inference did not run, so no kernel was profiled")
+            if not isinstance(kernels, list) or not kernels:
+                return mk("backend_delegation", RuntimeState.NOT_TESTED.value, method,
+                          notes=f"Delegation not observable: no profiled kernel ({d.get('profile_error') or 'empty profile'}).")
+            by_provider: Dict[str, int] = {}
+            for k in kernels:
+                p = (k or {}).get("provider")
+                by_provider[str(p)] = by_provider.get(str(p), 0) + 1
+            n_req = by_provider.get(requested, 0)
+            others = {p: n for p, n in by_provider.items() if p != requested}
+            ev.update(kernels_by_provider=by_provider, observed=sorted(by_provider), delegated=n_req > 0,
+                      cpu_fallback=bool(others), partitions=n_req if nnapi else None)
+            if n_req:
+                fb = f"; other providers: {others}" if others else "; no other provider executed a kernel"
+                return mk("backend_delegation", RuntimeState.AVAILABLE.value, method, verifiable=verifiable,
+                          value=f"{requested} executed {n_req} of {sum(by_provider.values())} profiled kernel(s){fb}",
+                          notes=note_nnapi)
+            return mk("backend_delegation", RuntimeState.UNAVAILABLE.value, method,
+                      notes=f"No profiled kernel ran on {requested}; executed providers: {by_provider}.")
+        return mk("backend_delegation", RuntimeState.ERROR.value, method,
+                  error=f"Unknown or missing delegation mechanism {d.get('mechanism')!r} (inconsistent app output).")
+
+    @staticmethod
+    def _quantization(variant: str, e: Dict[str, Any], is_real: bool) -> CapabilityResult:
+        metric = f"quantization_{variant}"
+        for stage in ("load", "inference", "output"):
+            r: CapabilityResult = e[stage]
+            if r.state != RuntimeState.AVAILABLE.value:
+                return _retag(r, metric, "reference_graph_variant_check",
+                              notes=f"{variant} variant: {stage} stage is {r.state}.")
+        d = e["delegation"]
+        return _make(metric, RuntimeState.AVAILABLE.value, is_real=is_real, source=e["output"].source,
+                     verification_method="reference_graph_variant_check", evidence_ref=e["output"].evidence_ref,
+                     value=f"{variant} variant loaded, executed and produced a valid output",
+                     notes=f"Delegation for this variant: {d.state} ({d.value or d.notes or d.error_message}).")
+
+
+def _retag(r: CapabilityResult, metric: str, method: str, notes: Optional[str] = None) -> CapabilityResult:
+    """Copy of a non-AVAILABLE record under another metric name (same state, evidence and messages)."""
+    return CapabilityResult(metric=metric, state=r.state, report_status=r.report_status, value=None, unit=None,
+                            source=r.source, min_api=r.min_api, condition=r.condition, verified=False,
+                            verification_method=method, evidence_ref=r.evidence_ref, observed_at=r.observed_at,
+                            error_message=r.error_message, notes=_join_notes(r.notes, notes))
 
 
 class ProfilingCapabilityCollector:
@@ -2088,7 +2283,9 @@ class EnergyMeasurementCapabilityChecker:
       a demonstrated counter -> AVAILABLE / REQUIRES PILOT VALIDATION (agreement, D-16); all unsupported ->
       UNAVAILABLE; otherwise NOT_TESTED.
     - selected_level follows energy_evidence.select_energy_level(): a preferred level is never skipped while it
-      is unassessed, so software counters alone never select E-3. Absolute energy is never claimed.
+      is unassessed, so software counters alone never select E-3; E-1 needs every E-1 requirement including the
+      researcher's safety sign-off, E-2 every E-2 requirement including non-charging evidence. Absolute energy is
+      never claimed.
     """
 
     COUNTER_METRICS = ("battery_current_now", "battery_charge_counter", "battery_energy_counter")
@@ -2106,17 +2303,20 @@ class EnergyMeasurementCapabilityChecker:
             "E1_battery_side_reference", data, errors, ev_ref,
             source="Researcher physical inspection: battery-side external reference (power analyser bypass)",
             describe=lambda d: (f"feasible={d.get('feasible')}, reference_validated={d.get('reference_validated')}, "
-                                f"safety_signoff={d.get('safety_signoff')}, instrument={d.get('instrument_model')}"),
+                                f"safety_signoff={d.get('safety_signoff')}, instrument={d.get('instrument_model')}; "
+                                "unmet selection requirements: "
+                                f"{unmet_selection_requirements('E1_battery_side_reference', d) or 'none'}"),
         )
         e2 = self._level(
             "E2_supply_powered_session", data, errors, ev_ref,
             source="Researcher session: external meter on a supply-powered session with charging excluded",
             describe=lambda d: (f"feasible={d.get('feasible')}, reference_validated={d.get('reference_validated')}, "
-                                f"non_charging_verified={d.get('non_charging_verified')}, meter={d.get('meter_model')}"),
+                                f"non_charging_verified={d.get('non_charging_verified')}, meter={d.get('meter_model')}; "
+                                "unmet selection requirements: "
+                                f"{unmet_selection_requirements('E2_supply_powered_session', d) or 'none'}"),
         )
         e3, e3_available = self._software_counters(battery_results, is_real)
 
-        from src.monitoring.characterization.energy_evidence import select_energy_level
         selected = select_energy_level(
             (data or {}).get("E1_battery_side_reference"), (data or {}).get("E2_supply_powered_session"), e3_available
         ) if data else None
@@ -2127,6 +2327,7 @@ class EnergyMeasurementCapabilityChecker:
             E3_software_counters=e3,
             selected_level=selected,
             absolute_energy_claimed=False,  # FIXED FALSE
+            selection_basis=selection_basis(data),
         )
 
     @staticmethod

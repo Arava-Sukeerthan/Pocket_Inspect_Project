@@ -224,8 +224,11 @@ def _record_states(run: Dict[str, Any]) -> Dict[str, Optional[str]]:
         for r in cam.get("results", []) + [cam.get("manual_control_honoured") or {}]:
             out[f"camera/{cam.get('camera_id')}/{r.get('metric')}"] = r.get("state")
     for b in run.get("backends", []):
-        for k in ("availability", "delegation", "probability_output"):
-            out[f"backend/{b.get('backend')}/{k}"] = (b.get(k) or {}).get("state")
+        for k in ("availability", "graph_load", "inference_execution", "delegation", "probability_output"):
+            if k in b:
+                out[f"backend/{b.get('backend')}/{k}"] = (b.get(k) or {}).get("state")
+        for r in b.get("quantization_support") or []:
+            out[f"backend/{b.get('backend')}/{r.get('metric')}"] = r.get("state")
     for r in run.get("profiling", []):
         out[f"profiling/{r.get('metric')}"] = r.get("state")
     energy = run.get("energy") or {}
@@ -364,8 +367,11 @@ class CharacterizationReportGenerator:
                 if res:
                     _format_row(dict(res, metric=f"camera[{cam.get('camera_id')}].{res.get('metric')}"))
         for b in run_record.get("backends", []):
-            for key in ("availability", "delegation", "probability_output"):
-                _format_row(dict(b[key], metric=f"{b['backend']}.{b[key].get('metric')}"))
+            for key in ("availability", "graph_load", "inference_execution", "probability_output", "delegation"):
+                if b.get(key):
+                    _format_row(dict(b[key], metric=f"{b['backend']}.{b[key].get('metric')}"))
+            for res in b.get("quantization_support") or []:
+                _format_row(dict(res, metric=f"{b['backend']}.{res.get('metric')}"))
         for res in run_record.get("profiling", []):
             _format_row(res)
         energy = run_record.get("energy", {})

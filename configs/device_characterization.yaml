@@ -61,11 +61,66 @@ probes:
 
 # Camera advertised-vs-honoured check (protocol §4 P3, §5.3).
 # The Android app requests locked manual exposure/sensitivity and reports requested and CaptureResult values;
-# the host decides "honoured" from them. A non-zero tolerance is a researcher decision: until one is approved,
-# any difference between requested and reported values is classified as NOT HONOURED.
+# the host decides "honoured" from them: abs(reported - requested) <= tolerance * requested, checked separately
+# for exposure time and for sensitivity; both must hold. Tolerances are relative (fractions of the requested value).
+# Researcher decision (2026-10-07): ±5 % for both. 0.0 would mean exact equality.
 camera_manual_control_check:
-  exposure_time_relative_tolerance: 0.0
-  sensitivity_relative_tolerance: 0.0
+  exposure_time_relative_tolerance: 0.05
+  sensitivity_relative_tolerance: 0.05
+
+# Runtime / backend capability check (protocol §4 P4, §5.4, §5.5; matrix §5). Capability only: no latency,
+# throughput or accuracy is recorded.
+# Researcher decision (2026-10-07): scope is LiteRT / TensorFlow Lite (CPU/XNNPACK, GPU delegate, NNAPI delegate)
+# and ONNX Runtime Mobile (CPU, NNAPI execution provider). No other runtime is approved.
+# The Android app runs the probes (BackendProbes.kt); the host decides every status from the app's raw observations.
+# Runtime artifact versions are declared once, in mobile/characterization/build.gradle.kts; the app reports the
+# runtime-reported version (or null when the runtime does not report one).
+inference_backend_check:
+  backends:
+    TFLite_CPU: {runtime_family: "LiteRT / TensorFlow Lite", artifact_format: "tflite", requested_delegate: "XNNPACK"}
+    TFLite_GPU: {runtime_family: "LiteRT / TensorFlow Lite", artifact_format: "tflite", requested_delegate: "GPU"}
+    TFLite_NNAPI: {runtime_family: "LiteRT / TensorFlow Lite", artifact_format: "tflite", requested_delegate: "NNAPI"}
+    ONNXRuntime_CPU: {runtime_family: "ONNX Runtime Mobile", artifact_format: "onnx", requested_delegate: "CPUExecutionProvider"}
+    ONNXRuntime_NNAPI: {runtime_family: "ONNX Runtime Mobile", artifact_format: "onnx", requested_delegate: "NnapiExecutionProvider"}
+  # Matrix row "Other approved runtimes (e.g. ExecuTorch)": none approved. The row stays NOT YET VERIFIED.
+  other_approved_runtimes: []
+  primary_variant: "fp32"            # availability / load / inference / probability output / delegation records
+  quantization_variants: ["fp16", "int8"]   # one quantization_support record each
+  # Deterministic in-repository reference graph. Definition and generator (standard library only):
+  # src/monitoring/characterization/reference_graph.py. Variants fp32, fp16 (float16 weight storage), int8.
+  # CONV 3x3 (3->4) -> DEPTHWISE CONV 3x3 -> AVERAGE POOL 2x2 -> FULLY CONNECTED (64->4) -> SOFTMAX;
+  # input [1,8,8,3] (ONNX [1,3,8,8]), output [1,4]; fixed-formula weights and test input; no training, no download.
+  # The binary artifacts are not committed (no model binaries in git, AGENTS.md): the APK build generates them
+  # (Gradle task generateReferenceGraph -> APK assets reference_graph/). The app reports the SHA-256 of the bytes it
+  # loaded; the host compares it with the value pinned here. Check the pins:
+  #   python scripts/device_characterization/generate_reference_graph.py --check
+  reference_graph:
+    graph_id: "pocketinspect_step10d_reference_graph_v1"
+    apk_asset_dir: "reference_graph"
+    artifacts:
+      reference_graph_fp32.tflite: "1010b916154c293e5a168e4d8f394092958e4b739f2b614bbcf29fdb5aeb5f72"
+      reference_graph_fp16.tflite: "04995dba9755181179a208c4e4c4d7b39fc63b544e142b0bb12e0fe2ed31ab03"
+      reference_graph_int8.tflite: "4f7ef2f2d5bc90a2080f458d6f27ba83ee26e96a3731910831d1eb5a20978516"
+      reference_graph_fp32.onnx: "fad6dca1033903656ff0589d7470ab215a6878336f1bf6b9115e6ea6de52b55e"
+      reference_graph_fp16.onnx: "528648a4cf978e8ceb0fa4a4a57695bcd4372d9cf0cbd4ea4fc5e89660a813de"
+      reference_graph_int8.onnx: "ccafb6ce999a812d71626a719d70347db2bf206432391e4f91f1d653609cd0cd"
+      reference_graph_manifest.json: "3c904b28e9283e1b6df766e75713c789f8150ff5f7269069c235fd97e800ed0d"
+  # Output-validity rule (one rule, applied by the host to every app-reported output):
+  #   output present; shape == [1, 4]; every value finite and within [0, 1];
+  #   abs(sum(values) - 1) <= probability_sum_tolerance;
+  #   max_i abs(value_i - expected_i) <= max_abs_error, expected = float64 reference (reference_graph.py).
+  # float (fp32, fp16 variants): 1e-2. Half-precision execution, which the GPU delegate and NNAPI may use, gives errors
+  #   of order 1e-3 on this graph; 1e-2 keeps an order-of-magnitude margin and is below the smallest gap between
+  #   expected class probabilities (0.0165), so a structural error still fails. Bit-exact agreement is not required.
+  # int8: compared in output quantization steps (LSB = 1/256, the int8 softmax output scale), not with the float rule.
+  output_validation:
+    float:
+      max_abs_error: 0.01
+      probability_sum_tolerance: 0.01
+    int8:
+      output_scale: 0.00390625        # 1/256
+      max_abs_error_lsb: 2
+      probability_sum_tolerance_lsb: 4
 
 # Energy-measurement feasibility evidence (protocol §6, D-16 hierarchy).
 # E-1 and E-2 are physical/procedural checks performed by the researcher, never by software.

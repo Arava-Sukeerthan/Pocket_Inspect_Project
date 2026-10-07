@@ -12,6 +12,9 @@ Failures are explicit and never suppressed:
 - UNMAPPED_ROW: a matrix row with no mapping entry (matrix changed, mapping not updated);
 - STALE_MAPPING: a mapping entry for a row that no longer exists in the matrix;
 - NO_COLLECTOR: the row has no collector yet (reason recorded in the mapping);
+- NOT_IN_APPROVED_SCOPE: the row's `scope` list in configs/device_characterization.yaml is empty (nothing approved
+  to characterise). The row still fails: the protocol status vocabulary has no out-of-scope status, so it stays
+  NOT YET VERIFIED until the researcher decides how §9 treats it;
 - MISSING_RECORD / NOT_TESTED / ERROR / DEFAULT_STATUS / NO_EVIDENCE: per mapped record.
 """
 
@@ -24,6 +27,17 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 MATRIX_PATH = ROOT / "research" / "experiments" / "device_capability_matrix.md"
 COVERAGE_CONFIG_PATH = ROOT / "configs" / "device_capability_coverage.yaml"
+CHARACTERIZATION_CONFIG_PATH = ROOT / "configs" / "device_characterization.yaml"
+
+
+def _scope_list(dotted: str) -> List[Any]:
+    """Value of a dotted key in configs/device_characterization.yaml (must be a list)."""
+    node: Any = yaml.safe_load(CHARACTERIZATION_CONFIG_PATH.read_text(encoding="utf-8")) or {}
+    for part in dotted.split("."):
+        node = node.get(part) if isinstance(node, dict) else None
+    if not isinstance(node, list):
+        raise ValueError(f"coverage scope '{dotted}' is not a list in {CHARACTERIZATION_CONFIG_PATH.name}")
+    return node
 
 DEFAULT_STATUS = "NOT YET VERIFIED"
 FAILING_STATES = ("NOT_TESTED", "ERROR")
@@ -170,7 +184,9 @@ def check_matrix_coverage(run: Dict[str, Any], matrix_path: Path = MATRIX_PATH,
                 result.update(passed=ok, problem=None if ok else "SPECIFICATION_CHECK_FAILED",
                               basis="matrix status fixed by the specification")
         elif not entry.get("records"):
-            result.update(passed=False, problem="NO_COLLECTOR", reason=entry.get("reason"))
+            in_scope = _scope_list(entry["scope"]) if entry.get("scope") else None
+            problem = "NOT_IN_APPROVED_SCOPE" if in_scope == [] else "NO_COLLECTOR"
+            result.update(passed=False, problem=problem, reason=entry.get("reason"))
         else:
             problems: List[str] = []
             for ref in entry["records"]:

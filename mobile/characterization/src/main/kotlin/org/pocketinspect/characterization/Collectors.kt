@@ -36,7 +36,8 @@ enum class ReportStatus {
 
 /**
  * One app observation. The host (scripts/device_characterization/adb_collector.py) consumes `metric`, `state`,
- * `value`, `unit`, `error_message`, `notes`, `details` and, for per-camera records, `camera_id`. The host
+ * `value`, `unit`, `error_message`, `notes`, `details`, for per-camera records `camera_id`, and for backend records
+ * `backend` and `graph_variant` (BackendProbes.kt). The host
  * recomputes `report_status`/`verified` from its own rules; the app's values are informative only.
  * A state other than AVAILABLE always has value = null (no fake zeros).
  */
@@ -56,7 +57,9 @@ data class CapabilityResult(
     val error_message: String? = null,
     val notes: String? = null,
     val camera_id: String? = null,
-    val details: Any? = null
+    val details: Any? = null,
+    val backend: String? = null,
+    val graph_variant: String? = null
 )
 
 fun getIsoTimestamp(): String {

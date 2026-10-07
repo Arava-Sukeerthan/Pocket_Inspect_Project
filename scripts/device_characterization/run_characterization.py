@@ -38,7 +38,7 @@ from src.monitoring.characterization.collectors import (
     ProfilingCapabilityCollector,
     EnergyMeasurementCapabilityChecker,
 )
-from src.monitoring.characterization.energy_evidence import load_energy_evidence
+from src.monitoring.characterization.energy_evidence import EVIDENCE_LIST_FIELDS, load_energy_evidence
 from src.monitoring.characterization.models import CharacterizationRun
 from src.monitoring.characterization.report_generator import CharacterizationReportGenerator
 from scripts.device_characterization.adb_collector import ADBCollector
@@ -161,8 +161,9 @@ def run_characterization(
         if energy["data"]:
             base = (ROOT / energy["path"]).parent
             for level in energy["data"].values():
-                for ef in (level or {}).get("evidence_files") or []:
-                    extra_evidence[f"energy_feasibility_{Path(ef).name}"] = (base / ef).read_bytes()
+                for field in EVIDENCE_LIST_FIELDS:
+                    for ef in (level or {}).get(field) or []:
+                        extra_evidence[f"energy_feasibility_{Path(ef).name}"] = (base / ef).read_bytes()
 
     if adb_connected:
         if extra_evidence:

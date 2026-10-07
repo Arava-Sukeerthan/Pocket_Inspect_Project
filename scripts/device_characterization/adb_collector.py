@@ -396,7 +396,11 @@ class ADBCollector:
         "gpu_capability": ("gpu_renderer", "gpu_vulkan_support"),
         "profiling_capability": ("system_nano_time", "android_trace_api"),
         "camera_telemetry": ("camera_id_list", "camera_probe", "camera_count", "camera_0_hardware_level"),
+        "backend_capability": (),  # every record is per backend (see APP_BACKEND_METRICS)
     }
+    # Per-backend metrics: app records in backend_capability that carry a "backend" field (BackendProbes.kt).
+    # `reference_graph_check` records also carry "graph_variant" and are keyed "reference_graph_check/<variant>".
+    APP_BACKEND_METRICS: Tuple[str, ...] = ("backend_runtime", "reference_graph_check")
     # Per-camera metrics: app records in camera_telemetry that carry a "camera_id" field.
     APP_CAMERA_METRICS: Tuple[str, ...] = (
         "lens_facing", "hardware_level", "available_capabilities", "manual_exposure_advertised",
@@ -431,12 +435,15 @@ class ADBCollector:
         return not (existing and existing.get("state") == "AVAILABLE" and new.get("state") != "AVAILABLE")
 
     def _normalize_app_output_full(self, app_parsed: Dict[str, Any]) -> Dict[str, Any]:
-        """Normalizes the app report into {"records", "camera_records", "unrecognised"} (structured, no raw dump)."""
+        """Normalizes the app report into {"records", "camera_records", "backend_records", "unrecognised"}
+        (structured, no raw dump)."""
         records: Dict[str, Dict[str, Any]] = {}
         camera_records: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        backend_records: Dict[str, Dict[str, Dict[str, Any]]] = {}
         unrecognised: List[str] = []
         if not isinstance(app_parsed, dict):
-            return {"records": records, "camera_records": camera_records, "unrecognised": unrecognised}
+            return {"records": records, "camera_records": camera_records, "backend_records": backend_records,
+                    "unrecognised": unrecognised}
 
         for section_name, allowed in self.APP_SECTION_METRICS.items():
             section = app_parsed.get(section_name)
@@ -446,6 +453,16 @@ class ADBCollector:
                     continue
                 metric = item.get("metric")
                 cam_id = item.get("camera_id")
+                backend = item.get("backend")
+                if section_name == "backend_capability":
+                    variant = item.get("graph_variant")
+                    if backend is None or metric not in self.APP_BACKEND_METRICS or \
+                            (metric == "reference_graph_check") != (variant is not None):
+                        unrecognised.append(f"{section_name}/{backend}/{metric}/{variant}")
+                        continue
+                    key = metric if variant is None else f"{metric}/{variant}"
+                    backend_records.setdefault(str(backend), {})[key] = self._app_record(item)
+                    continue
                 if section_name == "camera_telemetry" and cam_id is not None:
                     if metric not in self.APP_CAMERA_METRICS:
                         unrecognised.append(f"{section_name}/{cam_id}/{metric}")
@@ -461,7 +478,8 @@ class ADBCollector:
                 rec = self._app_record(item)
                 if self._prefer(records.get(metric), rec):
                     records[metric] = rec
-        return {"records": records, "camera_records": camera_records, "unrecognised": unrecognised}
+        return {"records": records, "camera_records": camera_records, "backend_records": backend_records,
+                "unrecognised": unrecognised}
 
     def _normalize_app_output(self, app_parsed: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         """Legacy view: one record per APP_METRICS metric ({"state", "value", "unit", "error_message"})."""
@@ -738,6 +756,7 @@ class ADBCollector:
             full = self._normalize_app_output_full(app_parsed)
             observed_props["app_records"] = full["records"]
             observed_props["app_camera_records"] = full["camera_records"]
+            observed_props["app_backend_records"] = full["backend_records"]
             if full["unrecognised"]:
                 observed_props["app_unrecognised_items"] = full["unrecognised"]
             self._merge_app_observations(observed_props, self._normalize_app_output(app_parsed))

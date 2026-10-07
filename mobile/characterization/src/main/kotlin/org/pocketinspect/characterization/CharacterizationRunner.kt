@@ -7,7 +7,7 @@ import com.google.gson.GsonBuilder
 /**
  * Runs every on-device probe and returns the report JSON. Section names are the contract with the host bridge
  * (adb_collector.py APP_SECTION_METRICS) and with AppJsonLogFormatter.SECTIONS. Must not run on the main thread:
- * the camera capture check waits for camera callbacks.
+ * the camera capture check waits for camera callbacks and the backend checks run inference.
  */
 class CharacterizationRunner(private val context: Context) {
     fun runAll(): String {
@@ -19,7 +19,9 @@ class CharacterizationRunner(private val context: Context) {
                 "target_sdk" to context.applicationInfo.targetSdkVersion,
                 "clock_samples" to ProfilingCapabilityCollector.CLOCK_SAMPLES,
                 "camera_target_exposure_ns" to CameraTelemetryCollector.TARGET_EXPOSURE_NS,
-                "camera_capture_frames" to CameraTelemetryCollector.CAPTURE_FRAMES
+                "camera_capture_frames" to CameraTelemetryCollector.CAPTURE_FRAMES,
+                "backend_num_threads" to BackendCapabilityCollector.NUM_THREADS,
+                "backend_graph_variants" to BackendCapabilityCollector.VARIANTS
             ),
             "device_identity" to DeviceIdentityCollector(context).collect(),
             "memory_telemetry" to MemoryTelemetryCollector(context).collect(),
@@ -29,7 +31,8 @@ class CharacterizationRunner(private val context: Context) {
             "cpu_telemetry" to CpuTelemetryCollector().collect(),
             "gpu_capability" to GpuCapabilityCollector(context).collect(),
             "profiling_capability" to ProfilingCapabilityCollector().collect(),
-            "camera_telemetry" to CameraTelemetryCollector(context).collect()
+            "camera_telemetry" to CameraTelemetryCollector(context).collect(),
+            "backend_capability" to BackendCapabilityCollector(context).collect()
         )
         return GsonBuilder().setPrettyPrinting().create().toJson(report)
     }

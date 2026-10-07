@@ -75,15 +75,24 @@ rows:
   "4/Manual control honoured": {records: ["camera:*/manual_control_honoured"]}
   "4/Video capability": {records: ["camera:*/video_profiles"]}
 
-  # 5. Runtime / backend capability (implementation blocked pending researcher decision)
-  "5/TFLite (LiteRT) CPU / XNNPACK": {records: ["backend:TFLite_CPU/availability", "backend:TFLite_CPU/probability_output"]}
-  "5/TFLite GPU delegate": {records: ["backend:TFLite_GPU/availability", "backend:TFLite_GPU/delegation", "backend:TFLite_GPU/probability_output"]}
-  "5/TFLite NNAPI delegate": {records: ["backend:TFLite_NNAPI/availability", "backend:TFLite_NNAPI/delegation", "backend:TFLite_NNAPI/probability_output"]}
-  "5/ONNX Runtime Mobile CPU": {records: ["backend:ONNXRuntime_CPU/availability", "backend:ONNXRuntime_CPU/probability_output"]}
-  "5/ONNX Runtime NNAPI EP": {records: ["backend:ONNXRuntime_NNAPI/availability", "backend:ONNXRuntime_NNAPI/delegation", "backend:ONNXRuntime_NNAPI/probability_output"]}
+  # 5. Runtime / backend capability (researcher decision 2026-10-07: LiteRT/TFLite and ONNX Runtime Mobile;
+  # configs/device_characterization.yaml inference_backend_check). Matrix verification method "reference graph runs;
+  # output checks": availability, graph load, one inference and the probability output; delegate rows also need the
+  # requested delegate observed active.
+  "5/TFLite (LiteRT) CPU / XNNPACK":
+    records: ["backend:TFLite_CPU/availability", "backend:TFLite_CPU/graph_load", "backend:TFLite_CPU/inference_execution", "backend:TFLite_CPU/probability_output"]
+  "5/TFLite GPU delegate":
+    records: ["backend:TFLite_GPU/availability", "backend:TFLite_GPU/graph_load", "backend:TFLite_GPU/inference_execution", "backend:TFLite_GPU/delegation", "backend:TFLite_GPU/probability_output"]
+  "5/TFLite NNAPI delegate":
+    records: ["backend:TFLite_NNAPI/availability", "backend:TFLite_NNAPI/graph_load", "backend:TFLite_NNAPI/inference_execution", "backend:TFLite_NNAPI/delegation", "backend:TFLite_NNAPI/probability_output"]
+  "5/ONNX Runtime Mobile CPU":
+    records: ["backend:ONNXRuntime_CPU/availability", "backend:ONNXRuntime_CPU/graph_load", "backend:ONNXRuntime_CPU/inference_execution", "backend:ONNXRuntime_CPU/probability_output"]
+  "5/ONNX Runtime NNAPI EP":
+    records: ["backend:ONNXRuntime_NNAPI/availability", "backend:ONNXRuntime_NNAPI/graph_load", "backend:ONNXRuntime_NNAPI/inference_execution", "backend:ONNXRuntime_NNAPI/delegation", "backend:ONNXRuntime_NNAPI/probability_output"]
   "5/Other approved runtimes (e.g. ExecuTorch)":
     records: []
-    reason: "No collector: which other runtimes are approved is a pending researcher decision."
+    scope: "inference_backend_check.other_approved_runtimes"
+    reason: "No other runtime is approved (researcher decision 2026-10-07). The row stays NOT YET VERIFIED: the protocol status vocabulary has no out-of-scope status, so how §9 treats it is a researcher decision."
 
   # 6. Profiling / tracing
   "6/Timestamps (monotonic)": {records: ["profiling:system_nano_time"]}

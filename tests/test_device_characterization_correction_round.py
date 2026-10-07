@@ -88,6 +88,86 @@ def camera_records(cid, facing="BACK", manual=True, honoured=None):
     return recs
 
 
+BACKEND_SPECS = {"TFLite_CPU": ("tflite", "XNNPACK"), "TFLite_GPU": ("tflite", "GPU"),
+                 "TFLite_NNAPI": ("tflite", "NNAPI"), "ONNXRuntime_CPU": ("onnx", "CPUExecutionProvider"),
+                 "ONNXRuntime_NNAPI": ("onnx", "NnapiExecutionProvider")}
+GRAPH_VARIANTS = ("fp32", "fp16", "int8")
+
+
+def _pinned_artifacts():
+    return yaml.safe_load(CONFIG.read_text(encoding="utf-8"))["inference_backend_check"]["reference_graph"]["artifacts"]
+
+
+def expected_values(variant):
+    """Synthetic 'device' output: the float64 reference (int8: on the 1/256 output grid)."""
+    from src.monitoring.characterization import reference_graph as rg
+    exp = rg.expected_output()
+    return [round(v * 256) / 256 for v in exp] if variant == "int8" else list(exp)
+
+
+def backend_runtime(backend, state="AVAILABLE", version="2.16.1", **extra):
+    fmt, deleg = BACKEND_SPECS[backend]
+    info = {"runtime_family": "LiteRT / TensorFlow Lite" if fmt == "tflite" else "ONNX Runtime Mobile",
+            "requested_delegate": deleg, "sdk_int": 29,
+            "runtime_version_source": "TensorFlowLite.runtimeVersion()" if fmt == "tflite" else "OrtEnvironment.getVersion()",
+            "declared_dependency": "synthetic"}
+    if version is not None:
+        info["runtime_version"] = version if fmt == "tflite" else "1.30.0"
+    if fmt == "onnx":
+        info["available_providers"] = ["CPU", "NNAPI"]
+    info.update(extra)
+    rec = item("backend_runtime", state, value=info if state == "AVAILABLE" else None)
+    return dict(rec, backend=backend, details=info)
+
+
+def backend_check(backend, variant, *, state="AVAILABLE", load_ok=True, infer_ok=True, values=None, shape=None,
+                  plan="default", kernels="default", sha=None, requested_delegate=None, output=True):
+    """Synthetic reference_graph_check app record (test fixture only, never a device observation)."""
+    from src.monitoring.characterization import reference_graph as rg
+    fmt, deleg = BACKEND_SPECS[backend]
+    if state != "AVAILABLE":
+        return dict(item("reference_graph_check", state, notes="Not run: backend_runtime is UNAVAILABLE."),
+                    backend=backend, graph_variant=variant)
+    name = rg.artifact_name(fmt, variant)
+    pinned = _pinned_artifacts()
+    nodes = rg.graph_node_counts()[fmt][variant]
+    val = {"graph_id": rg.GRAPH_ID, "graph_variant": variant, "artifact": name,
+           "artifact_sha256": sha or pinned[name], "manifest_sha256": pinned[rg.MANIFEST_NAME],
+           "requested_backend": backend, "requested_delegate": requested_delegate or deleg, "graph_node_count": nodes,
+           "load": {"ok": load_ok} if load_ok else {"ok": False, "error": "IllegalArgumentException: Internal error"}}
+    if load_ok:
+        val["inference"] = {"ok": True} if infer_ok else {"ok": False, "error": "IllegalStateException: invoke failed"}
+        if infer_ok and output:
+            val["output"] = {"shape": shape or [1, 4], "dtype": "FLOAT32",
+                             "values": values if values is not None else expected_values(variant)}
+    if fmt == "tflite":
+        d = {"mechanism": "tflite_execution_plan_length", "graph_node_count": nodes, "log_lines": []}
+        if load_ok:
+            if plan == "default":
+                d["execution_plan_length"] = 1
+            elif plan is None:
+                d["execution_plan_error"] = "getExecutionPlanLength() not found"
+            else:
+                d["execution_plan_length"] = plan
+    else:
+        d = {"mechanism": "ort_profile_node_provider", "graph_node_count": nodes}
+        if load_ok and infer_ok:
+            d["kernels"] = ([{"node": "fused", "op": "x", "provider": deleg}] if kernels == "default" else kernels)
+    val["delegation"] = d
+    return dict(item("reference_graph_check", value=val), backend=backend, graph_variant=variant)
+
+
+def backend_section(overrides=None):
+    """App backend_capability section; `overrides` maps (backend, variant or 'runtime') -> record."""
+    overrides = overrides or {}
+    out = []
+    for b in BACKEND_SPECS:
+        out.append(overrides.get((b, "runtime"), backend_runtime(b)))
+        for v in GRAPH_VARIANTS:
+            out.append(overrides.get((b, v), backend_check(b, v)))
+    return out
+
+
 def full_app(**overrides):
     """App report in the new (correction-round) format, as CharacterizationRunner.kt writes it."""
     app = {
@@ -120,6 +200,7 @@ def full_app(**overrides):
             item("android_trace_api", value={"section": "x", "is_enabled": False})],
         "camera_telemetry": [item("camera_id_list", value=["0", "1"]), item("camera_count", value=2)]
                             + camera_records("0", "BACK", manual=True) + camera_records("1", "FRONT", manual=False),
+        "backend_capability": backend_section(),
     }
     app.update(overrides)
     return app
@@ -232,8 +313,11 @@ def records(data):
         for r in cam["results"] + [cam["manual_control_honoured"]]:
             out[f"camera/{cam['camera_id']}/{r['metric']}"] = r
     for b in data["backends"]:
-        for k in ("availability", "delegation", "probability_output"):
-            out[f"backend/{b['backend']}/{k}"] = b[k]
+        for k in ("availability", "graph_load", "inference_execution", "delegation", "probability_output"):
+            if k in b:
+                out[f"backend/{b['backend']}/{k}"] = b[k]
+        for r in b["quantization_support"]:
+            out[f"backend/{b['backend']}/{r['metric']}"] = r
     for r in data["profiling"]:
         out[f"profiling/{r['metric']}"] = r
     for k in ("E1_battery_side_reference", "E2_supply_powered_session", "E3_software_counters"):
@@ -772,14 +856,22 @@ def _level(assessed=True, feasible=False, validated=False, **kw):
     return d
 
 
+E1_COMPLETE = dict(assessed_by="researcher", assessed_on="2026-10-08", instrument_model="analyser",
+                   evidence_files=["photo.txt"], safety_signoff=True)
+E2_COMPLETE = dict(assessed_by="researcher", assessed_on="2026-10-08", meter_model="usb meter",
+                   evidence_files=["photo.txt"], non_charging_verified=True, non_charging_evidence_files=["log.txt"])
+
+
 def test_select_energy_level_never_skips_a_preferred_level():
+    """Researcher decision 2026-10-07 (G/H): every E-1 / E-2 requirement, incl. safety_signoff, gates selection."""
     assert select_energy_level(None, None, True) is None
     assert select_energy_level(_level(assessed=False), None, True) is None             # E-1 unassessed
-    assert select_energy_level(_level(feasible=True, validated=False), None, True) is None  # E-1 pending validation
-    assert select_energy_level(_level(feasible=True, validated=True), None, True) == "E-1"
+    assert select_energy_level(_level(feasible=True, validated=False, **E1_COMPLETE), None, True) is None  # not validated
+    assert select_energy_level(_level(feasible=True, validated=True), None, True) is None  # no safety sign-off etc.
+    assert select_energy_level(_level(feasible=True, validated=True, **E1_COMPLETE), None, True) == "E-1"
     assert select_energy_level(_level(), _level(assessed=False), True) is None          # E-2 unassessed
-    assert select_energy_level(_level(), _level(feasible=True, validated=True, non_charging_verified=False), True) is None
-    assert select_energy_level(_level(), _level(feasible=True, validated=True, non_charging_verified=True), True) == "E-2"
+    assert select_energy_level(_level(), _level(feasible=True, validated=True, **dict(E2_COMPLETE, non_charging_verified=False)), True) is None
+    assert select_energy_level(_level(), _level(feasible=True, validated=True, **E2_COMPLETE), True) == "E-2"
     assert select_energy_level(_level(), _level(), True) == "E-3"
     assert select_energy_level(_level(), _level(), None) is None
     assert select_energy_level(_level(), _level(), False) is None
@@ -863,7 +955,10 @@ def test_coverage_flags_untested_rows_and_backends(full_run):
     cov = check_matrix_coverage(full_run[1])
     by_id = {r["row_id"]: r for r in cov["rows"]}
     assert cov["passed"] is False
-    assert by_id["5/TFLite GPU delegate"]["passed"] is False and "NOT_TESTED" in by_id["5/TFLite GPU delegate"]["problem"]
+    # Backends are answered by the (synthetic) app backend section; "other approved runtimes" has none approved.
+    assert by_id["5/TFLite GPU delegate"]["passed"] is True
+    assert by_id["5/Other approved runtimes (e.g. ExecuTorch)"]["passed"] is False
+    assert by_id["5/Other approved runtimes (e.g. ExecuTorch)"]["problem"] == "NOT_IN_APPROVED_SCOPE"
     assert by_id["3/GPU/Memory"]["problem"] == "NO_COLLECTOR"
     assert by_id["8/E-1 battery-side external reference"]["passed"] is False
     assert by_id["7/D. External surface temperature required"]["passed"] is True
@@ -887,7 +982,7 @@ def test_coverage_passes_when_every_row_has_status_and_evidence(full_run):
     data = copy.deepcopy(full_run[1])
     filled = {"state": "AVAILABLE", "report_status": "AVAILABLE", "evidence_ref": "evidence/x", "value": 1}
     for b in data["backends"]:
-        for k in ("availability", "delegation", "probability_output"):
+        for k in ("availability", "graph_load", "inference_execution", "delegation", "probability_output"):
             b[k].update(filled)
     for k in ("E1_battery_side_reference", "E2_supply_powered_session"):
         data["energy"][k].update(state="EXTERNAL_REQUIRED", report_status="REQUIRES EXTERNAL INSTRUMENTATION",
@@ -969,17 +1064,33 @@ def test_protected_runs_listed_in_config():
     assert set(cfg["protected_runs"]) == {"run_20261005_181140", "run_20261006_052440", "run_20261007_082743"}
 
 
-def test_backends_stay_not_tested_and_are_marked_blocked(full_run):
-    for b in full_run[1]["backends"]:
-        for k in ("availability", "delegation", "probability_output"):
-            assert b[k]["state"] == "NOT_TESTED" and b[k]["value"] is None
-            assert "BLOCKED PENDING RESEARCHER DECISION" in b[k]["notes"]
+def test_backends_without_app_backend_section_are_not_tested(tmp_path):
+    """An app build without the backend probe gives NOT_TESTED everywhere: nothing verified, nothing fabricated."""
+    app = full_app()
+    del app["backend_capability"]
+    _, data, _ = run_pipeline(tmp_path, app)
+    assert {b["backend"] for b in data["backends"]} == set(BACKEND_SPECS)
+    for b in data["backends"]:
+        for k in ("availability", "graph_load", "inference_execution", "delegation", "probability_output"):
+            assert b[k]["state"] == "NOT_TESTED" and b[k]["value"] is None and b[k]["verified"] is False
+            assert "BLOCKED" not in (b[k]["notes"] or "")
+        assert all(r["state"] == "NOT_TESTED" for r in b["quantization_support"])
+        assert b["runtime_version"] is None and b["reference_graph_hash"] is None
 
 
-def test_no_ml_runtime_dependency_added_to_app():
-    gradle = Path("mobile/characterization/build.gradle.kts").read_text(encoding="utf-8").lower()
-    for dep in ("tensorflow", "tflite", "litert", "onnxruntime", "executorch"):
-        assert dep not in gradle, dep
+def test_only_approved_runtime_dependencies_added_to_app():
+    """Researcher decision 2026-10-07: LiteRT/TFLite (CPU, GPU, NNAPI) and ONNX Runtime Mobile only."""
+    import re
+    gradle = Path("mobile/characterization/build.gradle.kts").read_text(encoding="utf-8")
+    deps = set(re.findall(r'implementation\("([^:"]+:[^:"]+):', gradle))
+    ml = {d for d in deps if any(k in d.lower() for k in ("tensorflow", "tflite", "litert", "onnxruntime", "executorch",
+                                                          "pytorch", "mediapipe"))}
+    assert ml == {"org.tensorflow:tensorflow-lite", "org.tensorflow:tensorflow-lite-gpu",
+                  "org.tensorflow:tensorflow-lite-gpu-api", "com.microsoft.onnxruntime:onnxruntime-android"}
+    assert "executorch" not in gradle.lower()
+    # The reference graph is generated at build time by the repository generator; nothing is downloaded.
+    assert "generate_reference_graph.py" in gradle and "preBuild" in gradle
+    assert "http" not in gradle.lower()
 
 
 def test_app_sections_match_host_bridge():
