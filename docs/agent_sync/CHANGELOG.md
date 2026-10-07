@@ -3178,7 +3178,7 @@ Step 10E not started.
 
 ---
 
-## 2026-10-06 — Identity-Match Investigation
+## 2026-10-06 — Claude Code (Identity-Match Investigation)
 
 ### Task
 Read-only investigation of `identity_match_status=MISMATCH` in physical run
@@ -3216,3 +3216,187 @@ DOCUMENTATION ONLY.
 ### Next action
 Proceed with the remaining Step 10D sign-off criteria. Do not modify the
 identity-matching implementation as part of this finding.
+
+---
+
+## 2026-10-07 — Claude Code
+
+### Task
+Step 10D correction round, from Claude Code's read-only NOT_TESTED audit of `dde6f5f` (2026-10-07; audit decision: CORRECTION REQUIRED BEFORE NEXT PHYSICAL RUN). Implemented Phase A (host), Phase B (Android app, no ML dependencies) and the §9 sign-off infrastructure. The backend portion (Phase C) is **blocked pending a researcher decision**. No physical run was performed. Antigravity: please read the "Status semantics changed" section before the next physical run.
+
+### Audit source
+- Audit of `dde6f5f`. It modelled Run #2 as 41 of 62 records NOT_TESTED, from code tracing and a synthetic pipeline run. The physical run directories are not in the repository, so they were not inspected.
+- Every finding was re-traced against the current code before it was changed.
+
+### Header correction (earlier entry)
+- The entry header `## 2026-10-06 — Identity-Match Investigation` failed `test_roles_and_handoff`: the agent name is required.
+- It now reads `## 2026-10-06 — Claude Code (Identity-Match Investigation)`. The title and body are unchanged.
+- **Uncertain:** the original header did not record the agent, and the commit was authored by the researcher. The Claude Code attribution is inferred and needs the researcher's confirmation.
+
+### Phase A — host (`7f22cd8`)
+- **Configuration first.**
+  - The `probes` block of `configs/device_characterization.yaml` was dead config. It now supplies every host path: `cpufreq_sysfs_pattern`, `cpufreq_policy_dir`/`_files`, `thermal_sysfs_pattern`/`thermal_zone_scan_count`, `kgsl_gpu_clock_path`, `kgsl_gpu_busy_path`, `psi_memory_path`, `kernel_release_command`.
+  - Missing keys are rejected.
+- **New host probes, with outcomes that are never collapsed into one boolean.**
+  - Outcomes: READABLE / ABSENT / PERMISSION_DENIED / ERROR (`src/monitoring/characterization/host_probes.py`).
+  - Probes: PSI memory with `uname -r`; kgsl `gpubusy` (readability only); per-policy `scaling_cur_freq` / `scaling_max_freq` / `cpuinfo_max_freq`; the SurfaceFlinger `GLES:` line.
+  - Each probe writes a structured evidence file, hashed in the manifest.
+- **dumpsys battery.**
+  - `Charge counter`, `health` and `status` are now parsed.
+  - A field the build does not print is never defaulted.
+  - Absent `current now` is NOT_TESTED with an explicit note and evidence, because the BatteryManager property itself was not probed.
+- **Camera dumpsys** is parsed as a host cross-check only (`camera_host_evidence.json`). It never replaces the app's CameraCharacteristics probe.
+- **App → host bridge.**
+  - The 12-metric allow-list is replaced by an explicit per-section registry (`APP_SECTION_METRICS`) plus per-camera records.
+  - Unrecognised app items are listed in `app_unrecognised_items`, not dumped.
+  - App-only metrics always cite `android_app_evidence.json`; host values never do.
+  - App output retrieval failure is ERROR. An app build without a probe gives NOT_TESTED, with a note saying so.
+- **Collectors.**
+  - Services keep PERMISSION_REQUIRED.
+  - Camera IDs come only from the app's `camera_id_list`: `range(camera_count)` and the default `lens_facing="BACK"` are removed. With no ID list there is a single `UNIDENTIFIED` entry.
+  - Advertised vs honoured: the app reports the requested and CaptureResult values, and the host decides using `camera_manual_control_check` tolerances (0.0 until a researcher decision).
+  - `temperature_battery` is derived from the battery temperature observation.
+  - There is one authoritative GPU renderer source: app EGL, else host SurfaceFlinger, condition HOST ADB.
+  - The eight phantom evidence paths are removed. API_UNSUPPORTED cites the API-level evidence.
+- **D-16.**
+  - E-1/E-2 are taken only from a researcher evidence file. The template is `configs/energy_feasibility_evidence_template.yaml`; `energy_feasibility_evidence: null` by default. The file is copied into the run and hashed.
+  - E-3 is derived from the battery counter records.
+  - `selected_level` never skips an unassessed preferred level. The old code could select E-3 while E-1/E-2 were NOT_TESTED.
+  - Absolute energy is never claimed.
+- **Historical runs.** `protected_runs` (run_20261005_181140, run_20261006_052440, run_20261007_082743) are refused before any other check, with or without `--overwrite`.
+
+### Status semantics changed (affects reading of future runs)
+- **Host-ADB-only signals are now CONDITIONALLY AVAILABLE (condition `HOST ADB SHELL`), never VERIFIED.** This covers `/proc/stat`, `gpuclk`, cpu0 `scaling_cur_freq`, thermal zones, `atrace`, `gpubusy`, PSI and cpufreq policies.
+  - In the earlier runs these appeared as VERIFIED. That was a mapping defect, not a device change.
+- **REQUIRES PILOT VALIDATION** is now emitted per record, and only for a demonstrated interface:
+  - battery current: sign convention and update rate;
+  - charge counter: monotonic change;
+  - energy counter;
+  - E-3: agreement.
+  
+  The model and the validator reject it for any non-AVAILABLE state.
+- **Validator:** every `evidence_ref`, verified or not, must name an existing file. Verified + condition is rejected. CONDITIONALLY AVAILABLE without a condition is rejected.
+
+### §9 sign-off infrastructure (`7f22cd8`)
+- `coverage.py` and `configs/device_capability_coverage.yaml` evaluate §9 criterion 1 against the authoritative matrix, which is never modified.
+  - All 73 matrix rows are mapped.
+  - UNMAPPED_ROW and STALE_MAPPING are detected.
+  - Rows without a collector carry a reason and always fail: GPU memory, and other approved runtimes.
+- `signoff.py` evaluates the criteria:
+  - coverage;
+  - the R-08 variant check;
+  - D-10 source supported by evidence;
+  - the D-16 level against the hierarchy;
+  - a **human review gate that software never satisfies** (`PENDING_HUMAN_REVIEW`).
+  
+  Each run writes `step10d_signoff.json` and the README shows every criterion.
+- `compare_repeat_runs()` now compares every phase (camera, backends, profiling, thermal, energy).
+  - `variant_gate_passed` keeps the old "stable + variant" meaning.
+  - `signoff_allowed` now means the full §9 result.
+- The broken, never-called `update_device_capability_matrix()` was removed. Coverage replaces it.
+
+### Phase B — Android app (`ef772c0`)
+- **Services:** each service is obtained and one operation is exercised; SecurityException gives PERMISSION_REQUIRED.
+- **BatteryManager properties:** CURRENT_NOW, CURRENT_AVERAGE, CHARGE_COUNTER and ENERGY_COUNTER, recorded with the raw value, SDK and target SDK. The sentinel gives UNAVAILABLE.
+- **Memory:** `lowMemory`, `threshold`, heap and total PSS.
+- **Other device probes:** StatFs storage, `Process.getElapsedCpuTime()`, EGL renderer and vendor, the Vulkan feature, and thermal-listener registration.
+- **Cameras:** exact IDs; per-ID characteristics for the matrix §4 rows; and an AE-off capture with locked exposure/sensitivity that reports the requested and CaptureResult values.
+  - CAMERA not granted gives PERMISSION_REQUIRED. The README documents `adb shell pm grant ... android.permission.CAMERA`.
+- **Clocks:** monotonicity, smallest step and mean call interval (characterization only).
+- **Trace:** API calls only, never claimed as captured.
+- Probes run on a background thread.
+- No TFLite or ONNX Runtime dependency was added.
+
+### Files changed
+- **Configuration:** `configs/device_characterization.yaml`; new `configs/device_capability_coverage.yaml`, `configs/energy_feasibility_evidence_template.yaml`.
+- **Host code:** `scripts/device_characterization/adb_collector.py`, `run_characterization.py`.
+- **Characterization package (`src/monitoring/characterization/`):** `collectors.py`, `models.py`, `report_generator.py`; new `host_probes.py`, `energy_evidence.py`, `coverage.py`, `signoff.py`.
+- **Android app (`mobile/characterization/`):** `README.md`; `Collectors.kt`, `CharacterizationRunner.kt`, `MainActivity.kt`, `AppJsonLogFormatter.kt`, `AppJsonLogFormatterTest.kt`; new `SystemProbes.kt`, `CameraProbes.kt`.
+- **Tests:** `test_device_characterization_connected_e2e.py`, `_ram_variant.py`, `_report.py`; new `test_device_characterization_correction_round.py`.
+- **This file.**
+- **Not changed:** protocol, matrix, schema, decision register, GC-03, RQs, hypotheses, R0–R3, C1–C4, D-10/D-16 decisions.
+
+### Tests
+- **Before:** at `dde6f5f`, 366 passed and 1 failed (this header guard).
+- **After:** 450 passed, 0 failed (full suite, run twice). The new module has 83 tests.
+- **Existing expectations changed only where the correction is stricter:**
+  - conditional and pilot statuses replace VERIFIED (R-09, P-03);
+  - real camera IDs replace generated ones (P5-03, P-07, P-03 legacy camera);
+  - `signoff_allowed` is full §9.
+  
+  The P5-03 intent (a failed camera probe is ERROR, not NOT_TESTED) is kept.
+- **Mutation checks:** 15 planted defects, each killed. They covered:
+  - conditional value marked VERIFIED;
+  - E-3 from counters alone;
+  - IDs generated from count;
+  - facing defaulted to BACK;
+  - permission denied collapsed into absent;
+  - dangling evidence ignored;
+  - pilot status on an untested record;
+  - protected-run guard removed;
+  - coverage ignoring missing evidence;
+  - review gate satisfied by default;
+  - honoured without comparison;
+  - charge counter not parsed;
+  - `temperature_battery` not derived;
+  - bridge dropping records;
+  - readability claimed as throttling.
+- **Kotlin:** main and test sources compile against the Android API 34 framework classes (Robolectric `android-all` from Maven Central) with 0 warnings, and `AppJsonLogFormatterTest` passes 6/6.
+  - **No APK was built:** the Android SDK repository (`dl.google.com`) is blocked by this environment's network policy.
+
+### Failures found and fixed during the round
+- The protected-run guard first ran after the run-ID date check, so for older dates it was never reached. It now runs first, and a test covers it.
+- For a per-camera record absent from the app report, `_app_result(record=None)` fell back to a flat lookup by metric name. An explicit sentinel fixes it.
+- The legacy P5-03 shape: a failed camera probe now propagates its state to the per-camera checks of the `UNIDENTIFIED` entry.
+
+### BACKEND IMPLEMENTATION BLOCKED PENDING RESEARCHER DECISION
+G1–G15 stay NOT_TESTED, marked as blocked. **Proposal only**, for researcher approval:
+- **Runtimes and versions:** TensorFlow Lite / LiteRT Android (CPU/XNNPACK, GPU delegate, NNAPI delegate) and ONNX Runtime Android (CPU, NNAPI EP). Exact artifacts and versions to be chosen; adding them is gated by AGENTS.md.
+- **Reference graph:** a tiny graph exercising convolution, depthwise convolution, pooling, fully connected and softmax, with deterministic constant weights (no training), plus INT8 and FP16 variants (protocol §5.5). Two things need a decision:
+  - how it is generated: host tooling (TensorFlow / `onnx`) is a heavy dependency;
+  - whether the binary `.tflite` / `.onnx` files may be committed (AGENTS.md).
+- **Checks, with no latency recorded:**
+  - interpreter/session creation;
+  - delegate/EP application;
+  - delegated vs CPU partition counts (whether the Java APIs expose these, or native/op-profiling tooling is needed, must be investigated);
+  - output shape, finite values and probability sum.
+- **Decisions also needed:**
+  - the probability-sum tolerance;
+  - the NNAPI device list (NDK only at API 29);
+  - whether any "other approved runtime" (e.g. ExecuTorch) is in scope.
+
+### Energy decision gate (D-16)
+- **Pending:** the researcher fills the template — E-1 battery-side inspection with safety sign-off, and E-2 meter and supply-powered non-charging session — and sets `energy_feasibility_evidence`.
+- Until then E-1/E-2 stay NOT_TESTED and `selected_level` stays null, so §9 criterion 3 (D-16) fails.
+- The agreement threshold remains a pre-data-collection decision.
+
+### Other uncertain items (researcher review)
+- **Camera honoured tolerance:** currently 0.0, so any difference counts as NOT HONOURED.
+- **HardwarePropertiesManager:** reported as PERMISSION_REQUIRED, report UNAVAILABLE. Whether device-owner provisioning counts as an unlocking condition (CONDITIONALLY AVAILABLE) is a decision.
+- **Not probed:**
+  - GPU memory (no collector);
+  - `onTrimMemory` levels;
+  - app readability of sysfs/procfs paths;
+  - trace capture across USB disconnection (D-16 B);
+  - Trace section visibility in a captured trace.
+- **Thermal zones:** only zones 0–9 are scanned (config).
+
+### Physical validation
+- **NO NEW PHYSICAL RUN PERFORMED.** No physical observation has changed.
+- Run #1 and Run #2 are untouched and were not inspected (they are not in the repository).
+- **Next physical step, only after an independent review and after the backend gate is resolved or explicitly excluded:**
+  1. build the APK on a machine with the Android SDK;
+  2. install it and grant CAMERA;
+  3. launch the app;
+  4. run `run_characterization.py --require-device`;
+  5. repeat on a second day after a reboot.
+
+### Next action
+- Independent review of `7f22cd8` and `ef772c0`, not by Claude Code (Antigravity or the researcher).
+- Researcher decisions: the backend gate, the camera tolerance, and the E-1/E-2 evidence.
+
+### Git
+- Branch `claude/cool-thompson-su8kwd`. It contains a merge of `origin/claude/step-10d-r08-nearest-variant` (`dde6f5f`), so the header correction has its target.
+- Commits: `7f22cd8` (host + §9), `ef772c0` (Android). This entry is a separate commit.
+
+Step 10E not started.
