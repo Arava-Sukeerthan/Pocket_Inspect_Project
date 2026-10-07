@@ -89,10 +89,15 @@ rows:
     records: ["backend:ONNXRuntime_CPU/availability", "backend:ONNXRuntime_CPU/graph_load", "backend:ONNXRuntime_CPU/inference_execution", "backend:ONNXRuntime_CPU/probability_output"]
   "5/ONNX Runtime NNAPI EP":
     records: ["backend:ONNXRuntime_NNAPI/availability", "backend:ONNXRuntime_NNAPI/graph_load", "backend:ONNXRuntime_NNAPI/inference_execution", "backend:ONNXRuntime_NNAPI/delegation", "backend:ONNXRuntime_NNAPI/probability_output"]
+  # Researcher decision F-02 (2026-10-07): the Step 10D runtime scope is the five rows above; no other runtime is
+  # approved (configs/device_characterization.yaml inference_backend_check.other_approved_runtimes: []). Protocol §5.4
+  # covers only repository-approved runtimes, so with none approved this row passes exactly when every in-scope row
+  # above passes; it never adds a record or a runtime. Adding an approved runtime makes it fail (NO_COLLECTOR).
   "5/Other approved runtimes (e.g. ExecuTorch)":
     records: []
     scope: "inference_backend_check.other_approved_runtimes"
-    reason: "No other runtime is approved (researcher decision 2026-10-07). The row stays NOT YET VERIFIED: the protocol status vocabulary has no out-of-scope status, so how §9 treats it is a researcher decision."
+    requires_rows: ["5/TFLite (LiteRT) CPU / XNNPACK", "5/TFLite GPU delegate", "5/TFLite NNAPI delegate", "5/ONNX Runtime Mobile CPU", "5/ONNX Runtime NNAPI EP"]
+    reason: "No other runtime approved (researcher decision F-02, 2026-10-07); the row is satisfied only by complete characterization of the approved scope."
 
   # 6. Profiling / tracing
   "6/Timestamps (monotonic)": {records: ["profiling:system_nano_time"]}

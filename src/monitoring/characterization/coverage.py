@@ -12,9 +12,12 @@ Failures are explicit and never suppressed:
 - UNMAPPED_ROW: a matrix row with no mapping entry (matrix changed, mapping not updated);
 - STALE_MAPPING: a mapping entry for a row that no longer exists in the matrix;
 - NO_COLLECTOR: the row has no collector yet (reason recorded in the mapping);
-- NOT_IN_APPROVED_SCOPE: the row's `scope` list in configs/device_characterization.yaml is empty (nothing approved
-  to characterise). The row still fails: the protocol status vocabulary has no out-of-scope status, so it stays
-  NOT YET VERIFIED until the researcher decides how §9 treats it;
+- Scope rows (`scope` + `requires_rows`, e.g. matrix §5 "Other approved runtimes"): the protocol item covers only
+  *repository-approved* runtimes (protocol §5.4). When the researcher-approved list named by `scope` in
+  configs/device_characterization.yaml is empty (researcher decision F-02), the row has nothing of its own to
+  characterise: it passes only when every row in `requires_rows` (the approved runtime scope) passes, and fails with
+  SCOPE_NOT_FULLY_CHARACTERIZED otherwise. A non-empty list without a collector fails with NO_COLLECTOR. The row
+  never creates a capability record and never marks a runtime available;
 - MISSING_RECORD / NOT_TESTED / ERROR / DEFAULT_STATUS / NO_EVIDENCE: per mapped record.
 """
 
@@ -185,8 +188,11 @@ def check_matrix_coverage(run: Dict[str, Any], matrix_path: Path = MATRIX_PATH,
                               basis="matrix status fixed by the specification")
         elif not entry.get("records"):
             in_scope = _scope_list(entry["scope"]) if entry.get("scope") else None
-            problem = "NOT_IN_APPROVED_SCOPE" if in_scope == [] else "NO_COLLECTOR"
-            result.update(passed=False, problem=problem, reason=entry.get("reason"))
+            if in_scope == [] and entry.get("requires_rows"):
+                result.update(passed=None, problem="PENDING_SCOPE_CHECK", reason=entry.get("reason"),
+                              requires_rows=list(entry["requires_rows"]), scope=entry["scope"])
+            else:
+                result.update(passed=False, problem="NO_COLLECTOR", reason=entry.get("reason"))
         else:
             problems: List[str] = []
             for ref in entry["records"]:
@@ -206,6 +212,19 @@ def check_matrix_coverage(run: Dict[str, Any], matrix_path: Path = MATRIX_PATH,
                         problems.append(f"{ref}: {prob}")
             result.update(passed=not problems, problem="; ".join(problems) or None)
         rows_out.append(result)
+
+    # Scope rows are decided after every other row, so the order of the matrix does not matter.
+    by_id = {r["row_id"]: r for r in rows_out}
+    for result in rows_out:
+        if result.get("problem") != "PENDING_SCOPE_CHECK":
+            continue
+        missing = [rid for rid in result["requires_rows"] if rid not in by_id]
+        failing = [rid for rid in result["requires_rows"] if rid in by_id and by_id[rid]["passed"] is not True]
+        ok = not missing and not failing
+        result.update(passed=ok, problem=None if ok else "SCOPE_NOT_FULLY_CHARACTERIZED",
+                      basis=(f"no runtime approved beyond the characterised scope ({result['scope']} is empty, "
+                             "researcher decision F-02); every in-scope runtime row passes"),
+                      failing_required_rows=failing + missing)
 
     for rid in sorted(set(mapping) - matrix_ids):
         rows_out.append({"row_id": rid, "matrix_status": None, "records": [], "passed": False,

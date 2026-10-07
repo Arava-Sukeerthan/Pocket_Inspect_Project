@@ -78,12 +78,77 @@ def test_app_probes_exactly_the_configured_backends():
     assert "executorch" not in kt.lower()
 
 
-def test_other_approved_runtimes_row_stays_failing_and_unselected(tmp_path):
+OTHER_ROW = "5/Other approved runtimes (e.g. ExecuTorch)"
+SCOPE_ROWS = ["5/TFLite (LiteRT) CPU / XNNPACK", "5/TFLite GPU delegate", "5/TFLite NNAPI delegate",
+              "5/ONNX Runtime Mobile CPU", "5/ONNX Runtime NNAPI EP"]
+
+
+def _row(cov, rid):
+    return next(r for r in cov["rows"] if r["row_id"] == rid)
+
+
+def test_f02_other_runtimes_row_passes_only_with_complete_scope(tmp_path):
+    """F-02: no other runtime approved; the row is satisfied exactly when every in-scope runtime row passes."""
     _, data, _ = run_pipeline(tmp_path, full_app())
-    row = next(r for r in check_matrix_coverage(data)["rows"] if r["row_id"].startswith("5/Other approved runtimes"))
-    assert row["passed"] is False and row["problem"] == "NOT_IN_APPROVED_SCOPE"
-    assert "researcher decision" in row["reason"]
-    assert not any(b["backend"] not in BACKEND_SPECS for b in data["backends"])
+    cov = check_matrix_coverage(data)
+    assert all(_row(cov, rid)["passed"] for rid in SCOPE_ROWS)
+    row = _row(cov, OTHER_ROW)
+    assert row["passed"] is True and row["problem"] is None and row["records"] == []
+    assert "F-02" in row["basis"] and row["failing_required_rows"] == []
+    # No runtime or record was added for the row.
+    assert {b["backend"] for b in data["backends"]} == set(BACKEND_SPECS)
+
+
+@pytest.mark.parametrize("override", [
+    ("TFLite_GPU", "fp32", dict(plan=None)),          # delegation unobservable -> NOT_TESTED
+    ("ONNXRuntime_NNAPI", "fp32", dict(load_ok=False)),  # graph load ERROR
+])
+def test_f02_other_runtimes_row_fails_when_scope_incomplete(tmp_path, override):
+    name, variant, kw = override
+    _, data, _ = run_pipeline(tmp_path, app_with({(name, variant): backend_check(name, variant, **kw)}))
+    row = _row(check_matrix_coverage(data), OTHER_ROW)
+    assert row["passed"] is False and row["problem"] == "SCOPE_NOT_FULLY_CHARACTERIZED"
+    assert row["failing_required_rows"]
+
+
+def test_f02_other_runtimes_row_fails_without_backend_output(tmp_path):
+    app = full_app()
+    del app["backend_capability"]
+    _, data, _ = run_pipeline(tmp_path, app)
+    row = _row(check_matrix_coverage(data), OTHER_ROW)
+    assert row["passed"] is False and set(row["failing_required_rows"]) == set(SCOPE_ROWS)
+
+
+def test_f02_an_approved_extra_runtime_without_collector_fails(tmp_path, monkeypatch):
+    from src.monitoring.characterization import coverage as cov_mod
+    cfg = copy.deepcopy(CFG)
+    cfg["inference_backend_check"]["other_approved_runtimes"] = ["ExecuTorch"]
+    path = tmp_path / "cfg.yaml"
+    path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    _, data, _ = run_pipeline(tmp_path, full_app())
+    monkeypatch.setattr(cov_mod, "CHARACTERIZATION_CONFIG_PATH", path)
+    row = _row(check_matrix_coverage(data), OTHER_ROW)
+    assert row["passed"] is False and row["problem"] == "NO_COLLECTOR"
+
+
+def test_f02_scope_row_does_not_unblock_signoff_alone(tmp_path):
+    from src.monitoring.characterization.signoff import evaluate_step10d_signoff
+    _, data, _ = run_pipeline(tmp_path, full_app())
+    s = evaluate_step10d_signoff(data)
+    assert s["signoff_allowed"] is False      # GPU memory row, D-16 evidence and the human review gate remain
+
+
+def test_f01_approved_tolerances_exact():
+    assert RULES == {"float": {"max_abs_error": 0.01, "probability_sum_tolerance": 0.01},
+                     "int8": {"output_scale": 0.00390625, "max_abs_error_lsb": 2, "probability_sum_tolerance_lsb": 4}}
+    assert CFG["camera_manual_control_check"] == {"exposure_time_relative_tolerance": 0.05,
+                                                  "sensitivity_relative_tolerance": 0.05}
+    # The float rule applies to both fp32 and fp16; int8 uses the quantization-step rule.
+    exp = rg.expected_output()
+    off = [exp[0] + 0.0099, exp[1] - 0.0099] + exp[2:]
+    for v in ("fp32", "fp16"):
+        assert rg.validate_output({"shape": [1, 4], "values": off}, v, RULES)[0]
+    assert not rg.validate_output({"shape": [1, 4], "values": off}, "int8", RULES)[0]
 
 
 # ---------------------------------------------------------------------------------------------------------------

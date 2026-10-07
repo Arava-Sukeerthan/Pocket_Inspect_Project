@@ -957,8 +957,9 @@ def test_coverage_flags_untested_rows_and_backends(full_run):
     assert cov["passed"] is False
     # Backends are answered by the (synthetic) app backend section; "other approved runtimes" has none approved.
     assert by_id["5/TFLite GPU delegate"]["passed"] is True
-    assert by_id["5/Other approved runtimes (e.g. ExecuTorch)"]["passed"] is False
-    assert by_id["5/Other approved runtimes (e.g. ExecuTorch)"]["problem"] == "NOT_IN_APPROVED_SCOPE"
+    # F-02: no other runtime approved; the row is satisfied by the fully characterized in-scope rows, never by a record.
+    assert by_id["5/Other approved runtimes (e.g. ExecuTorch)"]["passed"] is True
+    assert by_id["5/Other approved runtimes (e.g. ExecuTorch)"]["records"] == []
     assert by_id["3/GPU/Memory"]["problem"] == "NO_COLLECTOR"
     assert by_id["8/E-1 battery-side external reference"]["passed"] is False
     assert by_id["7/D. External surface temperature required"]["passed"] is True
@@ -988,9 +989,9 @@ def test_coverage_passes_when_every_row_has_status_and_evidence(full_run):
         data["energy"][k].update(state="EXTERNAL_REQUIRED", report_status="REQUIRES EXTERNAL INSTRUMENTATION",
                                  evidence_ref="evidence/energy_feasibility_evidence.yaml")
     cfg = load_coverage_config()
-    rows = {k: v for k, v in cfg["rows"].items() if v.get("records") or v.get("specification_fixed")}
+    rows = {k: v for k, v in cfg["rows"].items()
+            if v.get("records") or v.get("specification_fixed") or v.get("requires_rows")}
     rows["3/GPU/Memory"] = {"records": ["identity:model"]}
-    rows["5/Other approved runtimes (e.g. ExecuTorch)"] = {"records": ["identity:model"]}
     cov = check_matrix_coverage(data, config={"rows": rows})
     assert cov["passed"] is True, [r for r in cov["rows"] if not r["passed"]]
     rec = next(r for t in data["telemetry"] for r in t["results"] if r["metric"] == "app_cpu_time")
