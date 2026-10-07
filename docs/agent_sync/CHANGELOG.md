@@ -3574,3 +3574,78 @@ Implement the researcher decisions of 2026-10-07 for Step 10D, after Antigravity
   - build the APK on a machine with the Android SDK and Python 3;
   - run `generate_reference_graph.py --check`;
   - physical runs per the protocol.
+
+## 2026-10-07 — Claude Code (F-01 / F-02 Researcher Decisions)
+
+### Task
+Record the researcher's approval F-01 (numerical capability-validation tolerances) and decision F-02 (Step 10D inference-runtime scope). Make the minimum change so that the "Other approved runtimes" matrix row does not falsely block §9 sign-off once the approved scope is fully characterized. **Research methodology unchanged.**
+
+### F-01 — researcher approval (values unchanged, now recorded as approved)
+
+| Parameter | Approved value |
+| :-- | :-- |
+| FP32 maximum absolute output error | 0.01 |
+| FP16 maximum absolute output error | 0.01 |
+| Float probability-sum tolerance | 0.01 (unchanged config value) |
+| INT8 per-output tolerance | 2 quantization steps (1/256) |
+| INT8 probability-sum tolerance | 4 quantization steps |
+| Camera exposure-time relative tolerance | 0.05 (±5 %) |
+| Camera sensitivity/ISO relative tolerance | 0.05 (±5 %) |
+
+These are capability-validation acceptance thresholds only. They are not model-performance targets and are not accuracy improvements.
+
+### F-02 — runtime-scope decision
+- **Step 10D scope:**
+  - TFLite/LiteRT: CPU/XNNPACK, GPU delegate, NNAPI delegate;
+  - ONNX Runtime Mobile: CPU, NNAPI.
+- No other runtime is approved or required. None was added.
+- **Protocol check:** §5.4 reads "...ONNX Runtime Mobile CPU and its NNAPI execution provider, and other **repository-approved** runtimes". The item is conditional on approval, and F-02 approves none, so **no protocol text change is required**. The protocol, the matrix (`device_capability_matrix.md`, authoritative and unmodified) and the decision register were not edited.
+- **Coverage rule** (`configs/device_capability_coverage.yaml`, `coverage.py`). The row "5/Other approved runtimes (e.g. ExecuTorch)" now has `scope: inference_backend_check.other_approved_runtimes` and `requires_rows` naming the five in-scope rows. It:
+  - **passes** only when the approved list is empty **and** all five in-scope rows pass;
+  - otherwise fails with **SCOPE_NOT_FULLY_CHARACTERIZED**, listing the failing rows;
+  - fails with **NO_COLLECTOR** if a runtime is ever added to the list.
+  
+  The row creates no record and never marks a runtime available.
+
+### Files changed
+- `configs/device_characterization.yaml`: F-01 / F-02 approval comments only. No value changed.
+- `configs/device_capability_coverage.yaml`: the "Other approved runtimes" row entry.
+- `src/monitoring/characterization/coverage.py`: scope-row evaluation.
+- `tests/test_device_characterization_correction_round.py`: two assertions of the superseded "row always fails" behaviour now assert the F-02 rule. The coverage-pass test now uses the real scope-row entry instead of a stand-in record.
+- `tests/test_device_characterization_researcher_decisions.py`: 6 new tests:
+  - complete scope passes;
+  - incomplete scope fails (delegation unobservable; graph load ERROR);
+  - no backend output fails;
+  - an approved extra runtime without a collector fails;
+  - sign-off still blocked;
+  - exact F-01 values, with the float rule applied to fp32 and fp16.
+- This file.
+
+### Tests
+- **Targeted:** 152 passed (researcher-decision and correction-round modules).
+- **Full suite:** **519 passed, 0 failed** (513 before).
+- **Mutation:** 2 planted defects in the new rule were both killed: the row always passing, and the empty-scope check removed.
+- **Reference graphs:** `generate_reference_graph.py --check` returned OK; all 7 SHA-256 values match the pins.
+- **Android unit tests / assembleDebug: BLOCKED (not run).**
+  - `./gradlew testDebugUnitTest assembleDebug` failed at plugin resolution: `com.android.application` 8.2.2 could not be resolved.
+  - Cause: the environment's network policy rejects `dl.google.com` (`maven.google.com` redirects there), so neither AGP nor the Android SDK can be downloaded.
+  - **Substitute (not an Android build):** all main and test Kotlin sources compiled with 0 warnings against Android API 34 classes and the real TFLite 2.16.1 / ORT 1.30.0 classes, and `AppJsonLogFormatterTest` passed 6/6 on the JVM.
+
+### Status
+- Step 10D §9 sign-off is **not claimed**. It is still blocked by:
+  - GPU memory (no collector);
+  - D-16 E-1/E-2 researcher evidence;
+  - the human review gate;
+  - every capability row awaiting a physical run.
+- D-16 gates unchanged; `absolute_energy_claimed` stays false. Delegation verification is unchanged and conservative.
+- **NO PHYSICAL RUN PERFORMED.** Historical runs are untouched.
+- **Research methodology unchanged.**
+
+### Git
+- Branch `claude/inspiring-euler-lrlzlk` ([PR #32](https://github.com/Arava-Sukeerthan/Pocket_Inspect_Project/pull/32)).
+- Implementation commit `32e07e9`. This entry is a separate commit.
+
+### Next action
+- Allow `dl.google.com` (or build on a machine with the Android SDK), then run `testDebugUnitTest` and `assembleDebug`.
+- Antigravity independent review of `bd02512` and `32e07e9`.
+- Physical runs only after approval.
