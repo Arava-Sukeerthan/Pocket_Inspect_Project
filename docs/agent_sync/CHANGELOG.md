@@ -3400,3 +3400,177 @@ G1–G15 stay NOT_TESTED, marked as blocked. **Proposal only**, for researcher a
 - Commits: `7f22cd8` (host + §9), `ef772c0` (Android). This entry is a separate commit.
 
 Step 10E not started.
+
+## 2026-10-07 — Claude Code (Researcher-Decision Implementation)
+
+### Task
+Implement the researcher decisions of 2026-10-07 for Step 10D, after Antigravity's review of PR #31 (APPROVE WITH MINOR FINDINGS — READY FOR RESEARCHER DECISIONS):
+- A. backend scope;
+- B. reference graph;
+- C. delegation verification;
+- D. output validity;
+- E. runtime provenance;
+- F. camera tolerances;
+- G. D-16 E-1 safety gate;
+- H. D-16 E-2 evidence;
+- I. E-3 kept as the fallback.
+
+**Research methodology unchanged.** The protocol, matrix, decision register, RQs, hypotheses and D-16 method were not edited.
+
+### Researcher decisions implemented
+- **A. Backend scope.** LiteRT / TensorFlow Lite (CPU/XNNPACK, GPU delegate, NNAPI delegate) and ONNX Runtime Mobile (CPU, NNAPI EP).
+  - `inference_backend_check.other_approved_runtimes: []`.
+  - The matrix row "Other approved runtimes" stays NOT YET VERIFIED and fails §9 coverage with the new problem code `NOT_IN_APPROVED_SCOPE`.
+- **B. Reference graph.** CONV 3x3 (3→4) → DEPTHWISE CONV 3x3 → AVERAGE POOL 2x2 → FULLY CONNECTED (64→4) → SOFTMAX.
+  - Input `[1,8,8,3]` (ONNX `[1,3,8,8]`), output `[1,4]`.
+  - Fixed-formula weights and test input. Every value is exact in float16.
+  - Variants: fp32; fp16 (float16 weight storage + DEQUANTIZE/Cast); int8 (per-tensor; softmax output scale 1/256, zero point −128).
+  - Expected output: float64 reference, `[0.19136, 0.20783, 0.26713, 0.33368]`.
+- **C. Delegation.** These are now separate records: availability, graph load, inference, output validity and delegation.
+  - Accepting a delegate is never taken as delegation.
+- **D. Output validity.** One rule, with tolerances in config:
+  - shape `[1,4]`;
+  - finite values in [0,1];
+  - |sum−1| and max |value−reference| within tolerance.
+  
+  Float variants: 1e-2 / 1e-2. Int8: 2 LSB / 4 LSB, where LSB = 1/256 (quantized semantics, not the float rule).
+- **E. Provenance.** Each backend records:
+  - runtime family;
+  - runtime-reported version (null when not reported, plus a limitation note);
+  - declared dependency;
+  - requested and observed delegate/provider;
+  - artifact SHA-256: app-reported vs pinned;
+  - an evidence reference.
+- **F. Camera.** `exposure_time_relative_tolerance: 0.05` and `sensitivity_relative_tolerance: 0.05` (±5 %).
+  - Existing formula `abs(reported − requested) <= tol × requested`. Both must hold.
+  - Config only; nothing is hard-coded in Kotlin.
+- **G. E-1** is selected only when all of these are present: assessed, feasible, reference_validated, **safety_signoff**, assessed_by, assessed_on, instrument_model, and at least one evidence file.
+  - An E-1 that is feasible but incomplete selects nothing and does not fall through to E-2.
+  - A file with E-1 `reference_validated: true` without `safety_signoff` is invalid (protocol §8).
+- **H. E-2** additionally needs **non_charging_verified**, meter_model and the new `non_charging_evidence_files` (battery status and current logs, protocol §6).
+  - `non_charging_verified: true` without those files makes the evidence file invalid.
+  - The files are copied into the run and hashed.
+- **I. E-3** only after E-1 and E-2 are both assessed and not feasible, with demonstrated counters.
+  - `absolute_energy_claimed` stays false.
+
+### Implementation details
+- **Reference graph generation.** `src/monitoring/characterization/reference_graph.py` (new) holds the definition, the float64 reference, the int8 quantization parameters and the output rule. It has hand-written FlatBuffers (TFLite) and protobuf (ONNX) encoders, standard library only. No TensorFlow or `onnx` dependency, no download.
+  - `scripts/device_characterization/generate_reference_graph.py` (new): `--out DIR`, `--check`.
+  - **Artifact strategy (deviation, flagged for review).** The binaries are **not committed**: `tests/test_dataset_device_model.py::test_no_data_experiments_or_results` and AGENTS.md forbid model binaries in git, and the test was not weakened.
+  - Instead, the Gradle task `generateReferenceGraph` (runs before `preBuild`) generates them into the APK assets `reference_graph/`. This needs Python 3 on the build machine.
+  - The SHA-256 of all 7 artifacts (6 graphs + manifest) is pinned in `configs/device_characterization.yaml`. The app reports the hash of the bytes it loaded, and the host compares it with the pin. A mismatch gives graph_load ERROR.
+- **Artifact validation (design check only, not a device result).** The artifacts were validated in an isolated scratch venv; these packages are not repository dependencies.
+  - `ai-edge-litert` 2.3.0 and `onnxruntime` 1.30.0 (CPU), plus `onnx.checker` (full check).
+  - All 6 artifacts loaded and ran.
+  - fp32/fp16: max deviation from the reference ≤ 3.4e-8.
+  - int8: 0.0017 (0.42 LSB).
+- **Android app.** `BackendProbes.kt` (new), section `backend_capability`.
+  - `backend_runtime` record per backend; `reference_graph_check` record per variant.
+  - Raw observations only; no thresholds and no timing.
+  - TFLite delegation evidence: `InterpreterImpl.getExecutionPlanLength()` (package-private, read by reflection) compared with the graph node count.
+    - XNNPACK is disabled for the GPU and NNAPI backends.
+    - This process's `tflite` log lines are attached as supplementary evidence.
+    - The "Replacing N out of M nodes" line is VERBOSE in 2.16.1, so it is not relied on.
+  - ORT delegation evidence: the session profile reduced to (node, op, provider); durations are discarded.
+  - NNAPI options: TFLite `setUseNnapiCpu(false)`; ORT `NNAPIFlags.CPU_DISABLED`.
+  - Dependencies, all from Maven Central, versions declared once in `build.gradle.kts` (BuildConfig):
+    - `org.tensorflow:tensorflow-lite`, `-gpu` and `-gpu-api` 2.16.1;
+    - `com.microsoft.onnxruntime:onnxruntime-android` 1.30.0.
+  - TFLite 2.17.0 relocates to `com.google.ai.edge.litert:litert:1.0.1` on Google Maven, which this environment cannot reach.
+  - `CapabilityResult` gains `backend` and `graph_variant`. `CharacterizationRunner` and `AppJsonLogFormatter.SECTIONS` gain `backend_capability`.
+- **Host.**
+  - `adb_collector.py` routes backend records (`app_backend_records`).
+  - `InferenceBackendCapabilityCollector` was rewritten: config-driven, its config is validated, and `BACKEND_BLOCKED_NOTE` is removed.
+  - Delegation status:
+
+    | Observation | Status |
+    | :-- | :-- |
+    | Plan shorter than the node count, or a kernel run by the requested provider | AVAILABLE (VERIFIED, except NNAPI) |
+    | Plan equal to the node count, or no kernel on the requested provider | UNAVAILABLE (limitation in the note) |
+    | Not observable | NOT_TESTED |
+    | NNAPI delegation | Never VERIFIED: the accelerator identity is not observable from the Java APIs |
+
+  - `BackendCapability` gains optional `graph_load`, `inference_execution`, `runtime_version_source`, `delegation_evidence` and `reference_graph_artifacts`. The schema gains the same optional properties, so earlier runs stay valid.
+  - `quantization_support` holds `quantization_fp16` and `quantization_int8`.
+  - `report_generator` covers the new records.
+- **D-16.**
+  - `energy_evidence.py` adds `unmet_selection_requirements()` and `selection_basis()`.
+  - `EnergyCapability.selection_basis` is recorded (optional schema property).
+  - `signoff.evaluate_d16_energy_level` re-checks the basis independently.
+  - The template gains `non_charging_evidence_files: []` and the full selection rule. It stays unfilled, and `energy_feasibility_evidence` stays null.
+
+### Files changed
+- **Configuration:** `configs/device_characterization.yaml`, `configs/device_capability_coverage.yaml`, `configs/energy_feasibility_evidence_template.yaml`.
+- **Schema:** `research/experiments/device_characterization_schema.json` (optional fields only).
+- **Characterization package (`src/monitoring/characterization/`):**
+  - `collectors.py`, `models.py`, `coverage.py`, `energy_evidence.py`, `signoff.py`, `report_generator.py`;
+  - new `reference_graph.py`.
+- **Host scripts (`scripts/device_characterization/`):** `adb_collector.py`, `run_characterization.py`; new `generate_reference_graph.py`.
+- **Android app (`mobile/characterization/`):**
+  - `build.gradle.kts`, `README.md`;
+  - `Collectors.kt`, `CharacterizationRunner.kt`, `AppJsonLogFormatter.kt`;
+  - new `BackendProbes.kt`.
+- **Tests:**
+  - `tests/test_device_characterization_correction_round.py`: synthetic backend fixtures. Four tests that encoded the superseded state were replaced by stricter equivalents: backend blocked, no ML dependency, E-1 without safety sign-off, and the GPU coverage row.
+  - New `tests/test_device_characterization_researcher_decisions.py`, 63 tests.
+
+### Tests
+- **Before:** 450 passed.
+- **After:** **513 passed, 0 failed** (full suite).
+- **Mutation checks:** 15 planted defects; 14 killed, 1 equivalent (E-1 fall-through, already blocked by the next guard). The killed defects:
+  - safety_signoff not enforced;
+  - non-charging not enforced;
+  - E-3 from counters alone;
+  - sign-off ignoring the selection basis;
+  - camera exposure OR ISO;
+  - camera tolerance ignored;
+  - equal plan length counted as delegation;
+  - unobservable delegation marked AVAILABLE;
+  - NNAPI VERIFIED;
+  - artifact hash not checked;
+  - ORT delegation without a provider kernel;
+  - abs-error check removed;
+  - int8 judged by the float rule (found by the first run and fixed in the test);
+  - load failure ignored.
+- **Kotlin:** main and test sources compile with 0 warnings against Android API 34 classes (Robolectric `android-all`) and the real TFLite 2.16.1 / ORT 1.30.0 classes. `AppJsonLogFormatterTest` passes 6/6.
+- **Not built:** no APK, because the Android SDK and Google Maven are blocked in this environment. The new Gradle task and `buildConfig` have therefore not been exercised by an AGP build.
+
+### Known limitations
+- **TFLite execution-plan length.**
+  - It proves delegation but cannot count delegated nodes or partitions exactly.
+  - A single-node partition is indistinguishable from CPU execution.
+  - It relies on a package-private method; if that method is missing, delegation is NOT_TESTED.
+- **NNAPI.**
+  - The accelerator cannot be identified (device enumeration needs the NDK, API 29).
+  - Below API 29 the NNAPI CPU reference implementation cannot be excluded.
+- **Output tolerances.** The float 1e-2 and int8 2 LSB / 4 LSB values were set by this implementation with a documented rationale. The researcher should confirm them.
+- **§9 sign-off still impossible:**
+  - the "Other approved runtimes" row has no protocol status for "out of scope";
+  - GPU memory has no collector;
+  - D-16 needs the researcher's E-1/E-2 evidence;
+  - the human review gate is open.
+  
+  Making the other-runtimes row pass would need a protocol-level decision, so it was not changed.
+- **Run status.** A graph-load or inference failure is recorded as ERROR, which reads "re-run required". The runtimes do not distinguish an unsupported graph from a fault.
+
+### Physical-device status
+- **NO PHYSICAL RUN PERFORMED.** No device observation changed.
+- Historical runs run_20261005_181140, run_20261006_052440 and run_20261007_082743 are untouched and still protected.
+
+### Methodology
+- **Research methodology unchanged.**
+
+### Git
+- Branch `claude/inspiring-euler-lrlzlk`.
+- Implementation commit `bd02512`. This entry is a separate commit.
+
+### Next action
+- Antigravity independent review of `bd02512`, in particular:
+  - the deviation from a committed artifact to build-time generation;
+  - the delegation-observation mechanism and its UNAVAILABLE / NOT_TESTED boundaries;
+  - the output tolerances;
+  - the D-16 gates.
+- After approval only:
+  - build the APK on a machine with the Android SDK and Python 3;
+  - run `generate_reference_graph.py --check`;
+  - physical runs per the protocol.
