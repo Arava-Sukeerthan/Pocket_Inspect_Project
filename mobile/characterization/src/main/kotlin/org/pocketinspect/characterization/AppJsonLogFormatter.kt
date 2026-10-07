@@ -33,6 +33,10 @@ object AppJsonLogFormatter {
         "memory_telemetry",
         "thermal_capability",
         "battery_telemetry",
+        "service_capability",
+        "cpu_telemetry",
+        "gpu_capability",
+        "profiling_capability",
         "camera_telemetry",
     )
 

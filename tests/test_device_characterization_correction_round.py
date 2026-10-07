@@ -980,3 +980,16 @@ def test_no_ml_runtime_dependency_added_to_app():
     gradle = Path("mobile/characterization/build.gradle.kts").read_text(encoding="utf-8").lower()
     for dep in ("tensorflow", "tflite", "litert", "onnxruntime", "executorch"):
         assert dep not in gradle, dep
+
+
+def test_app_sections_match_host_bridge():
+    import re
+    fmt = Path("mobile/characterization/src/main/kotlin/org/pocketinspect/characterization/AppJsonLogFormatter.kt"
+               ).read_text(encoding="utf-8")
+    runner = Path("mobile/characterization/src/main/kotlin/org/pocketinspect/characterization/CharacterizationRunner.kt"
+                  ).read_text(encoding="utf-8")
+    block = fmt[fmt.index("val SECTIONS"):fmt.index(")", fmt.index("val SECTIONS"))]
+    sections = re.findall(r'"([a-z_]+)"', block)
+    assert set(sections) == set(ADBCollector.APP_SECTION_METRICS)
+    for s in sections:
+        assert f'"{s}" to' in runner, s

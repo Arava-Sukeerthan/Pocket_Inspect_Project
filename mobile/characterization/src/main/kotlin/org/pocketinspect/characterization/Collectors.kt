@@ -4,11 +4,12 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraManager
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Debug
+import android.os.Environment
 import android.os.PowerManager
+import android.os.StatFs
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.TimeZone
@@ -33,6 +34,12 @@ enum class ReportStatus {
     NOT_YET_VERIFIED
 }
 
+/**
+ * One app observation. The host (scripts/device_characterization/adb_collector.py) consumes `metric`, `state`,
+ * `value`, `unit`, `error_message`, `notes`, `details` and, for per-camera records, `camera_id`. The host
+ * recomputes `report_status`/`verified` from its own rules; the app's values are informative only.
+ * A state other than AVAILABLE always has value = null (no fake zeros).
+ */
 data class CapabilityResult(
     val metric: String,
     val state: String,
@@ -47,7 +54,9 @@ data class CapabilityResult(
     val evidence_ref: String? = null,
     val observed_at: String? = null,
     val error_message: String? = null,
-    val notes: String? = null
+    val notes: String? = null,
+    val camera_id: String? = null,
+    val details: Any? = null
 )
 
 fun getIsoTimestamp(): String {
@@ -56,59 +65,85 @@ fun getIsoTimestamp(): String {
     return sdf.format(Date())
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// Record helpers. Every evidence_ref names the host copy of this report (AppJsonLogFormatter.HOST_EVIDENCE_PATH).
+// ---------------------------------------------------------------------------------------------------------
+
+fun observed(
+    metric: String, value: Any, source: String, unit: String? = null, minApi: Int? = null,
+    cameraId: String? = null, details: Any? = null, notes: String? = null
+) = CapabilityResult(
+    metric = metric,
+    state = RuntimeState.AVAILABLE.name,
+    report_status = ReportStatus.AVAILABLE.name,
+    value = value,
+    unit = unit,
+    source = source,
+    min_api = minApi,
+    verification_method = "android_api",
+    observed_at = getIsoTimestamp(),
+    evidence_ref = "evidence/android_app_evidence.json#$metric",
+    notes = notes,
+    camera_id = cameraId,
+    details = details
+)
+
+fun notAvailable(
+    metric: String, state: RuntimeState, source: String, notes: String? = null, errorMessage: String? = null,
+    minApi: Int? = null, cameraId: String? = null, details: Any? = null
+) = CapabilityResult(
+    metric = metric,
+    state = state.name,
+    report_status = if (state == RuntimeState.ERROR) ReportStatus.NOT_YET_VERIFIED.name else ReportStatus.UNAVAILABLE.name,
+    value = null,
+    source = source,
+    min_api = minApi,
+    verification_method = "android_api",
+    observed_at = getIsoTimestamp(),
+    evidence_ref = "evidence/android_app_evidence.json#$metric",
+    error_message = errorMessage,
+    notes = notes,
+    camera_id = cameraId,
+    details = details
+)
+
+fun failure(metric: String, source: String, e: Throwable, cameraId: String? = null): CapabilityResult =
+    if (e is SecurityException) {
+        notAvailable(metric, RuntimeState.PERMISSION_REQUIRED, source,
+            errorMessage = "${e.javaClass.simpleName}: ${e.message}", cameraId = cameraId)
+    } else {
+        notAvailable(metric, RuntimeState.ERROR, source,
+            errorMessage = "${e.javaClass.simpleName}: ${e.message}", cameraId = cameraId)
+    }
+
+/** Runs [probe]; a thrown exception becomes PERMISSION_REQUIRED (SecurityException) or ERROR, never a value. */
+inline fun guarded(metric: String, source: String, cameraId: String? = null, probe: () -> CapabilityResult): CapabilityResult =
+    try {
+        probe()
+    } catch (e: Exception) {
+        failure(metric, source, e, cameraId)
+    }
+
 class DeviceIdentityCollector(private val context: Context) {
     fun collect(): List<CapabilityResult> {
         val results = mutableListOf<CapabilityResult>()
-        val now = getIsoTimestamp()
 
-        results.add(CapabilityResult(
-            metric = "manufacturer",
-            state = RuntimeState.AVAILABLE.name,
-            report_status = ReportStatus.VERIFIED.name,
-            value = Build.MANUFACTURER,
-            source = "Build.MANUFACTURER",
-            verified = true,
-            verification_method = "android_api",
-            observed_at = now,
-            evidence_ref = "evidence/android_app_evidence.json#manufacturer"
-        ))
-
-        results.add(CapabilityResult(
-            metric = "model",
-            state = RuntimeState.AVAILABLE.name,
-            report_status = ReportStatus.VERIFIED.name,
-            value = Build.MODEL,
-            source = "Build.MODEL",
-            verified = true,
-            verification_method = "android_api",
-            observed_at = now,
-            evidence_ref = "evidence/android_app_evidence.json#model"
-        ))
+        results.add(observed("manufacturer", Build.MANUFACTURER, "Build.MANUFACTURER"))
+        results.add(observed("model", Build.MODEL, "Build.MODEL"))
 
         if (Build.VERSION.SDK_INT >= 31) {
-            results.add(CapabilityResult(
-                metric = "soc_model",
-                state = RuntimeState.AVAILABLE.name,
-                report_status = ReportStatus.VERIFIED.name,
-                value = Build.SOC_MODEL,
-                source = "Build.SOC_MODEL",
-                min_api = 31,
-                verified = true,
-                verification_method = "android_api",
-                observed_at = now,
-                evidence_ref = "evidence/android_app_evidence.json#soc_model"
-            ))
+            results.add(observed("soc_model", Build.SOC_MODEL, "Build.SOC_MODEL", minApi = 31))
         } else {
-            results.add(CapabilityResult(
-                metric = "soc_model",
-                state = RuntimeState.API_UNSUPPORTED.name,
-                report_status = ReportStatus.UNAVAILABLE.name,
-                value = null,
-                min_api = 31,
-                notes = "Build.SOC_MODEL requires API >= 31"
-            ))
+            results.add(notAvailable("soc_model", RuntimeState.API_UNSUPPORTED, "Build.SOC_MODEL", minApi = 31,
+                notes = "Build.SOC_MODEL requires API >= 31"))
         }
 
+        // Storage (matrix §1): StatFs on the data partition.
+        results.add(guarded("storage_total_bytes", "StatFs(Environment.getDataDirectory())") {
+            val stat = StatFs(Environment.getDataDirectory().path)
+            observed("storage_total_bytes", stat.totalBytes, "StatFs(Environment.getDataDirectory()).getTotalBytes()",
+                unit = "bytes")
+        })
         return results
     }
 }
@@ -116,227 +151,144 @@ class DeviceIdentityCollector(private val context: Context) {
 class MemoryTelemetryCollector(private val context: Context) {
     fun collect(): List<CapabilityResult> {
         val results = mutableListOf<CapabilityResult>()
-        val now = getIsoTimestamp()
-
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        val memInfo = ActivityManager.MemoryInfo()
         if (am != null) {
+            val memInfo = ActivityManager.MemoryInfo()
             am.getMemoryInfo(memInfo)
-            val totalRamMb = memInfo.totalMem / (1024 * 1024)
-            val availRamMb = memInfo.availMem / (1024 * 1024)
-
-            results.add(CapabilityResult(
-                metric = "total_ram_mb",
-                state = RuntimeState.AVAILABLE.name,
-                report_status = ReportStatus.VERIFIED.name,
-                value = totalRamMb,
-                unit = "MB",
-                source = "ActivityManager.MemoryInfo.totalMem",
-                verified = true,
-                verification_method = "android_api",
-                observed_at = now,
-                evidence_ref = "evidence/android_app_evidence.json#total_ram_mb"
-            ))
-
-            results.add(CapabilityResult(
-                metric = "available_memory_mb",
-                state = RuntimeState.AVAILABLE.name,
-                report_status = ReportStatus.VERIFIED.name,
-                value = availRamMb,
-                unit = "MB",
-                source = "ActivityManager.MemoryInfo.availMem",
-                verified = true,
-                verification_method = "android_api",
-                observed_at = now,
-                evidence_ref = "evidence/android_app_evidence.json#available_memory_mb"
-            ))
+            results.add(observed("total_ram_mb", memInfo.totalMem / (1024 * 1024),
+                "ActivityManager.MemoryInfo.totalMem", unit = "MB"))
+            results.add(observed("available_memory_mb", memInfo.availMem / (1024 * 1024),
+                "ActivityManager.MemoryInfo.availMem", unit = "MB"))
+            // B3: the platform low-memory flag and its threshold (not a /proc/meminfo field).
+            results.add(observed("low_memory_flag", memInfo.lowMemory, "ActivityManager.MemoryInfo.lowMemory",
+                unit = "boolean"))
+            results.add(observed("memory_threshold_mb", memInfo.threshold / (1024 * 1024),
+                "ActivityManager.MemoryInfo.threshold", unit = "MB"))
+        } else {
+            for (m in listOf("low_memory_flag", "memory_threshold_mb")) {
+                results.add(notAvailable(m, RuntimeState.UNAVAILABLE, "ActivityManager.MemoryInfo",
+                    notes = "ActivityManager system service not available"))
+            }
         }
+
+        results.add(guarded("app_heap_allocated_mb", "Runtime.totalMemory() - Runtime.freeMemory()") {
+            val rt = Runtime.getRuntime()
+            observed("app_heap_allocated_mb", (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024),
+                "Runtime.totalMemory() - Runtime.freeMemory()", unit = "MB")
+        })
+        results.add(guarded("app_pss_kb", "Debug.getMemoryInfo()") {
+            val mi = Debug.MemoryInfo()
+            Debug.getMemoryInfo(mi)
+            observed("app_pss_kb", mi.totalPss, "Debug.getMemoryInfo(Debug.MemoryInfo).getTotalPss()", unit = "kB")
+        })
         return results
     }
 }
 
 class ThermalTelemetryCollector(private val context: Context) {
-    fun collect(): CapabilityResult {
-        val now = getIsoTimestamp()
-        return if (Build.VERSION.SDK_INT >= 29) {
-            val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-            val status = pm?.currentThermalStatus
-            if (status != null) {
-                CapabilityResult(
-                    metric = "thermal_status_api",
-                    state = RuntimeState.AVAILABLE.name,
-                    report_status = ReportStatus.VERIFIED.name,
-                    value = status,
-                    source = "PowerManager.getCurrentThermalStatus()",
-                    min_api = 29,
-                    verified = true,
-                    verification_method = "android_api",
-                    observed_at = now,
-                    evidence_ref = "evidence/android_app_evidence.json#thermal_status"
-                )
-            } else {
-                CapabilityResult(
-                    metric = "thermal_status_api",
-                    state = RuntimeState.UNAVAILABLE.name,
-                    report_status = ReportStatus.UNAVAILABLE.name,
-                    value = null,
-                    min_api = 29
-                )
-            }
-        } else {
-            CapabilityResult(
-                metric = "thermal_status_api",
-                state = RuntimeState.API_UNSUPPORTED.name,
-                report_status = ReportStatus.UNAVAILABLE.name,
-                value = null,
-                min_api = 29,
-                notes = "getCurrentThermalStatus requires API >= 29"
-            )
+    fun collect(): List<CapabilityResult> {
+        val results = mutableListOf<CapabilityResult>()
+        if (Build.VERSION.SDK_INT < 29) {
+            results.add(notAvailable("thermal_status_api", RuntimeState.API_UNSUPPORTED,
+                "PowerManager.getCurrentThermalStatus()", minApi = 29, notes = "getCurrentThermalStatus requires API >= 29"))
+            results.add(notAvailable("thermal_status_listener", RuntimeState.API_UNSUPPORTED,
+                "PowerManager.addThermalStatusListener()", minApi = 29, notes = "Thermal status listener requires API >= 29"))
+            return results
         }
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        if (pm == null) {
+            results.add(notAvailable("thermal_status_api", RuntimeState.UNAVAILABLE,
+                "PowerManager.getCurrentThermalStatus()", minApi = 29, notes = "PowerManager system service not available"))
+            results.add(notAvailable("thermal_status_listener", RuntimeState.UNAVAILABLE,
+                "PowerManager.addThermalStatusListener()", minApi = 29, notes = "PowerManager system service not available"))
+            return results
+        }
+        results.add(guarded("thermal_status_api", "PowerManager.getCurrentThermalStatus()") {
+            observed("thermal_status_api", pm.currentThermalStatus, "PowerManager.getCurrentThermalStatus()", minApi = 29)
+        })
+        // Listener registration (protocol §5.1). Callback delivery under a thermal change is not exercised.
+        results.add(guarded("thermal_status_listener", "PowerManager.addThermalStatusListener()") {
+            val listener = PowerManager.OnThermalStatusChangedListener { }
+            pm.addThermalStatusListener(context.mainExecutor, listener)
+            pm.removeThermalStatusListener(listener)
+            observed("thermal_status_listener", "registered and removed", "PowerManager.addThermalStatusListener()",
+                minApi = 29)
+        })
+        return results
     }
 }
 
 class BatteryTelemetryCollector(private val context: Context) {
     fun collect(): List<CapabilityResult> {
         val results = mutableListOf<CapabilityResult>()
-        val now = getIsoTimestamp()
-        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-        val batteryStatus: Intent? = context.registerReceiver(null, filter)
+        val batteryStatus: Intent? = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
 
         if (batteryStatus != null) {
             val level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
             val scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-            val batteryPct = if (level >= 0 && scale > 0) (level * 100) / scale else null
             val voltage = batteryStatus.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
-            val temp10 = batteryStatus.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
-            val tempC = if (temp10 != -1) temp10 / 10.0 else null
+            val temp10 = batteryStatus.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
             val statusInt = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-            val pluggedInt = batteryStatus.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
-            val isCharging = statusInt == BatteryManager.BATTERY_STATUS_CHARGING || statusInt == BatteryManager.BATTERY_STATUS_FULL
 
-            results.add(CapabilityResult(
-                metric = "battery_level_percent",
-                state = RuntimeState.AVAILABLE.name,
-                report_status = ReportStatus.VERIFIED.name,
-                value = batteryPct,
-                unit = "percent",
-                source = "BatteryManager.EXTRA_LEVEL",
-                verified = true,
-                verification_method = "android_api",
-                observed_at = now,
-                evidence_ref = "evidence/android_app_evidence.json#battery_level_percent"
-            ))
-
-            results.add(CapabilityResult(
-                metric = "battery_voltage",
-                state = RuntimeState.AVAILABLE.name,
-                report_status = ReportStatus.VERIFIED.name,
-                value = if (voltage > 0) voltage else null,
-                unit = "mV",
-                source = "BatteryManager.EXTRA_VOLTAGE",
-                verified = voltage > 0,
-                verification_method = "android_api",
-                observed_at = now,
-                evidence_ref = "evidence/android_app_evidence.json#battery_voltage"
-            ))
-
-            results.add(CapabilityResult(
-                metric = "battery_temperature",
-                state = RuntimeState.AVAILABLE.name,
-                report_status = ReportStatus.VERIFIED.name,
-                value = tempC,
-                unit = "degC",
-                source = "BatteryManager.EXTRA_TEMPERATURE",
-                verified = tempC != null,
-                verification_method = "android_api",
-                observed_at = now,
-                evidence_ref = "evidence/android_app_evidence.json#battery_temperature"
-            ))
-
-            results.add(CapabilityResult(
-                metric = "is_charging",
-                state = RuntimeState.AVAILABLE.name,
-                report_status = ReportStatus.VERIFIED.name,
-                value = isCharging,
-                unit = "boolean",
-                source = "BatteryManager.EXTRA_STATUS",
-                verified = true,
-                verification_method = "android_api",
-                observed_at = now,
-                evidence_ref = "evidence/android_app_evidence.json#is_charging"
-            ))
+            results.add(if (level >= 0 && scale > 0) observed("battery_level_percent", (level * 100) / scale,
+                "BatteryManager.EXTRA_LEVEL / EXTRA_SCALE", unit = "percent")
+            else notAvailable("battery_level_percent", RuntimeState.UNAVAILABLE, "BatteryManager.EXTRA_LEVEL",
+                notes = "EXTRA_LEVEL/EXTRA_SCALE missing from ACTION_BATTERY_CHANGED"))
+            results.add(if (voltage > 0) observed("battery_voltage", voltage, "BatteryManager.EXTRA_VOLTAGE", unit = "mV")
+            else notAvailable("battery_voltage", RuntimeState.UNAVAILABLE, "BatteryManager.EXTRA_VOLTAGE",
+                notes = "EXTRA_VOLTAGE missing or non-positive"))
+            results.add(if (temp10 != Int.MIN_VALUE) observed("battery_temperature", temp10 / 10.0,
+                "BatteryManager.EXTRA_TEMPERATURE", unit = "degC")
+            else notAvailable("battery_temperature", RuntimeState.UNAVAILABLE, "BatteryManager.EXTRA_TEMPERATURE",
+                notes = "EXTRA_TEMPERATURE missing from ACTION_BATTERY_CHANGED"))
+            if (statusInt >= 0) {
+                results.add(observed("is_charging", statusInt == BatteryManager.BATTERY_STATUS_CHARGING ||
+                    statusInt == BatteryManager.BATTERY_STATUS_FULL, "BatteryManager.EXTRA_STATUS", unit = "boolean"))
+            }
         }
 
-        return results
-    }
-}
-
-class CameraTelemetryCollector(private val context: Context) {
-    fun collect(): List<CapabilityResult> {
-        val results = mutableListOf<CapabilityResult>()
-        val now = getIsoTimestamp()
-        val cm = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
-        if (cm != null) {
-            try {
-                val ids = cm.cameraIdList
-                results.add(CapabilityResult(
-                    metric = "camera_count",
-                    state = RuntimeState.AVAILABLE.name,
-                    report_status = ReportStatus.VERIFIED.name,
-                    value = ids.size,
-                    source = "CameraManager.getCameraIdList()",
-                    verified = true,
-                    verification_method = "android_api",
-                    observed_at = now,
-                    evidence_ref = "evidence/android_app_evidence.json#camera_count"
-                ))
-
-                if (ids.isNotEmpty()) {
-                    val id0 = ids[0]
-                    val chars = cm.getCameraCharacteristics(id0)
-                    val hwLevel = chars.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)
-                    if (hwLevel != null) {
-                        results.add(CapabilityResult(
-                            metric = "camera_0_hardware_level",
-                            state = RuntimeState.AVAILABLE.name,
-                            report_status = ReportStatus.VERIFIED.name,
-                            value = hwLevel,
-                            source = "CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL",
-                            verified = true,
-                            verification_method = "android_api",
-                            observed_at = now,
-                            evidence_ref = "evidence/android_app_evidence.json#camera_0_hardware_level"
-                        ))
+        // B2: BatteryManager properties. With targetSdk >= 28 an unsupported property returns Integer.MIN_VALUE
+        // (Long.MIN_VALUE for getLongProperty): recorded as UNAVAILABLE with the raw sentinel, never as a value.
+        val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+        val apiDetails = mapOf("sdk_int" to Build.VERSION.SDK_INT,
+            "target_sdk" to context.applicationInfo.targetSdkVersion)
+        val intProps = listOf(
+            Triple("battery_property_current_now", BatteryManager.BATTERY_PROPERTY_CURRENT_NOW, "uA"),
+            Triple("battery_property_current_average", BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE, "uA"),
+            Triple("battery_property_charge_counter", BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER, "uAh")
+        )
+        for ((metric, id, unit) in intProps) {
+            val source = "BatteryManager.getIntProperty(${metric.removePrefix("battery_property_").uppercase()})"
+            results.add(when {
+                bm == null -> notAvailable(metric, RuntimeState.UNAVAILABLE, source,
+                    notes = "BatteryManager system service not available")
+                else -> guarded(metric, source) {
+                    val raw = bm.getIntProperty(id)
+                    if (raw == Int.MIN_VALUE) {
+                        notAvailable(metric, RuntimeState.UNAVAILABLE, source, notes = "Unsupported-property sentinel",
+                            details = apiDetails + mapOf("raw" to "Integer.MIN_VALUE", "sentinel" to true))
                     } else {
-                        // The key returned no value: report it as unavailable instead of AVAILABLE with null.
-                        results.add(CapabilityResult(
-                            metric = "camera_0_hardware_level",
-                            state = RuntimeState.UNAVAILABLE.name,
-                            report_status = ReportStatus.UNAVAILABLE.name,
-                            value = null,
-                            source = "CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL",
-                            notes = "INFO_SUPPORTED_HARDWARE_LEVEL returned null for camera ${id0}"
-                        ))
+                        observed(metric, raw, source, unit = unit, details = apiDetails + mapOf("raw" to raw))
                     }
                 }
-            } catch (e: Exception) {
-                results.add(CapabilityResult(
-                    metric = "camera_probe",
-                    state = RuntimeState.ERROR.name,
-                    report_status = ReportStatus.NOT_YET_VERIFIED.name,
-                    error_message = e.message ?: "CameraManager error"
-                ))
-            }
-        } else {
-            // No CameraManager service: report the camera probe as unavailable instead of an empty section.
-            results.add(CapabilityResult(
-                metric = "camera_probe",
-                state = RuntimeState.UNAVAILABLE.name,
-                report_status = ReportStatus.UNAVAILABLE.name,
-                source = "Context.CAMERA_SERVICE",
-                notes = "CameraManager system service not available"
-            ))
+            })
         }
+        val energySource = "BatteryManager.getLongProperty(ENERGY_COUNTER)"
+        results.add(when {
+            bm == null -> notAvailable("battery_property_energy_counter", RuntimeState.UNAVAILABLE, energySource,
+                notes = "BatteryManager system service not available")
+            else -> guarded("battery_property_energy_counter", energySource) {
+                val raw = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER)
+                if (raw == Long.MIN_VALUE) {
+                    notAvailable("battery_property_energy_counter", RuntimeState.UNAVAILABLE, energySource,
+                        notes = "Unsupported-property sentinel",
+                        details = apiDetails + mapOf("raw" to "Long.MIN_VALUE", "sentinel" to true))
+                } else {
+                    observed("battery_property_energy_counter", raw, energySource, unit = "nWh",
+                        details = apiDetails + mapOf("raw" to raw))
+                }
+            }
+        })
         return results
     }
 }

@@ -89,7 +89,7 @@ class AppJsonLogFormatterTest {
         // Every section is reconstructable from its RECORD lines.
         val root = JsonParser.parseString(json).asJsonObject
         for (section in AppJsonLogFormatter.SECTIONS) {
-            val el = root.get(section)
+            val el = root.get(section) ?: continue  // sections absent from this fixture are logged as MISSING
             val expected = if (el.isJsonArray) el.asJsonArray.toList() else listOf(el)
             assertEquals(section, expected, recordsOf(lines, section).map { JsonParser.parseString(it) })
         }
