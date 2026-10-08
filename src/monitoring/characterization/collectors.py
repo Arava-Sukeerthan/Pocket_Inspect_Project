@@ -1496,6 +1496,29 @@ class GPUTelemetryCollector:
         if results[-1].state == RuntimeState.UNAVAILABLE.value:
             results[-1].notes = _join_notes(results[-1].notes, "UNAVAILABLE THROUGH AVAILABLE PLATFORM INTERFACE.")
 
+        # GPU memory: readability of the configured candidate KGSL allocation nodes only. The value is the raw
+        # integer of each readable node, as reported; no unit, capacity or dedicated-GPU-memory claim is made.
+        mem = props.get("gpu_memory_probe")
+        mem_values = {p["target"]: p["value"] for p in (mem or {}).get("paths", [])
+                      if p.get("outcome") == "READABLE" and isinstance(p.get("value"), int)}
+        if mem and mem.get("outcome") == "READABLE" and not mem_values:
+            mem = dict(mem, outcome="ERROR")  # inconsistent probe record: readable without a parsed integer
+        mem_source = f"{(mem or {}).get('target', 'kgsl memory nodes')} via adb shell"
+        if mem:
+            # Notes name only the paths that produced the aggregate outcome.
+            focus = [p["target"] for p in mem.get("paths", []) if p.get("outcome") == mem.get("outcome")]
+            mem = dict(mem, target=", ".join(focus) or mem.get("target"))
+        results.append(_host_outcome_result(
+            "gpu_memory", mem, is_real=is_real, source=mem_source,
+            verification_method="kgsl_memory_readability_check", evidence_file="gpu_memory_evidence.json",
+            value=mem_values or None,
+            pilot_note="Raw integer content of the readable KGSL node(s), as reported. Unit and meaning are not "
+                       "validated; this is driver allocation accounting in shared system RAM, not dedicated GPU "
+                       "memory. Per-path outcomes are in the evidence file.",
+        ))
+        if results[-1].state == RuntimeState.UNAVAILABLE.value:
+            results[-1].notes = _join_notes(results[-1].notes, "UNAVAILABLE THROUGH AVAILABLE PLATFORM INTERFACE.")
+
         results.append(_app_result(props, "gpu_vulkan_support",
                                    source="PackageManager.hasSystemFeature(FEATURE_VULKAN_HARDWARE_VERSION / LEVEL)",
                                    verification_method="system_feature_check"))

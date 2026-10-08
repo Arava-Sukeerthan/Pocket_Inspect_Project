@@ -56,6 +56,16 @@ probes:
   thermal_zone_scan_count: 10                                   # zones thermal_zone0 .. thermal_zone9 are read
   kgsl_gpu_clock_path: "/sys/class/kgsl/kgsl-3d0/gpuclk"
   kgsl_gpu_busy_path: "/sys/class/kgsl/kgsl-3d0/gpubusy"        # readability only; meaning is not interpreted in Step 10D
+  # GPU memory (matrix §3 "GPU / Memory": "No public API; driver-specific", verification "Check").
+  # Candidate KGSL global-allocation nodes, tested for readability only. Their existence and readability on the
+  # device are NOT YET VERIFIED. A readable node's raw integer is stored as reported; its unit and meaning are not
+  # interpreted, and it is never treated as dedicated GPU memory (the Adreno GPU shares system RAM).
+  kgsl_gpu_memory_paths:
+    - "/sys/class/kgsl/kgsl/page_alloc"
+    - "/sys/class/kgsl/kgsl/coherent"
+    - "/sys/class/kgsl/kgsl/mapped"
+    - "/sys/class/kgsl/kgsl/secure"
+    - "/sys/class/kgsl/kgsl/vmalloc"
   psi_memory_path: "/proc/pressure/memory"
   kernel_release_command: ["uname", "-r"]
 

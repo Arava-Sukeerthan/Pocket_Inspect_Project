@@ -577,6 +577,138 @@ def test_gpubusy_states_e2e(tmp_path, resp, state):
         assert rec["value"] is None
 
 
+# ---------------------------------------------------------------------------
+# GPU memory: readability of the configured candidate KGSL nodes only
+# ---------------------------------------------------------------------------
+
+GPU_MEM_PATHS = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))["probes"]["kgsl_gpu_memory_paths"]
+ABSENT_RESP = (1, "", "cat: x: No such file or directory")
+
+
+def _gpu_mem_responses(first, rest=ABSENT_RESP):
+    """`first` answers the first configured candidate path; every other candidate gets `rest`."""
+    out = {f"cat {p}": rest for p in GPU_MEM_PATHS[1:]}
+    out[f"cat {GPU_MEM_PATHS[0]}"] = first
+    return out
+
+
+@pytest.mark.parametrize("outcomes, expected", [
+    (["ABSENT", "ABSENT"], "ABSENT"),
+    (["ABSENT", "PERMISSION_DENIED"], "PERMISSION_DENIED"),
+    (["PERMISSION_DENIED", "ERROR"], "ERROR"),
+    (["ERROR", "READABLE", "ABSENT"], "READABLE"),
+    ([], "ERROR"),
+])
+def test_gpu_memory_outcome_aggregation(outcomes, expected):
+    assert host_probes.aggregate_outcomes(outcomes) == expected
+
+
+@pytest.mark.parametrize("first, rest, state, report", [
+    ((0, "4096000\n", ""), ABSENT_RESP, "AVAILABLE", "CONDITIONALLY AVAILABLE"),
+    (ABSENT_RESP, ABSENT_RESP, "UNAVAILABLE", "UNAVAILABLE"),
+    ((1, "", "cat: x: Permission denied"), ABSENT_RESP, "PERMISSION_REQUIRED", "UNAVAILABLE"),
+    ((1, "", "cat: x: Permission denied"), (1, "", "cat: x: Permission denied"), "PERMISSION_REQUIRED", "UNAVAILABLE"),
+    ((0, "not an integer\n", ""), ABSENT_RESP, "ERROR", "NOT YET VERIFIED"),
+    ((1, "", "error: device offline"), ABSENT_RESP, "ERROR", "NOT YET VERIFIED"),
+])
+def test_gpu_memory_states_e2e(tmp_path, first, rest, state, report):
+    out_dir, data, observed = run_pipeline(tmp_path, full_app(), responses=_gpu_mem_responses(first, rest))
+    rec = records(data)["gpu/gpu_memory"]
+    assert rec["state"] == state and rec["report_status"] == report
+    assert rec["verification_method"] == "kgsl_memory_readability_check"
+    assert rec["verified"] is False and rec["report_status"] != "VERIFIED"
+    # Evidence reference names an existing, manifest-hashed file holding every path's raw streams and outcome.
+    assert rec["evidence_ref"] == "evidence/gpu_memory_evidence.json"
+    ev = json.loads((out_dir / "evidence" / "gpu_memory_evidence.json").read_text(encoding="utf-8"))
+    assert [p["target"] for p in ev["paths"]] == GPU_MEM_PATHS
+    assert ev["paths"][0]["stderr"] == first[2] and ev["paths"][0]["exit_code"] == first[0]
+    manifest = json.loads((out_dir / "evidence" / "manifest.json").read_text(encoding="utf-8"))
+    assert "evidence/gpu_memory_evidence.json" in {e["relative_path"] for e in manifest}
+    probe = observed["gpu_memory_probe"]
+    assert [p["target"] for p in probe["paths"]] == GPU_MEM_PATHS
+    if state == "AVAILABLE":
+        assert rec["condition"] == "HOST ADB SHELL"
+        assert rec["value"] == {GPU_MEM_PATHS[0]: 4096000}  # the node's raw integer, exactly as reported
+        assert rec["unit"] is None and "not dedicated GPU memory" in rec["notes"]
+    else:
+        assert rec["value"] is None
+        assert all(p["value"] is None for p in probe["paths"])
+    if state == "UNAVAILABLE":
+        assert "UNAVAILABLE THROUGH AVAILABLE PLATFORM INTERFACE" in rec["notes"]
+    if first == (0, "not an integer\n", ""):
+        assert ev["paths"][0]["outcome"] == "ERROR" and ev["paths"][0]["parse_error"]
+
+
+@pytest.mark.parametrize("first, rest", [
+    (ABSENT_RESP, ABSENT_RESP),
+    ((1, "", "Permission denied"), (1, "", "Permission denied")),
+    ((0, "garbage\n", ""), ABSENT_RESP),
+    ((0, "\n", ""), ABSENT_RESP),
+])
+def test_gpu_memory_never_fakes_a_value(tmp_path, first, rest):
+    """Unavailable GPU memory is never 0, -1, an empty string or a default, and never VERIFIED."""
+    _, data, observed = run_pipeline(tmp_path, full_app(), responses=_gpu_mem_responses(first, rest))
+    rec = records(data)["gpu/gpu_memory"]
+    assert rec["value"] is None
+    assert rec["value"] not in (0, -1, "")
+    assert rec["report_status"] != "VERIFIED" and rec["verified"] is False
+    for p in observed["gpu_memory_probe"]["paths"]:
+        assert p["value"] is None
+
+
+def test_gpu_memory_readable_zero_is_kept_as_reported_not_treated_as_unavailable(tmp_path):
+    """A node that really reports 0 is a reported value (CONDITIONALLY AVAILABLE), distinct from unavailability."""
+    _, data, _ = run_pipeline(tmp_path, full_app(), responses=_gpu_mem_responses((0, "0\n", "")))
+    rec = records(data)["gpu/gpu_memory"]
+    assert rec["state"] == "AVAILABLE" and rec["value"] == {GPU_MEM_PATHS[0]: 0}
+
+
+def test_gpu_memory_not_verified_without_evidence():
+    """Without a host probe the record is NOT_TESTED / NOT YET VERIFIED, with no value and no evidence."""
+    from src.monitoring.characterization.collectors import GPUTelemetryCollector
+    cap = GPUTelemetryCollector().collect({"is_real_device_observation": True})
+    rec = next(r for r in cap.results if r.metric == "gpu_memory")
+    assert rec.state == "NOT_TESTED" and rec.report_status == "NOT YET VERIFIED"
+    assert rec.value is None and rec.evidence_ref is None and rec.verified is False
+
+
+def test_gpu_memory_coverage_row_maps_to_the_record(tmp_path):
+    assert load_coverage_config()["rows"]["3/GPU/Memory"] == {"records": ["telemetry:gpu/gpu_memory"]}
+    _, data, _ = run_pipeline(tmp_path, full_app(), responses=_gpu_mem_responses((1, "", "error: closed")))
+    row = next(r for r in check_matrix_coverage(data)["rows"] if r["row_id"] == "3/GPU/Memory")
+    assert row["passed"] is False and row["problem"] == "telemetry:gpu/gpu_memory: ERROR"
+    data["telemetry"] = [t for t in data["telemetry"] if t["dimension"] != "gpu"]
+    row = next(r for r in check_matrix_coverage(data)["rows"] if r["row_id"] == "3/GPU/Memory")
+    assert row["passed"] is False and "MISSING_RECORD" in row["problem"]
+
+
+def test_gpu_memory_paths_come_from_config(tmp_path):
+    cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    probes = dict(cfg["probes"], kgsl_gpu_memory_paths=["/sys/class/kgsl/kgsl/CONFIGURED_MEM"])
+    seen = []
+    adb = ADBCollector(device_id="x", probe_config=probes)
+    transport = make_transport(json.dumps(full_app()))
+
+    def recording(args):
+        seen.append(" ".join(args))
+        return transport(args)
+
+    with patch.object(adb, "_adb_cmd", side_effect=recording):
+        adb.collect_raw_evidence_and_observations(tmp_path)
+    assert any("CONFIGURED_MEM" in c for c in seen)
+    host = Path("scripts/device_characterization/adb_collector.py").read_text(encoding="utf-8")
+    for path in GPU_MEM_PATHS:
+        assert path not in host, path
+
+
+@pytest.mark.parametrize("bad", [[], "/sys/class/kgsl/kgsl/page_alloc", [""], None])
+def test_gpu_memory_paths_config_is_validated(bad):
+    probes = load_probe_config()
+    probes["kgsl_gpu_memory_paths"] = bad
+    with pytest.raises(ValueError, match="kgsl_gpu_memory_paths"):
+        ADBCollector(device_id="x", probe_config=probes)
+
+
 def test_cpufreq_policies_give_observability_without_throttling_claim(full_run):
     recs = records(full_run[1])
     cap = recs["thermal/frequency_capping_observable"]
@@ -959,7 +1091,9 @@ def test_coverage_flags_untested_rows_and_backends(full_run):
     assert by_id["5/TFLite GPU delegate"]["passed"] is True
     assert by_id["5/Other approved runtimes (e.g. ExecuTorch)"]["passed"] is False
     assert by_id["5/Other approved runtimes (e.g. ExecuTorch)"]["problem"] == "NOT_IN_APPROVED_SCOPE"
-    assert by_id["3/GPU/Memory"]["problem"] == "NO_COLLECTOR"
+    # GPU memory: every synthetic candidate node is absent -> evidence-backed UNAVAILABLE, so the row passes.
+    assert by_id["3/GPU/Memory"]["passed"] is True
+    assert by_id["3/GPU/Memory"]["records"][0]["report_status"] == "UNAVAILABLE"
     assert by_id["8/E-1 battery-side external reference"]["passed"] is False
     assert by_id["7/D. External surface temperature required"]["passed"] is True
     assert by_id["1/RAM variant"]["passed"] is True
