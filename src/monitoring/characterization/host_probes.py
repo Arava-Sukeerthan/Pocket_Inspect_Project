@@ -57,6 +57,19 @@ def probe_record(path_or_cmd: str, exit_code: int, stdout: str, stderr: str) -> 
     }
 
 
+def aggregate_outcomes(outcomes: List[str]) -> str:
+    """One outcome for a set of candidate paths answering the same item.
+
+    READABLE if any path was readable; otherwise ERROR if any read failed unexpectedly (re-run required);
+    otherwise PERMISSION_DENIED if any existing path was refused; ABSENT only when every path is absent.
+    An empty list is ERROR (nothing was probed).
+    """
+    for outcome in (READABLE, ERROR, PERMISSION_DENIED, ABSENT):
+        if outcome in outcomes:
+            return outcome
+    return ERROR
+
+
 def parse_int_node(text: str) -> Optional[int]:
     """Parses a single-integer sysfs node; None if the content is not one integer."""
     stripped = (text or "").strip()

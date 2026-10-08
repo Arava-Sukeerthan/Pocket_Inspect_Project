@@ -53,9 +53,7 @@ rows:
   "3/GPU/Identification": {records: ["telemetry:gpu/gpu_vendor_renderer", "telemetry:gpu/gpu_vulkan_support"]}
   "3/GPU/Utilisation": {records: ["telemetry:gpu/gpu_utilization"]}
   "3/GPU/Frequency": {records: ["telemetry:gpu/gpu_clock_hz"]}
-  "3/GPU/Memory":
-    records: []
-    reason: "No collector: no public API exists and no driver-specific check is defined by the protocol yet."
+  "3/GPU/Memory": {records: ["telemetry:gpu/gpu_memory"]}
   "3/Thermal/Thermal status / listener": {records: ["thermal:thermal_status_api", "telemetry:thermal/thermal_status_listener"]}
   "3/Thermal/Temperature sources": {records: ["thermal:temperature_sources/temperature_battery", "thermal:temperature_sources/thermal_zones_sysfs"]}
   "3/Thermal/Throttling indicator": {records: ["thermal:frequency_capping_observable"]}

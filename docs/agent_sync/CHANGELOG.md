@@ -3574,3 +3574,78 @@ Implement the researcher decisions of 2026-10-07 for Step 10D, after Antigravity
   - build the APK on a machine with the Android SDK and Python 3;
   - run `generate_reference_graph.py --check`;
   - physical runs per the protocol.
+
+---
+
+## 2026-10-08 — Claude Code (GPU-Memory Readability Probe)
+
+### Task
+Implement the minimum GPU-memory capability probe identified by the read-only Step 10D GPU-memory audit (decision: IMPLEMENTATION REQUIRED).
+
+### Blocker identified
+- Matrix row `3/GPU/Memory` (`device_capability_matrix.md` §3; verification method "Check") had `records: []` in `configs/device_capability_coverage.yaml`.
+- §9 criterion 1 therefore always failed with `NO_COLLECTOR`.
+- The criterion needs a non-default status with evidence, not a measured GPU-memory value.
+
+### Changes
+- `configs/device_characterization.yaml`: new `probes.kgsl_gpu_memory_paths`.
+  - Candidate KGSL global-allocation nodes under `/sys/class/kgsl/kgsl/`: `page_alloc`, `coherent`, `mapped`, `secure`, `vmalloc`.
+  - Readability candidates only. Their existence on the device is NOT YET VERIFIED.
+- `scripts/device_characterization/adb_collector.py`:
+  - Every configured path is read with `probe_path`.
+  - `parse_int_node` is applied only to readable paths; non-integer content becomes ERROR with a `parse_error`.
+  - The new evidence file `evidence/gpu_memory_evidence.json` holds the aggregate outcome and, per path, the target, exit code, raw stdout/stderr, outcome and value. It is hashed in the manifest.
+  - `observed_props.gpu_memory_probe` holds the aggregate outcome and each path's outcome and value.
+  - `kgsl_gpu_memory_paths` is a required probe key and must be a non-empty list of paths.
+- `src/monitoring/characterization/host_probes.py`: `aggregate_outcomes`, with precedence READABLE > ERROR > PERMISSION_DENIED > ABSENT. An empty list gives ERROR.
+- `src/monitoring/characterization/collectors.py`: `GPUTelemetryCollector` emits `gpu_memory` through `_host_outcome_result`.
+  - Verification method `kgsl_memory_readability_check`; condition HOST ADB SHELL.
+  - The value is `{path: raw integer}` for readable nodes only, otherwise null. No unit is assigned.
+- `configs/device_capability_coverage.yaml`: `"3/GPU/Memory"` now maps to `telemetry:gpu/gpu_memory`.
+- `tests/test_device_characterization_correction_round.py`:
+  - The `NO_COLLECTOR` assertion is replaced: with all candidates absent, the row passes as evidence-backed UNAVAILABLE.
+  - 23 new GPU-memory test cases cover aggregation, per-outcome end-to-end states, evidence and manifest, the no-fake-zero rule, a really reported 0 kept as a value, NOT_TESTED without a probe, coverage mapping (ERROR and missing record fail), paths coming from config, and config validation.
+
+### Status mapping
+| Aggregate outcome | Runtime state | Report status | Value |
+| :-- | :-- | :-- | :-- |
+| READABLE (at least one integer node) | AVAILABLE | CONDITIONALLY AVAILABLE (HOST ADB SHELL), never VERIFIED | raw integer(s) as reported |
+| ABSENT (every node) | UNAVAILABLE | UNAVAILABLE, with the note "UNAVAILABLE THROUGH AVAILABLE PLATFORM INTERFACE" | null |
+| PERMISSION_DENIED | PERMISSION_REQUIRED | UNAVAILABLE | null |
+| ERROR (including non-integer content) | ERROR | NOT YET VERIFIED (re-run required) | null |
+| not probed | NOT_TESTED | NOT YET VERIFIED | null |
+
+### Research decisions
+- None made.
+- The probe checks readability only. It makes no claim about dedicated GPU memory or capacity: the readable value is KGSL allocation accounting in shared system RAM, with unit and meaning unvalidated.
+- GPU memory is not made an E0 variable and is not used as an R0–R3 input.
+- No app-side memtrack source was added.
+
+### Verification
+- Targeted GPU-memory and coverage tests (`-k "gpu_memory or coverage"`): 26 passed.
+- `tests/test_device_characterization_*.py`: 285 passed.
+- Full `pytest`: 536 passed, 0 failed.
+
+### Uncertain items
+- The candidate node list is based on the msm KGSL driver's global memory statistics. Whether these nodes exist on the CPH1931 kernel, and whether host ADB can read them under its SELinux policy, is NOT YET VERIFIED. Per-path outcomes in the evidence file will show this.
+
+### Physical-device status
+- **NO PHYSICAL RUN PERFORMED.** No device observation changed.
+- Historical runs run_20261005_181140, run_20261006_052440 and run_20261007_082743 are untouched and still protected. The committed dry-run artifacts are unchanged.
+
+### Methodology
+- **Research methodology unchanged.** The frozen protocol, the capability matrix and the decision register are unchanged.
+
+### Remaining §9 blockers
+- The "Other approved runtimes" row (`NOT_IN_APPROVED_SCOPE`) needs a researcher decision.
+- D-16 needs the researcher's E-1/E-2 evidence.
+- The human review gate is open.
+- The GPU-memory row needs the next physical run to produce its evidence-backed status.
+
+### Git
+- Branch `claude/great-gauss-e1fek7`.
+- Implementation commit `085f0e7`. This entry is a separate commit.
+
+### Next action
+- Review and merge `085f0e7`.
+- The next scheduled physical characterization run, with the reboot repeat, will record `gpu_memory` as UNAVAILABLE or CONDITIONALLY AVAILABLE with evidence. §9 coverage is then re-evaluated.

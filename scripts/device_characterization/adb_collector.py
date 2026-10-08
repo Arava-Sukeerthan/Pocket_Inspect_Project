@@ -25,8 +25,8 @@ DEFAULT_CONFIG_PATH = ROOT / "configs" / "device_characterization.yaml"
 
 REQUIRED_PROBE_KEYS = (
     "cpufreq_sysfs_pattern", "cpufreq_policy_dir", "cpufreq_policy_files", "thermal_sysfs_pattern",
-    "thermal_zone_scan_count", "kgsl_gpu_clock_path", "kgsl_gpu_busy_path", "psi_memory_path",
-    "kernel_release_command",
+    "thermal_zone_scan_count", "kgsl_gpu_clock_path", "kgsl_gpu_busy_path", "kgsl_gpu_memory_paths",
+    "psi_memory_path", "kernel_release_command",
 )
 
 
@@ -40,6 +40,10 @@ def validate_probe_config(probes: Dict[str, Any]) -> Dict[str, Any]:
     missing = [k for k in REQUIRED_PROBE_KEYS if k not in probes]
     if missing:
         raise ValueError(f"configs/device_characterization.yaml probes block is missing keys: {missing}")
+    mem_paths = probes["kgsl_gpu_memory_paths"]
+    if not isinstance(mem_paths, list) or not mem_paths or not all(isinstance(p, str) and p for p in mem_paths):
+        raise ValueError("configs/device_characterization.yaml probes.kgsl_gpu_memory_paths must be a non-empty "
+                         "list of paths")
     return dict(probes)
 
 
@@ -699,6 +703,24 @@ class ADBCollector:
             busy["parse_error"] = "content is not two integer counters"
         _save_json_evidence("gpu_busy_evidence.json", busy)
         observed_props["gpu_busy_probe"] = {"outcome": busy["outcome"], "target": busy["target"]}
+
+        # 9b'. GPU memory: readability of the configured candidate KGSL allocation nodes. A readable node's raw
+        # integer is kept as reported; unit and meaning are not interpreted. Nothing is defaulted.
+        mem_reads = []
+        for path in self.probes["kgsl_gpu_memory_paths"]:
+            rec = self.probe_path(path)
+            rec["value"] = host_probes.parse_int_node(rec["stdout"]) if rec["outcome"] == host_probes.READABLE else None
+            if rec["outcome"] == host_probes.READABLE and rec["value"] is None:
+                rec["outcome"] = host_probes.ERROR
+                rec["parse_error"] = "content is not a single integer"
+            mem_reads.append(rec)
+        mem_outcome = host_probes.aggregate_outcomes([r["outcome"] for r in mem_reads])
+        _save_json_evidence("gpu_memory_evidence.json", {"aggregate_outcome": mem_outcome, "paths": mem_reads})
+        observed_props["gpu_memory_probe"] = {
+            "outcome": mem_outcome,
+            "target": ", ".join(r["target"] for r in mem_reads),
+            "paths": [{"target": r["target"], "outcome": r["outcome"], "value": r["value"]} for r in mem_reads],
+        }
 
         # 9c. PSI memory pressure (A5) and kernel release.
         psi = self.probe_path(self.probes["psi_memory_path"])
