@@ -3649,3 +3649,67 @@ Implement the minimum GPU-memory capability probe identified by the read-only St
 ### Next action
 - Review and merge `085f0e7`.
 - The next scheduled physical characterization run, with the reboot repeat, will record `gpu_memory` as UNAVAILABLE or CONDITIONALLY AVAILABLE with evidence. §9 coverage is then re-evaluated.
+
+---
+
+## 2026-10-08 — Antigravity (Step 10D GPU-Memory Probe Independent Verification)
+
+### Task
+Perform an independent read-only verification of the merged Step 10D GPU-memory readability probe implementation (commit `e8c03226f3356500b35550d2d26cf7ae57073cb9`) and its two physical characterization runs (`run_20261008_101314` and `run_20261008_103213`).
+
+### Implementation & Configuration Verified
+- `configs/device_characterization.yaml`: `probes.kgsl_gpu_memory_paths` properly defines the 5 candidate sysfs paths (`page_alloc`, `coherent`, `mapped`, `secure`, `vmalloc`) under `/sys/class/kgsl/kgsl/`. Includes explicit caveats that readable values represent driver allocation in shared RAM, not dedicated GPU VRAM.
+- `scripts/device_characterization/adb_collector.py`:
+  - Strictly configuration-driven; candidate paths are not hard-coded.
+  - Configuration validated by `validate_probe_config` (rejects missing, empty, or non-list paths).
+  - All 5 paths are probed using `self.probe_path(path)`.
+  - Readable content is parsed via `parse_int_node`; non-integer content triggers `ERROR` with `parse_error`.
+  - Generates `evidence/gpu_memory_evidence.json` capturing target, exit code, stdout, stderr, outcome, value, and parse error per path.
+  - Aggregates outcomes via `host_probes.aggregate_outcomes`.
+- `src/monitoring/characterization/host_probes.py`:
+  - `aggregate_outcomes` enforces the strict precedence: `READABLE > ERROR > PERMISSION_DENIED > ABSENT` (empty list -> `ERROR`).
+- `src/monitoring/characterization/collectors.py`:
+  - `GPUTelemetryCollector` integrates `gpu_memory` via `_host_outcome_result`.
+  - Non-available states (`PERMISSION_REQUIRED`, `UNAVAILABLE`, `ERROR`, `NOT_TESTED`) strictly carry `value: null`.
+  - Legitimate reported integer `0` is retained; no fake zeros or sentinels (-1, "") are produced.
+  - `PERMISSION_REQUIRED` maps `report_status` to `UNAVAILABLE` with notes.
+  - `verification_method: "kgsl_memory_readability_check"`, `condition: "HOST ADB SHELL"` (for AVAILABLE only; never marked `VERIFIED`).
+- `configs/device_capability_coverage.yaml`:
+  - `"3/GPU/Memory"` maps to `["telemetry:gpu/gpu_memory"]`, successfully eliminating `NO_COLLECTOR`.
+
+### Physical Evidence Verification
+Inspected artifacts for both hardware runs on OPPO A5 2020 (CPH1931):
+1. **Run 1: `run_20261008_101314`**
+   - Run Status: `COMPLETE`, Physical run (`conditions.is_dry_run: false`).
+   - Repeat Index: `1`, Boot ID: `9fa74579-cdd7-4156-a3b6-1cc51ef61950`.
+   - `evidence/gpu_memory_evidence.json`: All 5 KGSL paths returned `exit_code: 1`, `stderr: "cat: ...: Permission denied\n"`, `outcome: "PERMISSION_DENIED"`. Aggregate outcome: `PERMISSION_DENIED`.
+   - `evidence/manifest.json`: `evidence/gpu_memory_evidence.json` registered and hashed (`sha256: 6bb35f7e5b3582c3889f8db22381ad9ac642d4464ec1f8d8549b2f0c8cbafbb8`).
+   - `characterization.json`: Contains structured `gpu_memory` record with `state: "PERMISSION_REQUIRED"`, `report_status: "UNAVAILABLE"`, `value: null`, `verified: false`, `evidence_ref: "evidence/gpu_memory_evidence.json"`.
+   - `step10d_signoff.json`: Row `"3/GPU/Memory"` evaluates to `passed: true` (`problem: null`).
+2. **Run 2: `run_20261008_103213`**
+   - Run Status: `COMPLETE`, Physical run (`conditions.is_dry_run: false`).
+   - Repeat Index: `2`, Boot ID: `387e1b04-05c1-4951-b6fc-58e6ce9fb6bb` (confirms separate post-reboot run).
+   - `evidence/gpu_memory_evidence.json`: All 5 KGSL paths consistently returned `PERMISSION_DENIED`.
+   - `evidence/manifest.json`: Identical evidence hash (`sha256: 6bb35f7e5b3582c3889f8db22381ad9ac642d4464ec1f8d8549b2f0c8cbafbb8`).
+   - `characterization.json`: Structured `gpu_memory` record with `state: "PERMISSION_REQUIRED"`, `report_status: "UNAVAILABLE"`, `value: null`, `verified: false`.
+   - `step10d_signoff.json`: Row `"3/GPU/Memory"` evaluates to `passed: true` (`problem: null`).
+
+### Historical Run & Methodology Integrity
+- Historical runs `run_20261005_100000`, `run_20261005_181140`, `run_20261006_052440`, `run_20261006_100000`, and `run_20261007_082743` were verified completely untouched.
+- No changes to research methodology, research protocol, decision register, R0–R3 variables, or E0 experimental definitions.
+
+### Tests Executed
+- `pytest tests/test_device_characterization_correction_round.py`: 106 passed.
+- `pytest tests/test_device_characterization_researcher_decisions.py`: 63 passed.
+- Targeted GPU-memory & coverage tests (`-k "gpu_memory or coverage"`): 26 passed.
+
+### Limitations & Unresolved Items
+- **On-Device Readability:** On the CPH1931 physical device with standard host ADB, all 5 candidate KGSL memory paths are blocked by SELinux / kernel permissions (`PERMISSION_DENIED`). The capability is therefore confirmed as evidence-backed `UNAVAILABLE`.
+- **Remaining §9 Blockers:**
+  - `5/Other approved runtimes (e.g. ExecuTorch)`: fails with `NOT_IN_APPROVED_SCOPE` pending researcher scope decision.
+  - D-16 Energy feasibility: pending researcher safety sign-off and E-1/E-2 instrument evidence.
+  - Human review gate remains open.
+
+### Final Decision
+**APPROVE & VERIFIED**: The GPU-memory readability probe implementation and physical characterization runs strictly satisfy all research, evidence, and no-fake-value criteria. Matrix row `3/GPU/Memory` is closed with reproducible physical evidence.
+
