@@ -1,4 +1,18 @@
 # PocketInspect System Default Configuration
+#
+# STATUS: Phase 1 scaffold. NOT a confirmatory configuration.
+# - No code in src/, scripts/, experiments/, mobile/ or tests/ other than the placeholder guard test loads this file
+#   (traced 2026-10-13).
+# - The values listed under `config_status.unresolved_placeholders` are scaffold placeholders from the initial
+#   repository commit. They are not research values and were not derived from any measurement.
+# - `src.config.load_confirmatory_config` rejects this file while `config_status` reports it unresolved.
+
+config_status:
+  confirmatory_ready: false
+  unresolved_placeholders:
+    uncertainty.confidence_threshold: "D-06: selected per configuration by the risk-controlled procedure on calibration-tau; the risk target requires future approval (FP-0)"
+    adaptation.thermal_limit_celsius: "D-10: R0-R3 thresholds are pilot-dependent (FP-1); the thermal source is device-verification-dependent"
+    adaptation.battery_low_threshold_pct: "D-10: R0-R3 thresholds are pilot-dependent (FP-1)"
 
 project:
   name: "PocketInspect"
@@ -23,11 +37,11 @@ inference:
   thread_count: 4
 
 adaptation:
-  thermal_limit_celsius: 45.0
-  battery_low_threshold_pct: 20
+  thermal_limit_celsius: 45.0  # UNRESOLVED PLACEHOLDER (see config_status)
+  battery_low_threshold_pct: 20  # UNRESOLVED PLACEHOLDER (see config_status)
   enable_dynamic_resolution: true
   enable_frame_skipping: true
 
 uncertainty:
-  confidence_threshold: 0.85
+  confidence_threshold: 0.85  # UNRESOLVED PLACEHOLDER (see config_status)
   ood_method: "entropy"  # options: entropy, energy, temperature_scaling

@@ -236,13 +236,16 @@ class TestDeviceCharacterizationSpec(unittest.TestCase):
             self.assertIn(item, sync)
         self.assertIn("narrow each guard to an explicit Step 10D allow-list", self.handoff)
         changelog = _text(ROOT / "docs" / "agent_sync" / "CHANGELOG.md")
-        last = changelog.rsplit("\n## ", 1)[1]
+        entries = changelog.split("\n# Entries\n", 1)[1].split("\n## ")[1:]
         # Entry header "YYYY-MM-DD — <agent>": any date from 2026-10-05 on (was locked to 2026-10-05 only).
-        header = re.match(r"(\d{4}-\d{2}-\d{2}) — (Antigravity|Claude Code)\b", last)
-        self.assertIsNotNone(header, last[:60])
+        header = re.match(r"(\d{4}-\d{2}-\d{2}) — (Antigravity|Claude Code)\b", entries[-1])
+        self.assertIsNotNone(header, entries[-1][:60])
         self.assertGreaterEqual(header.group(1), "2026-10-05")
-        self.assertIn("Step 10D", last)
-        self.assertIn("Antigravity", last)
+        # The Step 10D cycle is recorded by entry authorship. The newest entry is not required to be about Step 10D
+        # or to name Antigravity (it was: any later entry on another task failed, or passed by naming the agent).
+        authors = [(re.match(r"\S+ — (Antigravity|Claude Code)\b", e), e) for e in entries]
+        step10d_authors = {m.group(1) for m, e in authors if m and "Step 10D" in e}
+        self.assertEqual(step10d_authors, {"Antigravity", "Claude Code"})
 
 
 if __name__ == "__main__":

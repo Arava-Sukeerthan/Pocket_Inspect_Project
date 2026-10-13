@@ -11,6 +11,7 @@ This directory contains the primary modular Python library for PocketInspect.
 - **`inspection/`**: Visual defect classification, surface anomaly scoring, and 3D-print defect detection heads.
 - **`uncertainty/`**: Prediction confidence calibration and out-of-distribution (OOD) uncertainty estimation.
 - **`monitoring/`**: Hardware telemetry collectors (CPU/GPU utilization, thermals, battery, RAM).
+- **`config/`**: Confirmatory-readiness guard that rejects configuration files with unresolved placeholder values.
 
 ## Design Rules
 1. Every submodule must be decoupled and importable independently.

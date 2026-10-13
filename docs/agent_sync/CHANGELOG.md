@@ -3713,3 +3713,82 @@ Inspected artifacts for both hardware runs on OPPO A5 2020 (CPH1931):
 ### Final Decision
 **APPROVE & VERIFIED**: The GPU-memory readability probe implementation and physical characterization runs strictly satisfy all research, evidence, and no-fake-value criteria. Matrix row `3/GPU/Memory` is closed with reproducible physical evidence.
 
+---
+
+## 2026-10-13 — Claude Code (Repository Hygiene Correction, Stage 1)
+
+### Task
+Repository hygiene correction, Stage 1: the undeclared `jsonschema` dependency, the `test_roles_and_handoff` CHANGELOG contract, and the placeholder values in `configs/default_config.yaml`. Stage 2 is not started.
+
+### Starting state
+- Branch `main`, HEAD `e2df34b`.
+- Uncommitted items already present and not made by this task:
+  - modified `.gitignore` (adds `local.properties`);
+  - untracked `mobile/characterization/` files `characterization_log.txt`, `gradle.properties`, `run3_characterization_output.json`, `run3_logcat.txt`;
+  - untracked `research/results/device_characterization/` run directories `run_20261005_181140`, `run_20261006_052440`, `run_20261007_082743`, `run_20261008_101314`, `run_20261008_103213`;
+  - two untracked root files that look like accidental shell redirections (`tatus --short`, and a file whose name starts `t|3 GB|4 GB|6 GB|nominal`).
+- Rule 5 says to stop when unrelated uncommitted changes are present. The researcher's task instruction for this stage was to preserve them and continue. None of them was modified, moved or deleted.
+
+### Root causes
+- **Dependency.** `src/monitoring/characterization/report_generator.py` imports `jsonschema` (added with the Step 10D implementation), but `pyproject.toml` declared only `pyyaml`. The system Python 3.10 on the workstation has `jsonschema` installed globally, which hid the gap. The project `.venv` (Python 3.11, built from `pyproject.toml`) does not have it.
+- **CHANGELOG contract.** `test_roles_and_handoff` required the newest CHANGELOG entry to contain both "Step 10D" and "Antigravity". It was written when the newest entry was the Step 10D handoff, and it then constrained every later entry. Evaluated against history, the assertion failed at `b61476a` and at the merge `e8c0322`, where the newest entry was the 2026-10-08 Claude Code GPU-memory entry, which does not name Antigravity. It passes at `e2df34b` only because Antigravity's verification entry became the newest entry. Any later entry on another subject would fail it, or pass only by naming the agent.
+- **default_config.yaml.** The file dates from the initial repository commit (`67f048e`). `uncertainty.confidence_threshold`, `adaptation.thermal_limit_celsius` and `adaptation.battery_low_threshold_pct` are scaffold numbers, not derived from any measurement. Under `configs/pre_data_collection.yaml`, the D-06 acceptance threshold is selected per configuration by the risk-controlled procedure and its risk target requires future approval; the D-10 thresholds are pilot-dependent and the thermal platform API is not assumed.
+
+### Review record (Task B finding)
+- The Antigravity review of the GPU-memory probe **is recorded**: entry "2026-10-08 — Antigravity (Step 10D GPU-Memory Probe Independent Verification)", commit `e2df34b`. No review was missing from the record at HEAD, so no review entry was added or altered.
+- That entry has no `Git` section and was committed under the researcher's git identity as a CHANGELOG-only commit. This is an observation only. Its authorship is taken from its header; this task did not verify it independently.
+- The implementation it reviews was merged (`e8c0322`) before the review entry existed (`e2df34b`). The review was post-merge.
+
+### Changes
+- `pyproject.toml`: `jsonschema>=4.0` added to `[project].dependencies`.
+  - It is a runtime import in `src/`, so it is not a `dev` extra.
+  - Version 4.0 is the first release line with Draft 2020-12 support, which `research/experiments/device_characterization_schema.json` declares.
+  - The lower-bound-only form follows the existing `pyyaml>=6.0` entry. No other dependency changed.
+- `tests/test_device_characterization_protocol.py` (`test_roles_and_handoff`):
+  - The newest entry must still have a valid `YYYY-MM-DD — <agent>` header dated 2026-10-05 or later.
+  - The two content assertions on the newest entry are replaced by one assertion over all entries: the Step 10D entries are authored, by header, by both Antigravity and Claude Code.
+  - All other assertions in the test are unchanged.
+- `configs/default_config.yaml`: a `config_status` block (`confirmatory_ready: false`, and `unresolved_placeholders` naming the three keys with the governing decision), a status header, and a comment on each of the three lines. **No numerical value was changed, removed or selected.**
+- `src/config/__init__.py`, `src/config/confirmatory_guard.py` (new): `load_confirmatory_config` and `require_confirmatory_ready` raise `UnresolvedConfigError` unless the configuration declares `confirmatory_ready: true` with an empty `unresolved_placeholders` mapping. A missing or malformed `config_status` block is rejected. The guard holds no threshold and no key list, and never supplies or replaces a value.
+- `tests/test_confirmatory_guard.py` (new): 14 cases.
+- `src/README.md`: one line for `config/`.
+
+### Usage trace for `configs/default_config.yaml`
+- Before this task, no file in `src/`, `scripts/`, `experiments/`, `backend/`, `mobile/` or `tests/` referenced `default_config.yaml` or any of the three keys, and no README or protocol document referenced the file. It is now read only by `tests/test_confirmatory_guard.py`.
+- No confirmatory execution harness exists yet (`experiments/` holds only its README). The guard is therefore not yet called by any run path. It is the entry point a future harness must use; nothing enforces that yet.
+
+### Research decisions
+- None made. No threshold was chosen.
+- The research gap, research questions, hypotheses, dataset specification, methodology, R0–R3 rules, C1–C4 protocol, baselines and D-01 to D-16 are unchanged. No file under `research/` was modified.
+
+### Verification
+Before (HEAD `e2df34b`, no changes):
+- System Python 3.10.11 (`jsonschema` 4.26.0 installed globally): `python -m pytest tests -q` gave 536 passed; with `-k roles_and_handoff`, 1 passed.
+- Project `.venv` (Python 3.11.9, no `jsonschema`): `.venv/Scripts/python.exe -m pytest tests -q -p no:cacheprovider` gave 6 errors during collection (`ModuleNotFoundError: No module named 'jsonschema'`) in the `tests/test_device_characterization_` modules `collectors`, `connected_e2e`, `correction_round`, `ram_variant`, `report` and `researcher_decisions`.
+
+After, in a new virtual environment outside the repository (Python 3.10.11, `pip install -e ".[dev]"`, which resolved `jsonschema` 4.26.0):
+- `python -m pytest tests/test_confirmatory_guard.py tests/test_device_characterization_protocol.py tests/test_imports.py -q -p no:cacheprovider` gave 26 passed.
+- `python -m pytest tests -q -p no:cacheprovider` gave 550 passed (536 existing and 14 new). This run was made before this entry was appended.
+- The full suite was not re-run after this entry was appended. `test_roles_and_handoff` is the only test that reads this file; the focused command is re-run after the append and its outcome is given in the task report.
+- The project `.venv` was not modified. It still lacks `jsonschema` until `pip install -e ".[dev]"` is re-run in it.
+- Only `jsonschema` 4.26.0 was exercised. The lower bound 4.0 was not installed and tested.
+- `git status --short` and `git diff --stat` were reviewed: no file under `research/` or `mobile/` changed, and no untracked evidence file changed.
+
+### Uncertain items
+- **Guard change needs review.** The `test_roles_and_handoff` change relaxes a guard: the newest entry is no longer forced to mention Antigravity. The old assertion never verified that a review had happened; it matched a name. A real "every merged implementation has a review entry" gate needs a machine-readable link between a review entry and the reviewed commit, which the entry template does not have. Not implemented here.
+- **Disposition of `configs/default_config.yaml`** (researcher decision). Options, smallest first: (a) keep it as marked now; (b) set the three placeholder values to null so that any reader that bypasses the guard fails; (c) retire the file once real configurations exist. Its other values (`quality`, `acquisition`, `inference`) are also unmeasured scaffold values and were outside this task's scope.
+- **Lower bound `jsonschema>=4.0`** is chosen from the Draft 2020-12 requirement and was not tested at 4.0.
+- The two accidental root files and the `.gitignore` change are left for the researcher.
+- The five untracked physical run directories and the `mobile/characterization` run-3 files are evidence that is not in git.
+
+### Review requirement
+- **Open.** This entry has not been reviewed by Antigravity or the researcher. No review is claimed.
+
+### Remaining work
+- Review of this change, then commit and merge.
+- Re-run `pip install -e ".[dev]"` in the project `.venv`.
+- Stage 2 is not started.
+
+### Git
+- Commit: not committed. The changes are in the working tree on `main`; a branch and commit await the researcher's instruction.
+- Push status: not pushed.
